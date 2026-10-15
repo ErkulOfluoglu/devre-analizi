@@ -1,0 +1,486 @@
+<Window x:Class="CircuitAnalyzer.WPF.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:CircuitAnalyzer.WPF.Views"
+        xmlns:controls="clr-namespace:CircuitAnalyzer.WPF.Controls"
+        Title="Devre Analizi"
+        Icon="pack://application:,,,/CircuitAnalyzer;component/Assets/app.ico"
+        Width="1280" Height="800"
+        MinWidth="960" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Style="{DynamicResource Window.App}"
+        PreviewKeyDown="Window_PreviewKeyDown">
+
+    <Grid>
+        <Grid Margin="16">
+            <Grid.ColumnDefinitions>
+                <!-- Sol panel: Araç kutusu -->
+                <ColumnDefinition Width="248"/>
+                <ColumnDefinition Width="16"/>
+                <!-- Orta alan: Devre çizim Canvas'ı -->
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <!-- Sağ panel: Analiz ayarları + sonuçlar -->
+                <ColumnDefinition Width="400"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- SOL PANEL: KENAR ÇUBUĞU                    -->
+            <!-- ═══════════════════════════════════════════ -->
+            <Border Grid.Column="0"
+                    x:Name="SidebarCard"
+                    Style="{DynamicResource Card}"
+                    Padding="12,16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <!-- Başlık satırı -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- Kaydırılabilir eleman ve araç grupları -->
+                        <RowDefinition Height="*"/>
+                        <!-- Alt sabit butonlar -->
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Başlık satırı: Logo + Başlık + Yardım + Tema butonu -->
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Image Source="pack://application:,,,/CircuitAnalyzer;component/Assets/logo-128.png"
+                                   Width="22" Height="22"
+                                   Margin="0,0,8,0"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <TextBlock Text="Devre Analizi"
+                                       FontFamily="{DynamicResource Font.Display}"
+                                       FontSize="17"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Brush.Text.Primary}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button x:Name="BtnHelp"
+                                    Style="{DynamicResource Button.Icon}"
+                                    Width="32" Height="32"
+                                    AutomationProperties.Name="Yardım"
+                                    Click="BtnHelp_Click">
+                                <TextBlock Text="?"
+                                           FontWeight="SemiBold"
+                                           FontSize="15"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Button>
+                            <Button x:Name="BtnTheme"
+                                    Style="{DynamicResource Button.Icon}"
+                                    AutomationProperties.Name="Tema"
+                                    Margin="4,0,0,0"
+                                    Click="BtnTheme_Click">
+                                <controls:Icon x:Name="ThemeIcon"
+                                               Data="{DynamicResource Icon.Sun}"
+                                               Width="20" Height="20"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                <!-- Eleman ve araç listesi (pencere kısaysa kayar) -->
+                <ScrollViewer Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
+                              Focusable="False">
+                    <StackPanel>
+                        <!-- Grup 1: Pasif elemanlar -->
+                        <TextBlock Text="Pasif elemanlar"
+                                   Style="{DynamicResource Text.Overline}"/>
+
+                        <Button x:Name="BtnAddResistor"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddResistor_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Resistor}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Direnç" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnAddCapacitor"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddCapacitor_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Capacitor}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Kondansatör" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnAddInductor"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddInductor_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Inductor}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Bobin" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnAddImpedance"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddImpedance_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Impedance}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Empedans" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Grup 2: Kaynaklar (18px grup aralığı) -->
+                        <TextBlock Text="Kaynaklar"
+                                   Style="{DynamicResource Text.Overline}"
+                                   Margin="10,18,10,6"/>
+
+                        <Button x:Name="BtnAddVoltageSource"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddVoltageSource_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.DcSource}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="DC gerilim kaynağı" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnAddAcSource"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddAcSource_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.AcSource}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="AC gerilim kaynağı" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnAddCurrentSource"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddCurrentSource_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.CurrentSource}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Akım kaynağı" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnAddAcCurrentSource"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddAcCurrentSource_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.AcCurrentSource}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="AC akım kaynağı" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnAddGround"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddGround_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Ground}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Toprak (GND)" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Grup 3: Araçlar (18px grup aralığı) -->
+                        <TextBlock Text="Araçlar"
+                                   Style="{DynamicResource Text.Overline}"
+                                   Margin="10,18,10,6"/>
+
+                        <Button x:Name="BtnOpen"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnOpen_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Open}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Aç…" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnSave"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnSave_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Save}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Kaydet" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnPrint"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnPrint_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Print}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Yazdır / PDF" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnDrawWire"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnDrawWire_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Wire}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock x:Name="TxtDrawWire" Text="Tel çiz" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnAddProbe"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddProbe_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Probe}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Ölçüm probu" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnGenerateNetlist"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnGenerateNetlist_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Document}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Netlist oluştur" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnClearCanvas"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnClearCanvas_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Trash}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Temizle" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Alt butonlar (sabit dock): Örnek devreler + Yeni soru (8px ara) -->
+                <StackPanel Grid.Row="2" Margin="0,16,0,0">
+                    <Button x:Name="BtnExamples"
+                            Style="{DynamicResource Button.Secondary}"
+                            Click="BtnExamples_Click"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <controls:Icon Data="{DynamicResource Icon.Folder}" Width="20" Height="20" Margin="0,0,8,0"/>
+                            <TextBlock Text="Örnek devreler" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button x:Name="BtnNewProblem"
+                            Style="{DynamicResource Button.Strong}"
+                            Click="BtnNewProblem_Click"
+                            HorizontalAlignment="Stretch"
+                            ToolTip="Rastgele bir alıştırma sorusu üretir. Aynı soru kodu her bilgisayarda aynı devreyi verir.">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <controls:Icon Data="{DynamicResource Icon.Shuffle}" Width="20" Height="20" Margin="0,0,8,0"/>
+                            <TextBlock Text="Yeni soru" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- ORTA ALAN: DEVRE ÇİZİM CANVAS'I            -->
+        <!-- ═══════════════════════════════════════════ -->
+        <Grid Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Ana çizim alanı: Card stili, Padding 0, ClipToBounds -->
+            <Border Grid.Row="0"
+                    x:Name="CanvasCard"
+                    Style="{DynamicResource Card}"
+                    Padding="0"
+                    ClipToBounds="True">
+                <Grid>
+                    <ScrollViewer x:Name="CanvasScrollViewer"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Focusable="False"
+                                  PreviewMouseWheel="CanvasScrollViewer_PreviewMouseWheel"
+                                  PreviewMouseDown="CanvasScrollViewer_PreviewMouseDown"
+                                  MouseMove="CanvasScrollViewer_MouseMove"
+                                  MouseUp="CanvasScrollViewer_MouseUp">
+                        <Canvas x:Name="CircuitCanvas"
+                                Width="4000" Height="3000"
+                                Background="{DynamicResource Brush.Canvas.Grid}"
+                                MouseLeftButtonDown="CircuitCanvas_MouseLeftButtonDown"
+                                MouseMove="CircuitCanvas_MouseMove"
+                                MouseLeftButtonUp="CircuitCanvas_MouseLeftButtonUp">
+                            <Canvas.LayoutTransform>
+                                <ScaleTransform x:Name="CanvasScaleTransform" ScaleX="1" ScaleY="1"/>
+                            </Canvas.LayoutTransform>
+                        </Canvas>
+                    </ScrollViewer>
+
+                    <!-- Boş çizim alanı yardımcısı -->
+                    <Border x:Name="EmptyCanvasHelper"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            CornerRadius="20"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource Brush.Border.Default}"
+                            Background="{DynamicResource Brush.Bg.Surface}"
+                            Opacity="0.94"
+                            Padding="32,28"
+                            Visibility="Visible">
+                        <StackPanel HorizontalAlignment="Center">
+                            <Border Width="56" Height="56"
+                                    CornerRadius="14"
+                                    Background="{DynamicResource Brush.Bg.SurfaceAlt}"
+                                    HorizontalAlignment="Center"
+                                    Margin="0,0,0,14">
+                                <controls:Icon Data="{DynamicResource Icon.Resistor}"
+                                               Width="28" Height="28"
+                                               Foreground="{DynamicResource Brush.Text.Primary}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                            </Border>
+
+                            <TextBlock Text="Henüz devre yok"
+                                       FontSize="17"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Brush.Text.Primary}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,6"/>
+
+                            <TextBlock Text="Soldan bir eleman ekleyin ya da hazır bir örnekle başlayın."
+                                       Style="{DynamicResource Text.Caption}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,20"/>
+
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Style="{DynamicResource Button.Secondary}"
+                                        Content="Örnek devre aç"
+                                        Click="BtnExamples_Click"
+                                        Margin="0,0,10,0"/>
+                                <Button Style="{DynamicResource Button.Strong}"
+                                        Content="Yeni soru"
+                                        Click="BtnNewProblem_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Yüzen araç çubuğu (Floating Toolbar) -->
+                    <Border x:Name="FloatingToolbar"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Top"
+                            Margin="0,12,0,0"
+                            Background="{DynamicResource Brush.Bg.Surface}"
+                            BorderBrush="{DynamicResource Brush.Border.Default}"
+                            BorderThickness="1"
+                            CornerRadius="12"
+                            Effect="{DynamicResource Effect.Popup}"
+                            Padding="4"
+                            Panel.ZIndex="10">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="BtnUndo"
+                                    Style="{DynamicResource Button.Icon}"
+                                    Width="32" Height="32"
+                                    AutomationProperties.Name="Geri al (Ctrl+Z)"
+                                    ToolTip="Geri al (Ctrl+Z)"
+                                    Click="BtnUndo_Click">
+                                <controls:Icon Data="{DynamicResource Icon.Undo}" Width="16" Height="16"/>
+                            </Button>
+
+                            <Button x:Name="BtnRedo"
+                                    Style="{DynamicResource Button.Icon}"
+                                    Width="32" Height="32"
+                                    AutomationProperties.Name="Yinele (Ctrl+Y)"
+                                    ToolTip="Yinele (Ctrl+Y)"
+                                    Click="BtnRedo_Click">
+                                <controls:Icon Data="{DynamicResource Icon.Redo}" Width="16" Height="16"/>
+                            </Button>
+
+                            <Border Width="1" Height="18"
+                                    Background="{DynamicResource Brush.Border.Default}"
+                                    Margin="4,0"/>
+
+                            <Button x:Name="BtnZoomOut"
+                                    Style="{DynamicResource Button.Icon}"
+                                    Width="32" Height="32"
+                                    AutomationProperties.Name="Uzaklaştır"
+                                    ToolTip="Uzaklaştır (Ctrl+-)"
+                                    Click="BtnZoomOut_Click">
+                                <controls:Icon Data="{DynamicResource Icon.ZoomOut}" Width="16" Height="16"/>
+                            </Button>
+
+                            <TextBlock x:Name="TxtZoomPercent"
+                                       Text="100%"
+                                       FontSize="13"
+                                       Width="48"
+                                       TextAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Cursor="Hand"
+                                       ToolTip="%100 yap (Ctrl+0)"
+                                       Foreground="{DynamicResource Brush.Text.Primary}"
+                                       MouseLeftButtonDown="TxtZoomPercent_MouseLeftButtonDown"/>
+
+                            <Button x:Name="BtnZoomIn"
+                                    Style="{DynamicResource Button.Icon}"
+                                    Width="32" Height="32"
+                                    AutomationProperties.Name="Yakınlaştır"
+                                    ToolTip="Yakınlaştır (Ctrl++)"
+                                    Click="BtnZoomIn_Click">
+                                <controls:Icon Data="{DynamicResource Icon.ZoomIn}" Width="16" Height="16"/>
+                            </Button>
+
+                            <Button x:Name="BtnZoomFit"
+                                    Style="{DynamicResource Button.Icon}"
+                                    Width="32" Height="32"
+                                    AutomationProperties.Name="Sığdır"
+                                    ToolTip="Sığdır"
+                                    Click="BtnZoomFit_Click">
+                                <controls:Icon Data="{DynamicResource Icon.Fit}" Width="16" Height="16"/>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- Durum satırı: 8x8 nokta + TxtStatus + TxtCoords -->
+            <StackPanel Grid.Row="1"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="0,10,0,0">
+                <Border Width="8" Height="8"
+                        CornerRadius="4"
+                        Background="{DynamicResource Brush.Text.Tertiary}"
+                        VerticalAlignment="Center"
+                        Margin="4,0,8,0"/>
+                <TextBlock x:Name="TxtStatus"
+                           Text="Hazır — Araç kutusundan bir eleman seçin"
+                           Foreground="{DynamicResource Brush.Text.Secondary}"
+                           FontSize="13"
+                           VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtCoords"
+                           Text=""
+                           Foreground="{DynamicResource Brush.Text.Tertiary}"
+                           FontSize="13"
+                           VerticalAlignment="Center"
+                           Margin="16,0,0,0"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- SAĞ PANEL: ANALİZ (ayarlar + sonuçlar)     -->
+        <!-- ═══════════════════════════════════════════ -->
+        <views:AnalysisPanel x:Name="AnalysisPanel" Grid.Column="4"/>
+    </Grid>
+
+    <!-- Tanıtım Turu Katmanı (Tüm pencerenin üzerinde) -->
+    <views:TourOverlay x:Name="TourOverlay"
+                       Panel.ZIndex="1000"
+                       Visibility="Collapsed"/>
+
+    <!-- In-Window Tanıtım Katmanı -->
+    <views:OnboardingOverlay x:Name="OnboardingOverlay"
+                             Panel.ZIndex="1100"
+                             Visibility="Collapsed"/>
+
+    <!-- In-Window Hakkında Katmanı -->
+    <views:AboutOverlay x:Name="AboutOverlay"
+                        Panel.ZIndex="1200"
+                        Visibility="Collapsed"/>
+
+    <!-- In-Window Genel Diyalog Katmanı (Kısayollar vb.) -->
+    <views:DialogOverlay x:Name="DialogOverlay"
+                         Panel.ZIndex="1300"
+                         Visibility="Collapsed"/>
+</Grid>
+</Window>

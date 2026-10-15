@@ -1,0 +1,110 @@
+<UserControl x:Class="CircuitAnalyzer.WPF.Views.PracticeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:controls="clr-namespace:CircuitAnalyzer.WPF.Controls"
+             mc:Ignorable="d" 
+             d:DesignWidth="360"
+             Background="Transparent">
+
+    <StackPanel>
+        <!-- a) Bilgi Satırları -->
+        <TextBlock Text="Önce kendiniz çözün, sonra cevaplarınızı kontrol edin."
+                   Style="{DynamicResource Text.Caption}"
+                   Margin="0,0,0,3"/>
+
+        <TextBlock Text="Yazım: 4m · 4 mA · 0.004 · 2.5k   |   AC: 3.03∠-72.3 veya 0.92-j2.89"
+                   Style="{DynamicResource Text.Caption}"
+                   Margin="0,0,0,10"/>
+
+        <!-- b) Skor Metni (İlk kontrole kadar gizli) -->
+        <TextBlock x:Name="TxtScore"
+                   FontSize="15"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,10"
+                   Visibility="Collapsed"/>
+
+        <!-- c) Asıl Sorular Başlığı ve Konteyneri -->
+        <StackPanel x:Name="HeaderMainSection" Margin="0,4,0,4">
+            <TextBlock Text="Asıl sorular"
+                       Style="{DynamicResource Text.Overline}"
+                       Margin="0,0,0,6"/>
+        </StackPanel>
+        <StackPanel x:Name="ContainerMain"/>
+
+        <!-- d) Ek Sorular (İsteğe bağlı, varsa görünür) -->
+        <Expander x:Name="ExpanderExtra"
+                  Header="Ek sorular (isteğe bağlı)"
+                  Style="{DynamicResource Expander.Card}"
+                  IsExpanded="False"
+                  Margin="0,6,0,8"
+                  Visibility="Collapsed">
+            <StackPanel x:Name="ContainerExtra" Margin="0,6,0,0"/>
+        </Expander>
+
+        <!-- e) Buton Satırı -->
+        <WrapPanel Margin="0,8,0,8">
+            <Button x:Name="BtnCheck"
+                    Style="{DynamicResource Button.Primary}"
+                    Height="40"
+                    Margin="0,0,8,8"
+                    Click="BtnCheck_Click">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <controls:Icon Data="{DynamicResource Icon.Check}" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="Kontrol et" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button x:Name="BtnHint"
+                    Style="{DynamicResource Button.Secondary}"
+                    Height="40"
+                    Margin="0,0,8,8"
+                    Click="BtnHint_Click">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <controls:Icon x:Name="IconBtnHint" Data="{DynamicResource Icon.Lightbulb}" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtBtnHint" Text="İpucu (0/0)" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button x:Name="BtnReveal"
+                    Style="{DynamicResource Button.Secondary}"
+                    Height="40"
+                    Margin="0,0,0,8"
+                    Click="BtnReveal_Click">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <controls:Icon Data="{DynamicResource Icon.Eye}" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="Çözümü göster" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+        </WrapPanel>
+
+        <!-- f) Tebrik Banner'ı -->
+        <Border x:Name="BannerCongrats"
+                Style="{DynamicResource InfoBar.Success}"
+                Margin="0,4,0,8"
+                Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <controls:Icon Data="{DynamicResource Icon.Check}" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock Text="Tebrikler! Asıl soruların hepsi doğru. İsterseniz çözümü inceleyebilirsiniz."
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- g) Hata Metni -->
+        <Border x:Name="BannerError"
+                Style="{DynamicResource InfoBar.Error}"
+                Margin="0,4,0,8"
+                Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <controls:Icon Data="{DynamicResource Icon.Warning}" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtError"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center"
+                           Visibility="Collapsed"/>
+            </StackPanel>
+        </Border>
+
+        <!-- h) İpuçları Alanı -->
+        <StackPanel x:Name="HintsContainer" Margin="0,4,0,4"/>
+    </StackPanel>
+</UserControl>

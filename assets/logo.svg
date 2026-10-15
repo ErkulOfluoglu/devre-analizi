@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Devre Analizi logosu">
+  <title>Devre Analizi</title>
+  <!-- "Kitap": sayfaları devre yolu olan açık bir kitap -->
+  <rect x="8" y="8" width="1008" height="1008" rx="228" fill="#1D1D1F" stroke="#3A3A3C" stroke-width="16"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 300C430 250 300 240 210 262V722C300 700 430 710 512 760Z"/>
+    <path d="M512 300C594 250 724 240 814 262V722C724 700 594 710 512 760Z"/>
+  </g>
+  <g fill="none" stroke="#5AA9FF" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M600 420H720V560H610"/>
+    <path d="M290 560H440"/>
+  </g>
+  <g fill="none" stroke="#5AA9FF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M274 420H330M442 420H462"/>
+    <rect x="330" y="394" width="112" height="52" rx="12"/>
+  </g>
+  <circle cx="600" cy="420" r="26" fill="#5AA9FF"/>
+  <circle cx="610" cy="560" r="26" fill="#5AA9FF"/>
+</svg>

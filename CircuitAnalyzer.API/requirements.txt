@@ -1,0 +1,25 @@
+# ═══════════════════════════════════════════════════════
+#  CircuitAnalyzer API — Python Bağımlılıkları
+# ═══════════════════════════════════════════════════════
+#
+#  Kurulum: pip install -r requirements.txt
+#
+#  Mimari:
+#    FastAPI (web framework)
+#      → Pydantic (veri doğrulama)
+#      → lcapy (sembolik devre analizi)
+#        → SymPy (sembolik matematik motoru)
+#      → NumPy (sayısal hesaplama)
+#      → uvicorn (ASGI sunucu)
+
+# ── Web Framework ──
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+
+# ── Devre Analizi ──
+lcapy>=1.10
+sympy>=1.12
+
+# ── Sayısal Hesaplama ──
+numpy>=1.24.0

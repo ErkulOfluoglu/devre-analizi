@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CircuitAnalyzer.WPF", "CircuitAnalyzer.WPF\CircuitAnalyzer.WPF.csproj", "{A3184DC9-B482-4B42-8884-C3ADDBE2C57C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CircuitAnalyzer.Tests", "CircuitAnalyzer.Tests\CircuitAnalyzer.Tests.csproj", "{6F248B44-E552-45EA-9E59-612CD8BFAC08}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A3184DC9-B482-4B42-8884-C3ADDBE2C57C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A3184DC9-B482-4B42-8884-C3ADDBE2C57C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A3184DC9-B482-4B42-8884-C3ADDBE2C57C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A3184DC9-B482-4B42-8884-C3ADDBE2C57C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6F248B44-E552-45EA-9E59-612CD8BFAC08}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6F248B44-E552-45EA-9E59-612CD8BFAC08}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6F248B44-E552-45EA-9E59-612CD8BFAC08}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6F248B44-E552-45EA-9E59-612CD8BFAC08}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

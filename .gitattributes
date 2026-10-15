@@ -1,0 +1,3 @@
+
+# Windows komut dosyalari CRLF kalsin
+*.bat text eol=crlf

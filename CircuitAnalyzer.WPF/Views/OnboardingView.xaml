@@ -1,0 +1,462 @@
+<UserControl x:Class="CircuitAnalyzer.WPF.Views.OnboardingView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:CircuitAnalyzer.WPF.Views"
+             xmlns:controls="clr-namespace:CircuitAnalyzer.WPF.Controls"
+             Focusable="True">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Üst bar: Sayfa sayısı ve Atla -->
+            <RowDefinition Height="Auto"/>
+            <!-- Orta içerik: Sayfalar -->
+            <RowDefinition Height="*"/>
+            <!-- Alt bar: Noktalar ve gezinme butonları -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ═══════════ Üst Satır ═══════════ -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock x:Name="TxtPageIndicator"
+                       Text="1 / 5"
+                       Style="{DynamicResource Text.Caption}"
+                       VerticalAlignment="Center"/>
+
+            <Button x:Name="BtnSkip"
+                    Content="Atla"
+                    Style="{DynamicResource Button.Ghost}"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Click="BtnSkip_Click"/>
+        </Grid>
+
+        <!-- ═══════════ Sayfalar Alanı ═══════════ -->
+        <Grid Grid.Row="1">
+            <!-- ── Sayfa 1: Hoş Geldiniz ── -->
+            <Grid x:Name="Page1" Visibility="Visible">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <!-- 3'lü Kutucuklar: Çiz → Çöz → Öğren -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,28">
+                        <!-- Çiz -->
+                        <Border Width="84" Height="84"
+                                CornerRadius="16"
+                                Background="{DynamicResource Brush.Bg.SurfaceAlt}">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <controls:Icon Data="{DynamicResource Icon.Wire}"
+                                               Width="28" Height="28"
+                                               Foreground="{DynamicResource Brush.Text.Primary}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,6"/>
+                                <TextBlock Text="Çiz"
+                                           FontWeight="SemiBold"
+                                           FontSize="13.5"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+
+                        <controls:Icon Data="{DynamicResource Icon.ChevronRight}"
+                                       Width="18" Height="18"
+                                       Foreground="{DynamicResource Brush.Text.Tertiary}"
+                                       VerticalAlignment="Center"
+                                       Margin="12,0"/>
+
+                        <!-- Çöz (Vurgulu) -->
+                        <Border Width="84" Height="84"
+                                CornerRadius="16"
+                                Background="{DynamicResource Brush.Accent}">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <controls:Icon Data="{DynamicResource Icon.Play}"
+                                               Width="28" Height="28"
+                                               Foreground="{DynamicResource Brush.Text.OnAccent}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,6"/>
+                                <TextBlock Text="Çöz"
+                                           FontWeight="SemiBold"
+                                           FontSize="13.5"
+                                           Foreground="{DynamicResource Brush.Text.OnAccent}"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+
+                        <controls:Icon Data="{DynamicResource Icon.ChevronRight}"
+                                       Width="18" Height="18"
+                                       Foreground="{DynamicResource Brush.Text.Tertiary}"
+                                       VerticalAlignment="Center"
+                                       Margin="12,0"/>
+
+                        <!-- Öğren -->
+                        <Border Width="84" Height="84"
+                                CornerRadius="16"
+                                Background="{DynamicResource Brush.Bg.SurfaceAlt}">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <controls:Icon Data="{DynamicResource Icon.School}"
+                                               Width="28" Height="28"
+                                               Foreground="{DynamicResource Brush.Text.Primary}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,6"/>
+                                <TextBlock Text="Öğren"
+                                           FontWeight="SemiBold"
+                                           FontSize="13.5"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <TextBlock Text="Devre Analizi'ne hoş geldiniz"
+                               FontFamily="{DynamicResource Font.Display}"
+                               FontSize="30"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text.Primary}"
+                               TextAlignment="Center"
+                               Margin="0,0,0,14"/>
+
+                    <TextBlock Text="Devrenizi çizin ve Çöz'e basın. Program devreyi kesin olarak çözer, her adımı bir öğretmen gibi Türkçe anlatır. İnternet gerekmez, tamamen ücretsizdir."
+                               FontSize="16"
+                               Style="{DynamicResource Text.Body}"
+                               TextAlignment="Center"
+                               MaxWidth="560"
+                               LineHeight="25"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- ── Sayfa 2: Devre Çizmek ── -->
+            <Grid x:Name="Page2" Visibility="Collapsed">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Devre çizmek"
+                               FontFamily="{DynamicResource Font.Display}"
+                               FontSize="24"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text.Primary}"
+                               Margin="0,0,0,8"/>
+
+                    <TextBlock Text="Fareyle birkaç saniyede kurulur. En çok işinize yarayacak hareketler:"
+                               Style="{DynamicResource Text.Body}"
+                               Margin="0,0,0,16"/>
+
+                    <!-- 2x2 Izgara Kartları -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="14"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Eleman ekle -->
+                        <Border Grid.Row="0" Grid.Column="0"
+                                Style="{DynamicResource Card.Inset}"
+                                Padding="14,12">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <controls:Icon Data="{DynamicResource Icon.Resistor}" Width="18" Height="18"
+                                                   Foreground="{DynamicResource Brush.Accent}" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Eleman ekle" FontWeight="SemiBold" FontSize="14"
+                                               Foreground="{DynamicResource Brush.Text.Primary}"/>
+                                </StackPanel>
+                                <TextBlock Text="Soldaki listeden tıklayın, sonra sürükleyip yerleştirin."
+                                           Style="{DynamicResource Text.Caption}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Tel çiz -->
+                        <Border Grid.Row="0" Grid.Column="2"
+                                Style="{DynamicResource Card.Inset}"
+                                Padding="14,12">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <controls:Icon Data="{DynamicResource Icon.Wire}" Width="18" Height="18"
+                                                   Foreground="{DynamicResource Brush.Accent}" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Tel çiz" FontWeight="SemiBold" FontSize="14"
+                                               Foreground="{DynamicResource Brush.Text.Primary}"/>
+                                </StackPanel>
+                                <TextBlock Text="“Tel çiz”i seçin, iki ucu sırayla tıklayın. Bitirince Esc."
+                                           Style="{DynamicResource Text.Caption}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Değeri değiştir -->
+                        <Border Grid.Row="2" Grid.Column="0"
+                                Style="{DynamicResource Card.Inset}"
+                                Padding="14,12">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <controls:Icon Data="{DynamicResource Icon.Settings}" Width="18" Height="18"
+                                                   Foreground="{DynamicResource Brush.Accent}" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Değeri değiştir" FontWeight="SemiBold" FontSize="14"
+                                               Foreground="{DynamicResource Brush.Text.Primary}"/>
+                                </StackPanel>
+                                <TextBlock Text="Elemana çift tıklayın: 2.2k, 100µ, 50m gibi yazabilirsiniz."
+                                           Style="{DynamicResource Text.Caption}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Döndür ve sil -->
+                        <Border Grid.Row="2" Grid.Column="2"
+                                Style="{DynamicResource Card.Inset}"
+                                Padding="14,12">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <controls:Icon Data="{DynamicResource Icon.Trash}" Width="18" Height="18"
+                                                   Foreground="{DynamicResource Brush.Accent}" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Döndür ve sil" FontWeight="SemiBold" FontSize="14"
+                                               Foreground="{DynamicResource Brush.Text.Primary}"/>
+                                </StackPanel>
+                                <TextBlock Text="Seçip R ile döndürün; sağ tıklayıp silin."
+                                           Style="{DynamicResource Text.Caption}"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Toprak Uyarısı -->
+                    <Border Style="{DynamicResource InfoBar.Info}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <controls:Icon Data="{DynamicResource Icon.Ground}"
+                                           Width="18" Height="18"
+                                           Foreground="{DynamicResource Brush.Info}"
+                                           Margin="0,0,10,0"
+                                           VerticalAlignment="Center"/>
+                            <TextBlock Text="Toprak (GND) eklemeyi unutmayın. Gerilimler ona göre ölçülür."
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+
+            <!-- ── Sayfa 3: Çöz ve Adım Adım Öğren ── -->
+            <Grid x:Name="Page3" Visibility="Collapsed">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Çöz ve adım adım öğren"
+                               FontFamily="{DynamicResource Font.Display}"
+                               FontSize="24"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text.Primary}"
+                               Margin="0,0,0,8"/>
+
+                    <TextBlock Text="Sağ panelden yöntemi seçin ve Çöz'e basın (ya da F5). Saniyeler içinde:"
+                               Style="{DynamicResource Text.Body}"
+                               Margin="0,0,0,16"/>
+
+                    <!-- 3 Numaralı Satır -->
+                    <StackPanel Margin="0,0,0,16">
+                        <!-- Satır 1 -->
+                        <Border Style="{DynamicResource Card.Inset}" Margin="0,0,0,10" Padding="14,12">
+                            <DockPanel>
+                                <Border Width="28" Height="28"
+                                        CornerRadius="8"
+                                        Background="{DynamicResource Brush.Accent.Soft}"
+                                        Margin="0,0,12,0"
+                                        DockPanel.Dock="Left">
+                                    <TextBlock Text="1"
+                                               FontWeight="SemiBold"
+                                               FontSize="13.5"
+                                               Foreground="{DynamicResource Brush.Accent.SoftText}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="Anlatım sekmesi çözümü bir öğretmen gibi adım adım yazar; her adım çözücüyle kontrol edilir."
+                                           VerticalAlignment="Center"
+                                           Style="{DynamicResource Text.Body}"/>
+                            </DockPanel>
+                        </Border>
+
+                        <!-- Satır 2 -->
+                        <Border Style="{DynamicResource Card.Inset}" Margin="0,0,0,10" Padding="14,12">
+                            <DockPanel>
+                                <Border Width="28" Height="28"
+                                        CornerRadius="8"
+                                        Background="{DynamicResource Brush.Accent.Soft}"
+                                        Margin="0,0,12,0"
+                                        DockPanel.Dock="Left">
+                                    <TextBlock Text="2"
+                                               FontWeight="SemiBold"
+                                               FontSize="13.5"
+                                               Foreground="{DynamicResource Brush.Accent.SoftText}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="Sonuçlar sekmesi tüm gerilim, akım ve gücü listeler."
+                                           VerticalAlignment="Center"
+                                           Style="{DynamicResource Text.Body}"/>
+                            </DockPanel>
+                        </Border>
+
+                        <!-- Satır 3 -->
+                        <Border Style="{DynamicResource Card.Inset}" Padding="14,12">
+                            <DockPanel>
+                                <Border Width="28" Height="28"
+                                        CornerRadius="8"
+                                        Background="{DynamicResource Brush.Accent.Soft}"
+                                        Margin="0,0,12,0"
+                                        DockPanel.Dock="Left">
+                                    <TextBlock Text="3"
+                                               FontWeight="SemiBold"
+                                               FontSize="13.5"
+                                               Foreground="{DynamicResource Brush.Accent.SoftText}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="Değerler devrenin üzerinde de belirir: düğüm gerilimleri ve akım yönleri."
+                                           VerticalAlignment="Center"
+                                           Style="{DynamicResource Text.Body}"/>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <TextBlock Text="Yöntemler: düğüm gerilimleri, çevre akımları, Thevenin, Norton, süperpozisyon. DC ve AC devreler."
+                               Style="{DynamicResource Text.Caption}"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- ── Sayfa 4: Kendinizi Deneyin ── -->
+            <Grid x:Name="Page4" Visibility="Collapsed">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Kendinizi deneyin"
+                               FontFamily="{DynamicResource Font.Display}"
+                               FontSize="24"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text.Primary}"
+                               Margin="0,0,0,8"/>
+
+                    <TextBlock Text="Öğrendiklerinizi pekiştirmek için iki güçlü araç hazır:"
+                               Style="{DynamicResource Text.Body}"
+                               Margin="0,0,0,16"/>
+
+                    <!-- 2 Kart -->
+                    <Border Style="{DynamicResource Card.Inset}" Margin="0,0,0,12" Padding="16,14">
+                        <DockPanel>
+                            <controls:Icon Data="{DynamicResource Icon.School}"
+                                           Width="24" Height="24"
+                                           Foreground="{DynamicResource Brush.Accent}"
+                                           Margin="0,2,14,0"
+                                           DockPanel.Dock="Left"
+                                           VerticalAlignment="Top"/>
+                            <StackPanel>
+                                <TextBlock Text="Alıştırma modu"
+                                           FontWeight="SemiBold"
+                                           FontSize="15"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                           Margin="0,0,0,4"/>
+                                <TextBlock Text="Açıkken sonuçlar gizlenir. Cevabınızı yazın (4m, 4 mA, 3∠−72); program kontrol eder ve hatanın nedenini söyler: işaret, mA–A karışıklığı, tepe–etkin değer…"
+                                           Style="{DynamicResource Text.Caption}"
+                                           LineHeight="18"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <Border Style="{DynamicResource Card.Inset}" Margin="0,0,0,16" Padding="16,14">
+                        <DockPanel>
+                            <controls:Icon Data="{DynamicResource Icon.Shuffle}"
+                                           Width="24" Height="24"
+                                           Foreground="{DynamicResource Brush.Accent}"
+                                           Margin="0,2,14,0"
+                                           DockPanel.Dock="Left"
+                                           VerticalAlignment="Top"/>
+                            <StackPanel>
+                                <TextBlock Text="Yeni soru"
+                                           FontWeight="SemiBold"
+                                           FontSize="15"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                           Margin="0,0,0,4"/>
+                                <TextBlock Text="Seçtiğiniz türde rastgele bir devre üretir. Her sorunun 4 haneli bir kodu var: hocanız kodu verirse herkes aynı soruyu açar."
+                                           Style="{DynamicResource Text.Caption}"
+                                           LineHeight="18"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- İpucu Bilgisi -->
+                    <Border Style="{DynamicResource InfoBar.Success}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <controls:Icon Data="{DynamicResource Icon.Check}"
+                                           Width="18" Height="18"
+                                           Foreground="{DynamicResource Brush.Success}"
+                                           Margin="0,0,10,0"
+                                           VerticalAlignment="Center"/>
+                            <TextBlock Text="Takıldığınızda İpucu çözümü adım adım açar; cevabı birden göstermez."
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+
+            <!-- ── Sayfa 5: Yapay Zekâya Sorun ── -->
+            <Grid x:Name="Page5" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="0,0,12,0">
+                        <TextBlock Text="Yapay zekâya sorun (isteğe bağlı)"
+                                   FontFamily="{DynamicResource Font.Display}"
+                                   FontSize="22"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.Text.Primary}"
+                                   Margin="0,0,0,6"/>
+
+                        <TextBlock Text="Çözümden sonra “Neden bu akım eksi çıktı?” gibi sorular sorabilirsiniz. Yapay zekâ bilgisayarınızda çalışır; cevaplarındaki her sayı çözümle karşılaştırılır. Alıştırmada cevabı söylemez, yalnızca yol gösterir."
+                                   Style="{DynamicResource Text.Caption}"
+                                   LineHeight="18"
+                                   Margin="0,0,0,14"/>
+
+                        <!-- Gömülü Yapay Zekâ Sihirbazı -->
+                        <views:AiSetupView x:Name="SetupView"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+
+        <!-- ═══════════ Alt Satır: Noktalar ve Butonlar ═══════════ -->
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <!-- Sayfa Noktaları (0..4) -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="Dot0" Click="Dot_Click" Tag="0" Margin="0,0,6,0" Cursor="Hand" Background="Transparent" BorderThickness="0" Padding="0">
+                    <Border x:Name="DotVisual0" Width="22" Height="8" CornerRadius="4" Background="{DynamicResource Brush.Accent}"/>
+                </Button>
+                <Button x:Name="Dot1" Click="Dot_Click" Tag="1" Margin="0,0,6,0" Cursor="Hand" Background="Transparent" BorderThickness="0" Padding="0">
+                    <Border x:Name="DotVisual1" Width="8" Height="8" CornerRadius="4" Background="{DynamicResource Brush.Border.Strong}"/>
+                </Button>
+                <Button x:Name="Dot2" Click="Dot_Click" Tag="2" Margin="0,0,6,0" Cursor="Hand" Background="Transparent" BorderThickness="0" Padding="0">
+                    <Border x:Name="DotVisual2" Width="8" Height="8" CornerRadius="4" Background="{DynamicResource Brush.Border.Strong}"/>
+                </Button>
+                <Button x:Name="Dot3" Click="Dot_Click" Tag="3" Margin="0,0,6,0" Cursor="Hand" Background="Transparent" BorderThickness="0" Padding="0">
+                    <Border x:Name="DotVisual3" Width="8" Height="8" CornerRadius="4" Background="{DynamicResource Brush.Border.Strong}"/>
+                </Button>
+                <Button x:Name="Dot4" Click="Dot_Click" Tag="4" Cursor="Hand" Background="Transparent" BorderThickness="0" Padding="0">
+                    <Border x:Name="DotVisual4" Width="8" Height="8" CornerRadius="4" Background="{DynamicResource Brush.Border.Strong}"/>
+                </Button>
+            </StackPanel>
+
+            <!-- Gezinme Butonları -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button x:Name="BtnBack"
+                        Content="Geri"
+                        Style="{DynamicResource Button.Secondary}"
+                        Margin="0,0,10,0"
+                        Visibility="Collapsed"
+                        Click="BtnBack_Click"/>
+
+                <Button x:Name="BtnNext"
+                        Content="İleri"
+                        Style="{DynamicResource Button.Primary}"
+                        Click="BtnNext_Click"/>
+
+                <!-- Sayfa 5 için özel butonlar -->
+                <Button x:Name="BtnStartTour"
+                        Content="Uygulamayı gezdir"
+                        Style="{DynamicResource Button.Secondary}"
+                        Margin="0,0,10,0"
+                        Visibility="Collapsed"
+                        Click="BtnStartTour_Click"/>
+
+                <Button x:Name="BtnStartExample"
+                        Content="Örnek devreyle başla"
+                        Style="{DynamicResource Button.Primary}"
+                        Visibility="Collapsed"
+                        Click="BtnStartExample_Click"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

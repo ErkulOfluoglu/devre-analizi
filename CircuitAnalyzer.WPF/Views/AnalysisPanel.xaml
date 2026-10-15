@@ -1,0 +1,231 @@
+<UserControl x:Class="CircuitAnalyzer.WPF.Views.AnalysisPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:controls="clr-namespace:CircuitAnalyzer.WPF.Controls"
+             mc:Ignorable="d" 
+             d:DesignWidth="380" d:DesignHeight="700"
+             Background="Transparent">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Kart 1: Ayarlar ve Çöz Butonu -->
+            <RowDefinition Height="Auto"/>
+            <!-- Kart 2: Sonuçlar (Kalan yüksekliği doldurur) -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- KART 1: AYARLAR                            -->
+        <!-- ═══════════════════════════════════════════ -->
+        <Border Grid.Row="0"
+                Style="{DynamicResource Card}"
+                Margin="0,0,0,14">
+            <StackPanel>
+                <!-- Başlık Satırı -->
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Analiz"
+                                   Style="{DynamicResource Text.Title}"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtProblemCode"
+                                   Style="{DynamicResource Text.Caption}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.Accent}"
+                                   VerticalAlignment="Center"
+                                   Margin="8,4,0,0"
+                                   Visibility="Collapsed"/>
+                    </StackPanel>
+
+                    <!-- Durum Hapı -->
+                    <Border x:Name="PillBackendStatus"
+                            Grid.Column="1"
+                            Style="{DynamicResource Pill.Neutral}"
+                            VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtBackendStatus"
+                                   Text="Çözücü başlatılıyor…"/>
+                    </Border>
+                </Grid>
+
+                <!-- Soru Kodu Kartı (rastgele soru yüklenince) -->
+                <Border x:Name="CardProblemCode"
+                        Background="{DynamicResource Brush.Accent.Soft}"
+                        CornerRadius="12"
+                        Padding="12"
+                        Margin="0,0,0,12"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtProblemCodeBig"
+                                       Foreground="{DynamicResource Brush.Accent.SoftText}"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock Text="Aynı soruyu öğrencilere vermek için bu kodu paylaşın: Yeni Soru → Soru koduyla aç"
+                                       Style="{DynamicResource Text.Caption}"
+                                       Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <Button x:Name="BtnCopyProblemCode"
+                                Grid.Column="1"
+                                Style="{DynamicResource Button.Secondary}"
+                                Height="32"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                ToolTip="Soru kodunu panoya kopyalar"
+                                Click="BtnCopyProblemCode_Click">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <controls:Icon x:Name="IconCopyProblemCode"
+                                               Data="{DynamicResource Icon.Copy}"
+                                               Width="16" Height="16"
+                                               Margin="0,0,6,0"/>
+                                <TextBlock x:Name="TxtCopyProblemCode"
+                                           Text="Kopyala"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- Mod Etiketi -->
+                <TextBlock x:Name="TxtModeLabel"
+                           Text="DC analiz"
+                           Style="{DynamicResource Text.Caption}"
+                           Margin="0,0,0,8"/>
+
+                <!-- Yöntem Seçici -->
+                <TextBlock Text="Yöntem"
+                           Style="{DynamicResource Text.Caption}"
+                           Margin="0,0,0,4"/>
+                <ComboBox x:Name="CmbAnalysisType"
+                          SelectedIndex="0"
+                          SelectionChanged="CmbAnalysisType_SelectionChanged">
+                    <ComboBoxItem Content="Düğüm Gerilimleri"/>
+                    <ComboBoxItem Content="Thevenin Eşdeğeri"/>
+                    <ComboBoxItem Content="Norton Eşdeğeri"/>
+                    <ComboBoxItem Content="Çevre Akımları"/>
+                    <ComboBoxItem Content="Süperpozisyon"/>
+                </ComboBox>
+
+                <!-- Terminaller (Thevenin/Norton için) -->
+                <Grid x:Name="RowTerminals"
+                      Margin="0,8,0,0"
+                      Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="+ terminal"
+                                   Style="{DynamicResource Text.Caption}"
+                                   Margin="0,0,0,2"/>
+                        <ComboBox x:Name="CmbTerminalPositive"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="− terminal"
+                                   Style="{DynamicResource Text.Caption}"
+                                   Margin="0,0,0,2"/>
+                        <ComboBox x:Name="CmbTerminalNegative"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Frekans (AC için) -->
+                <StackPanel x:Name="RowFrequency"
+                            Margin="0,8,0,0"
+                            Visibility="Collapsed">
+                    <TextBlock x:Name="TxtFrequencyLabel"
+                               Text="Frekans (Hz) — gerekli"
+                               Style="{DynamicResource Text.Caption}"
+                               Margin="0,0,0,2"/>
+                    <TextBox x:Name="TxtFrequency"/>
+                </StackPanel>
+
+                <!-- Alıştırma modu switch -->
+                <CheckBox x:Name="ChkPracticeMode"
+                          Style="{DynamicResource CheckBox.Switch}"
+                          Margin="0,12,0,0"
+                          ToolTip="Açıkken Çöz'e basınca sonuçlar gizlenir; soruları kendiniz çözüp cevaplarınızı kontrol edersiniz.">
+                    <StackPanel>
+                        <TextBlock Text="Alıştırma modu" FontSize="14" FontWeight="SemiBold"/>
+                        <TextBlock Text="Önce kendim çözeceğim" Style="{DynamicResource Text.Caption}"/>
+                    </StackPanel>
+                </CheckBox>
+
+                <!-- Çöz Butonu -->
+                <Button x:Name="BtnSolve"
+                        Style="{DynamicResource Button.Primary}"
+                        HorizontalAlignment="Stretch"
+                        Margin="0,16,0,0"
+                        Click="BtnSolve_Click">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <controls:Icon x:Name="IconSolve"
+                                       Data="{DynamicResource Icon.Play}"
+                                       Width="16" Height="16"
+                                       Margin="0,0,8,0"
+                                       VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtSolve"
+                                   Text="Çöz"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtSolveKey"
+                                   Text="  F5"
+                                   Opacity="0.85"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- KART 2: SONUÇLAR VE ANLATIM                -->
+        <!-- ═══════════════════════════════════════════ -->
+        <Border Grid.Row="1"
+                Style="{DynamicResource Card}"
+                Padding="16">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <!-- Uyarı Banner'ı (Devre değişti) -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Kaydırılabilir Sonuçlar -->
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Uyarı Banner'ı (Devre değişti) -->
+                <Border x:Name="BannerStale"
+                        Grid.Row="0"
+                        Style="{DynamicResource InfoBar.Warning}"
+                        Margin="0,0,0,12"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <controls:Icon Data="{DynamicResource Icon.Warning}"
+                                       Width="16" Height="16"
+                                       Margin="0,0,8,0"
+                                       VerticalAlignment="Center"/>
+                        <TextBlock Text="Devre değişti — sonuçları güncellemek için tekrar Çöz'e basın"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Sonuçlar Alanı (Kaydırılabilir) -->
+                <ScrollViewer x:Name="ResultsScrollViewer"
+                              Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="ResultsContainer"/>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

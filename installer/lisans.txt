@@ -1,0 +1,47 @@
+﻿DEVRE ANALİZİ — KULLANIM KOŞULLARI
+
+Lütfen kuruluma devam etmeden önce okuyun.
+
+SORUMLULUK REDDİ
+
+Bu program bilgi paylaşımı ve eğitim amacıyla hazırlanmıştır. Olduğu gibi sunulur; doğruluğu, eksiksizliği veya belirli bir amaca uygunluğu konusunda hiçbir garanti verilmez. Sonuçları kendiniz kontrol edin. Programın kullanımından doğabilecek her türlü sonuçtan kullanıcı sorumludur; geliştirici sorumlu tutulamaz. Bu koşulları kabul etmiyorsanız programı kurmayın ve kullanmayın.
+
+GİZLİLİK
+
+Program internete bağlanmaz ve hiçbir kişisel veri toplamaz. İsteğe bağlı yapay zekâ yardımcısı tamamen bu bilgisayarda çalışır; internet yalnızca, siz istediğinizde Ollama'yı ve modeli indirirken kullanılır.
+
+İSTEĞE BAĞLI BİLEŞENLER
+
+Ollama (MIT) ve Gemma 4 modeli (Apache 2.0) bu kurulum paketinde YOKTUR. Yapay zekâ yardımcısını kullanmak isterseniz bunları kendiniz kurarsınız ve kendi lisans koşulları geçerlidir. Program, yapay zekâ olmadan da eksiksiz çalışır.
+
+AÇIK KAYNAK BİLEŞENLER
+
+Program, değiştirilmemiş açık kaynak bileşenler içerir (.NET, Python, lcapy, SymPy, NumPy, FastAPI ve diğerleri). Tam liste ve lisans metinleri, kurulumdan sonra program klasöründeki "licenses" klasöründedir. lcapy, GNU LGPL 2.1 (veya üstü) ile lisanslıdır ve "backend\_internal\lcapy" klasöründe değiştirilebilir kaynak dosyaları olarak durur.
+
+PROGRAMIN LİSANSI (MIT)
+
+Aşağıdaki İngilizce metin hukuken geçerli olan lisanstır. Özetle: programı ücretsiz kullanabilir, kopyalayabilir, değiştirebilir ve dağıtabilirsiniz; telif ve lisans notunu korumanız yeterlidir. Program hiçbir garanti olmaksızın sunulur.
+
+------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2026 Erkul Ofluoğlu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
