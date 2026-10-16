@@ -82,6 +82,10 @@ namespace CircuitAnalyzer.WPF
             {
                 _ = RunTourShotAsync(ts!);
             }
+            else if (TryGetDemoShots(args, out var demoOutDir))
+            {
+                _ = RunDemoShotsAsync(demoOutDir!);
+            }
             else if (SelfTestOptions.TryParse(args, out var selfTest))
             {
                 _ = RunSelfTestAsync(selfTest!);
@@ -418,7 +422,8 @@ namespace CircuitAnalyzer.WPF
                    args.Contains("--onboarding-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--about-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--shortcuts-shot", StringComparer.OrdinalIgnoreCase) ||
-                   args.Contains("--tour-shot", StringComparer.OrdinalIgnoreCase);
+                   args.Contains("--tour-shot", StringComparer.OrdinalIgnoreCase) ||
+                   args.Contains("--demo-shots", StringComparer.OrdinalIgnoreCase);
         }
 
         internal static bool TryGetOnboardingShot(string[] args, out OnboardingShotOptions? options)
