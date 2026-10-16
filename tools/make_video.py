@@ -1215,13 +1215,41 @@ def write_contact_sheet_and_poster(
     poster_img.save(poster_path, format="PNG")
 
 
+def mux_music_into_video(video_path: Path, music_path: Path) -> None:
+    """
+    Kodlanmış MP4 videosuna verilen WAV ses dosyasını (AAC 160k) ffmpeg ile
+    geçici dosya üzerinden birleştirir (muxing) ve hedef dosyanın üzerine yazar.
+    """
+    if not music_path.exists():
+        raise FileNotFoundError(f"Müzik dosyası bulunamadı: {music_path}")
+    tmp_mux = video_path.with_suffix(".mux.mp4")
+    mux_cmd = [
+        "ffmpeg",
+        "-y",
+        "-i", str(video_path),
+        "-i", str(music_path),
+        "-map", "0:v",
+        "-map", "1:a",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-b:a", "160k",
+        "-shortest",
+        "-movflags", "+faststart",
+        str(tmp_mux),
+    ]
+    subprocess.run(mux_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    tmp_mux.replace(video_path)
+
+
 def encode_video(
     renderer: VideoRenderer,
     out_path: Path,
     fps: int = DEFAULT_FPS,
+    music_path: Optional[Path] = None,
 ) -> Tuple[int, int]:
     """
     Ham RGB kareleri subprocess üzerinden ffmpeg'e aktararak MP4 üretir.
+    İsteğe bağlı olarak --music ile verilen WAV dosyasını AAC olarak birleştirir.
     Dosya boyutu 9.5 MB sınırını aşarsa CRF değerini +3 artırarak yeniden kodlar.
     Döndürür: (toplam_kare_sayısı, dosya_boyutu_bayt).
     """
@@ -1267,7 +1295,11 @@ def encode_video(
     poster_path = out_path.parent / "poster.png"
     write_contact_sheet_and_poster(renderer, contact_path, poster_path, sampled_seconds)
 
-    # 9.5 MB (9_961_472 bayt) boyut kontrolü
+    # Müzik birleştirme (muxing) varsa boyut kontrolünden önce uygula
+    if music_path is not None:
+        mux_music_into_video(out_path, music_path)
+
+    # 9.5 MB (9_961_472 bayt) boyut kontrolü (muxing sonrasında anlamlı kalır)
     max_bytes = int(9.5 * 1024 * 1024)
     crf = 20
     while out_path.stat().st_size > max_bytes and crf < 40:
@@ -1281,9 +1313,10 @@ def encode_video(
             "-preset", "slow",
             "-crf", str(crf),
             "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            str(tmp_path),
         ]
+        if music_path is not None:
+            re_cmd += ["-c:a", "copy"]
+        re_cmd += ["-movflags", "+faststart", str(tmp_path)]
         subprocess.run(re_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         tmp_path.replace(out_path)
 
@@ -1505,6 +1538,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--shots", type=Path, default=Path("build/video/shots"), help="shots.json dizini")
     parser.add_argument("--out", type=Path, default=Path("build/video/devre-analizi-tanitim.mp4"), help="Çıktı MP4 yolu")
     parser.add_argument("--fps", type=int, default=DEFAULT_FPS, help="Kare hızı (varsayılan: 30)")
+    parser.add_argument("--music", type=Path, default=None, help="Videoya eklenecek WAV ses dosyası (isteğe bağlı)")
     parser.add_argument("--preview", action="store_true", help="Yalnızca iletişim sayfasını ve posteri üret (hızlı)")
     parser.add_argument("--synthetic", type=Path, default=None, help="Sahte test görüntülerini belirtilen dizine üret ve çık")
     return parser.parse_args(argv)
@@ -1537,7 +1571,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 0
 
-    total_frames, size_bytes = encode_video(renderer, args.out, fps=args.fps)
+    total_frames, size_bytes = encode_video(renderer, args.out, fps=args.fps, music_path=args.music)
     dt = time.perf_counter() - t0
     size_mb = size_bytes / (1024 * 1024)
     print(
