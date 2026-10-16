@@ -16,6 +16,8 @@
   <a href="#sorumluluk-reddi">Sorumluluk reddi</a>
 </p>
 
+https://github.com/user-attachments/assets/8298aa93-6456-4b34-bcca-171816584310
+
 <p align="center">
   <img src="docs/ekran/01-cozum.png" width="860" alt="Çevre akımları yöntemiyle çözülmüş bir devre ve adım adım Türkçe anlatım">
 </p>
