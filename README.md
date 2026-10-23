@@ -43,6 +43,7 @@ https://github.com/user-attachments/assets/8298aa93-6456-4b34-bcca-171816584310
 - **DC ve AC (fazör) devreler:** farklı frekanslı kaynaklar süperpozisyonla ayrı ayrı çözülür.
 - **Alıştırma modu:** program soru sorar, siz cevabı yazarsınız (`1k5`, `2,5 mA`, `10∠30°` gibi). Yanlışsa *neden* yanlış olduğunu söyler: işaret hatası, birim öneki, tepe/etkin değer karışıklığı…
 - **Soru kodları:** "Yeni soru" ile rastgele devre üretin. Her sorunun 4 haneli bir kodu vardır; öğretmen kodu paylaşır, bütün sınıf aynı soruyu açar.
+- **Kolay düzenleme:** uca tıklayıp tel çizme, sürükleyerek toplu seçim, birlikte taşıma ve silme, **kopyala / yapıştır / çoğalt**.
 - **Kaydet / aç** (`.devre` dosyası), **geri al / yinele**, **yakınlaştırma**, **yazdır / PDF olarak kaydet** (alıştırma kâğıdı olarak da).
 - **Açık ve koyu tema**, ilk açılışta kısa bir tanıtım ve uygulama turu.
 
@@ -58,7 +59,8 @@ https://github.com/user-attachments/assets/8298aa93-6456-4b34-bcca-171816584310
 
 ## Nasıl kullanılır?
 
-1. Soldaki listeden bir elemana tıklayın ve çizim alanına yerleştirin. Bağlamak için **Tel çiz**'i seçip iki ucu sırayla tıklayın (bitirince Esc).
+1. Soldaki listeden bir elemana tıklayın ve çizim alanına yerleştirin. Bağlamak için bir elemanın **ucuna tıklayın**, sonra bağlanacak uca tıklayın (vazgeçmek için Esc).
+   Birden fazla elemanı seçmek için boş alanda fareyle sürükleyin; seçilenleri birlikte taşıyabilir, silebilir ya da Ctrl+C / Ctrl+V ile kopyalayabilirsiniz.
 2. Bir **toprak** (GND) eklemeyi unutmayın; gerilimler ona göre ölçülür.
 3. Sağ panelden yöntemi seçin (Düğüm gerilimleri, Çevre akımları, Thevenin…) ve **Çöz**'e basın.
 4. **Anlatım** sekmesinde çözümü adım adım okuyun; değerler devrenin üzerinde de görünür.

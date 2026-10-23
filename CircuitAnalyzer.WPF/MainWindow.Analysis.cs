@@ -78,6 +78,10 @@ namespace CircuitAnalyzer.WPF
             {
                 _ = RunShortcutsShotAsync(shortcutsPng!);
             }
+            else if (TryGetEditorShot(args, out var editorPng))
+            {
+                _ = RunEditorShotAsync(editorPng!);
+            }
             else if (TryGetTourShot(args, out var ts))
             {
                 _ = RunTourShotAsync(ts!);
@@ -350,14 +354,14 @@ namespace CircuitAnalyzer.WPF
                              "paylaşın (Yeni Soru → Soru koduyla aç). Çözmek için ▶ Çöz'e basın; sonuçlar gizli kalır.";
         }
 
-        private void LoadExample(ExampleCircuit example)
+        public void LoadExample(ExampleCircuit example)
         {
             ClearCircuit();
             _problemCode = example.ProblemCode;
             AnalysisPanel.SetProblemCode(example.ProblemCode);
 
             foreach (var element in example.Elements)
-                AddElementToCanvas(element);
+                AddElementToCanvasCore(element);
             foreach (var wire in example.Wires)
             {
                 _wires.Add(wire);
@@ -406,7 +410,7 @@ namespace CircuitAnalyzer.WPF
         }
 
         // ═══════════════════════════════════════════════════════
-        //  OTOMATİK EKRAN TESTİ  (--selftest / --onboarding-shot / --tour-shot)
+        //  OTOMATİK EKRAN TESTİ  (--selftest / --onboarding-shot / --tour-shot / --editor-shot)
         // ═══════════════════════════════════════════════════════
 
         internal sealed record OnboardingShotOptions(int Page, string OutputPng);
@@ -418,6 +422,7 @@ namespace CircuitAnalyzer.WPF
                    args.Contains("--onboarding-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--about-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--shortcuts-shot", StringComparer.OrdinalIgnoreCase) ||
+                   args.Contains("--editor-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--tour-shot", StringComparer.OrdinalIgnoreCase);
         }
 
@@ -445,6 +450,16 @@ namespace CircuitAnalyzer.WPF
         {
             outputPng = null;
             int i = Array.FindIndex(args, a => string.Equals(a, "--shortcuts-shot", StringComparison.OrdinalIgnoreCase));
+            if (i < 0 || i + 1 >= args.Length)
+                return false;
+            outputPng = Path.GetFullPath(args[i + 1]);
+            return true;
+        }
+
+        internal static bool TryGetEditorShot(string[] args, out string? outputPng)
+        {
+            outputPng = null;
+            int i = Array.FindIndex(args, a => string.Equals(a, "--editor-shot", StringComparison.OrdinalIgnoreCase));
             if (i < 0 || i + 1 >= args.Length)
                 return false;
             outputPng = Path.GetFullPath(args[i + 1]);
@@ -786,6 +801,33 @@ namespace CircuitAnalyzer.WPF
 
                 SaveScreenshot(outputPng);
                 File.WriteAllText(Path.ChangeExtension(outputPng, ".txt"), "Kısayollar");
+                Application.Current.Shutdown(0);
+            }
+            catch (Exception ex)
+            {
+                File.WriteAllText(Path.ChangeExtension(outputPng, ".txt"), $"HATA: {ex}");
+                Application.Current.Shutdown(1);
+            }
+        }
+
+        private async Task RunEditorShotAsync(string outputPng)
+        {
+            try
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                Left = -20000;
+                Top = 0;
+                ShowActivated = false;
+
+                Show();
+                await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                LoadExample(ExampleCircuits.All[0]());
+                SelectAllElements();
+                DuplicateSelected();
+                UpdateLayout();
+
+                SaveScreenshot(outputPng);
+                File.WriteAllText(Path.ChangeExtension(outputPng, ".txt"), TxtStatus.Text);
                 Application.Current.Shutdown(0);
             }
             catch (Exception ex)

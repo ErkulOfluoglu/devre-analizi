@@ -175,7 +175,7 @@
                                     <TextBlock Text="Tel çiz" FontWeight="SemiBold" FontSize="14"
                                                Foreground="{DynamicResource Brush.Text.Primary}"/>
                                 </StackPanel>
-                                <TextBlock Text="“Tel çiz”i seçin, iki ucu sırayla tıklayın. Bitirince Esc."
+                                <TextBlock Text="Bir elemanın ucuna tıklayın, sonra bağlanacak uca tıklayın. (Esc: vazgeç)"
                                            Style="{DynamicResource Text.Caption}"/>
                             </StackPanel>
                         </Border>

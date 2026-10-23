@@ -38,7 +38,7 @@ namespace CircuitAnalyzer.WPF.Services
                 {
                     TargetAccessor = () => window?.CanvasCard,
                     Title = "Çizim alanı",
-                    Body = "Elemanları burada bağlayın. Çift tık: değeri değiştir · R: döndür · sağ tık: sil. Kareler hizalamaya yardım eder."
+                    Body = "Bir elemanın ucuna tıklayın, sonra bağlanacak uca tıklayın. (Esc: vazgeç) Çift tık: değeri değiştir · R: döndür · sağ tık: sil."
                 },
                 new()
                 {

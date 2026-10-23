@@ -52,25 +52,60 @@ namespace CircuitAnalyzer.WPF
         private UIElement? _draggedVisual = null;
         private Point _dragOffset;
         private Point _dragStartPosition;
+        private Dictionary<CircuitElement, Point> _dragInitialPositions = new();
 
-        // ── Seçim durumu ('R' tuşu ile döndürme için) ──
+        // ── Seçim durumu (tekli ve çoklu seçim modeli) ──
+        private readonly SelectionModel _selection = new();
         private CircuitElement? _selectedElement = null;
         private UIElement? _selectedVisual = null;
+        private readonly List<Rectangle> _selectionHighlights = new();
 
-        // ── Tel çizim durumu ──
+        // ── Çerçeve (Rubber-band) seçim durumu ──
+        private const double RubberBandThreshold = 4.0;
+        private bool _isRubberBandPending = false;
+        private bool _isRubberBandActive = false;
+        private Point _rubberBandStart;
+        private Rectangle? _rubberBandRect = null;
+
+        // ── Tel çizim durumu (Tel modu + normal modda uca tıklayarak tel çizme) ──
         private bool _isWireMode = false;
+        private bool _isPinWiring = false;
         private Pin? _wireStartPin = null;
         private Polyline? _wirePreview = null;
         private Ellipse? _pinHighlight = null;
 
-        // ── UIElement → CircuitElement eşleştirmesi ──
+        // ── UIElement ↔ CircuitElement eşleştirmesi ──
         private readonly Dictionary<UIElement, CircuitElement> _visualToElement = new();
+        private readonly Dictionary<CircuitElement, UIElement> _elementToVisual = new();
+
+        // ── Pano ve sağ-tık bağlam menüsü durumu ──
+        private int _pasteCascadeCount = 0;
+        private Point? _contextMenuCanvasPos = null;
+        private MenuItem? _canvasPasteMenuItem = null;
+        private MenuItem? _canvasSelectAllMenuItem = null;
+
+        /// <summary>Seçim modeli (birim ve ekran testleri için erişilebilir).</summary>
+        public SelectionModel Selection => _selection;
+
+        /// <summary>Pano servisi (testlerde bellek içi pano ile değiştirilebilir).</summary>
+        public IClipboardService ClipboardService { get; set; } = new SystemClipboardService();
+
+        /// <summary>Tuvaldeki devre elemanları.</summary>
+        public IReadOnlyList<CircuitElement> Elements => _elements;
+
+        /// <summary>Tuvaldeki bağlantı telleri.</summary>
+        public IReadOnlyList<Wire> Wires => _wires;
+
+        /// <summary>Geri al / yinele geçmişi.</summary>
+        public UndoHistory UndoHistory => _undoHistory;
+
+        /// <summary>Belgede kaydedilmemiş değişiklik var mı?</summary>
+        public bool IsDirty => _isDirty;
 
         // ── Pin algılama eşiği (piksel) ──
         private const double PinSnapThreshold = 12.0;
-
-        // ── Seçim vurgu kutusu ──
-        private Rectangle? _selectionHighlight = null;
+        /// <summary>Normal modda uç algılama yarıçapının tuval birimi cinsinden üst sınırı.</summary>
+        private const double NormalModePinRadiusCap = 14.0;
 
         // ── Dosya ve Geri Al / Yinele durumu ──
         private string? _currentFilePath;
@@ -90,8 +125,22 @@ namespace CircuitAnalyzer.WPF
         {
             InitializeComponent();
             ThemeManager.ApplyTitleBar(this);
-            ThemeManager.ThemeChanged += (_, _) => Dispatcher.Invoke(UpdateThemeButton);
+            EventHandler onThemeChanged = (_, _) =>
+            {
+                if (!Dispatcher.HasShutdownStarted && !Dispatcher.HasShutdownFinished)
+                {
+                    if (Dispatcher.CheckAccess())
+                        UpdateThemeButton();
+                    else
+                        Dispatcher.BeginInvoke(UpdateThemeButton);
+                }
+            };
+            ThemeManager.ThemeChanged += onThemeChanged;
+            Closed += (_, _) => ThemeManager.ThemeChanged -= onThemeChanged;
             _undoHistory.Changed += (_, _) => Dispatcher.Invoke(UpdateUndoRedoButtons);
+            _selection.Changed += (_, _) => UpdateSelectionHighlight();
+            InitializeCanvasContextMenu();
+            _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
             Loaded += MainWindow_Loaded;
             UpdateThemeButton();
         }
@@ -258,8 +307,16 @@ namespace CircuitAnalyzer.WPF
             {
                 ("Ctrl+Z", "Geri al"),
                 ("Ctrl+Y", "Yinele"),
+                ("Ctrl+C", "Kopyala"),
+                ("Ctrl+X", "Kes"),
+                ("Ctrl+V", "Yapıştır"),
+                ("Ctrl+D", "Çoğalt"),
+                ("Ctrl+A", "Tümünü seç"),
                 ("R", "Seçili elemanı döndür"),
                 ("Delete", "Seçili elemanı sil"),
+                ("Uca tıkla", "Tel çiz"),
+                ("Ctrl+tık", "Seçime ekle/çıkar"),
+                ("Boş alanda sürükle", "Toplu seçim"),
                 ("Çift tık", "Değeri düzenle"),
                 ("Sağ tık", "Döndür / düzenle / sil"),
                 ("Esc", "Tel çizmeyi bırak"),
@@ -602,16 +659,20 @@ namespace CircuitAnalyzer.WPF
         }
 
         /// <summary>
-        /// Bir CircuitElement'i Canvas'a ekler.
-        /// 
-        /// ★ YENİ: Sağ-tık bağlam menüsü ve çift-tık desteği eklendi.
-        /// Her elemana otomatik olarak:
-        ///   - Sürükleme (MouseLeftButtonDown)
-        ///   - Çift tıklama → Değer düzenleme diyaloğu
-        ///   - Sağ tıklama → Bağlam menüsü (Döndür / Düzenle / Sil)
-        /// bağlanır.
+        /// Bir CircuitElement'i Canvas'a ekler ve devre değişikliği kaydeder.
         /// </summary>
         private void AddElementToCanvas(CircuitElement element)
+        {
+            AddElementToCanvasCore(element);
+            SyncCountersFromIds();
+            OnCircuitChanged();
+        }
+
+        /// <summary>
+        /// Bir CircuitElement'i ve görselini Canvas'a ekler (OnCircuitChanged çağırmaz;
+        /// toplu yükleme ve yapıştırma işlemlerinde tek geri-al adımı üretmek için kullanılır).
+        /// </summary>
+        private UIElement AddElementToCanvasCore(CircuitElement element)
         {
             _elements.Add(element);
             UIElement visual = element.CreateVisual();
@@ -619,35 +680,27 @@ namespace CircuitAnalyzer.WPF
             Canvas.SetLeft(visual, element.Position.X);
             Canvas.SetTop(visual, element.Position.Y);
 
-            // Dönüş varsa uygula (Clear sonrası veya gelecekte dosyadan yükleme)
             if (element.Rotation != 0)
             {
                 ApplyRotationTransform(visual, element.Rotation);
             }
 
-            // Olay bağlantıları
             visual.MouseLeftButtonDown += Element_MouseLeftButtonDown;
+            visual.MouseRightButtonDown += Element_MouseRightButtonDown;
 
-            // ★ Sağ-tık bağlam menüsü (Context Menu)
             if (visual is FrameworkElement fe)
             {
                 fe.ContextMenu = CreateElementContextMenu(element, visual);
             }
 
             _visualToElement[visual] = element;
+            _elementToVisual[element] = visual;
             CircuitCanvas.Children.Add(visual);
-
-            OnCircuitChanged();
+            return visual;
         }
 
         /// <summary>
         /// Bir eleman için sağ-tık bağlam menüsü oluşturur.
-        /// 
-        /// Menü yapısı:
-        ///   90° Döndür (R)
-        ///   Değer düzenle
-        ///   ──────────────
-        ///   Sil
         /// </summary>
         private ContextMenu CreateElementContextMenu(CircuitElement element, UIElement visual)
         {
@@ -658,7 +711,13 @@ namespace CircuitAnalyzer.WPF
             {
                 Header = "90° Döndür (R)"
             };
-            rotateItem.Click += (s, args) => RotateElement(element, visual);
+            rotateItem.Click += (s, args) =>
+            {
+                if (_selection.IsSelected(element) && _selection.Count > 1)
+                    RotateSelected();
+                else
+                    RotateElement(element, visual);
+            };
             menu.Items.Add(rotateItem);
 
             // Düzenle
@@ -671,26 +730,127 @@ namespace CircuitAnalyzer.WPF
 
             menu.Items.Add(new Separator());
 
+            // Kopyala
+            var copyItem = new MenuItem
+            {
+                Header = "Kopyala (Ctrl+C)"
+            };
+            copyItem.Click += (s, args) =>
+            {
+                if (!_selection.IsSelected(element))
+                    _selection.Select(element);
+                CopySelected();
+            };
+            menu.Items.Add(copyItem);
+
+            // Kes
+            var cutItem = new MenuItem
+            {
+                Header = "Kes (Ctrl+X)"
+            };
+            cutItem.Click += (s, args) =>
+            {
+                if (!_selection.IsSelected(element))
+                    _selection.Select(element);
+                CutSelected();
+            };
+            menu.Items.Add(cutItem);
+
+            // Çoğalt
+            var duplicateItem = new MenuItem
+            {
+                Header = "Çoğalt (Ctrl+D)"
+            };
+            duplicateItem.Click += (s, args) =>
+            {
+                if (!_selection.IsSelected(element))
+                    _selection.Select(element);
+                DuplicateSelected();
+            };
+            menu.Items.Add(duplicateItem);
+
+            menu.Items.Add(new Separator());
+
             // Sil
             var deleteItem = new MenuItem
             {
                 Header = "Sil"
             };
-            deleteItem.Click += (s, args) => DeleteElement(element, visual);
+            deleteItem.Click += (s, args) =>
+            {
+                if (_selection.IsSelected(element) && _selection.Count > 1)
+                    DeleteSelected();
+                else
+                    DeleteElement(element, visual);
+            };
             menu.Items.Add(deleteItem);
 
             return menu;
         }
 
+        /// <summary>
+        /// Boş çizim alanı için sağ-tık bağlam menüsünü oluşturur (Yapıştır ve Tümünü seç).
+        /// </summary>
+        private void InitializeCanvasContextMenu()
+        {
+            var menu = new ContextMenu();
+
+            _canvasPasteMenuItem = new MenuItem
+            {
+                Header = "Yapıştır (Ctrl+V)",
+                IsEnabled = false
+            };
+            _canvasPasteMenuItem.Click += (_, _) => PasteFromClipboard(_contextMenuCanvasPos);
+            menu.Items.Add(_canvasPasteMenuItem);
+
+            _canvasSelectAllMenuItem = new MenuItem
+            {
+                Header = "Tümünü seç (Ctrl+A)"
+            };
+            _canvasSelectAllMenuItem.Click += (_, _) => SelectAllElements();
+            menu.Items.Add(_canvasSelectAllMenuItem);
+
+            menu.Opened += (_, _) => UpdateCanvasContextMenuState();
+
+            CircuitCanvas.ContextMenu = menu;
+            CircuitCanvas.PreviewMouseRightButtonDown += (_, e) =>
+            {
+                _contextMenuCanvasPos = e.GetPosition(CircuitCanvas);
+                UpdateCanvasContextMenuState();
+            };
+        }
+
+        private void UpdateCanvasContextMenuState()
+        {
+            if (_canvasPasteMenuItem != null)
+                _canvasPasteMenuItem.IsEnabled = ClipboardService.ContainsCircuit();
+            if (_canvasSelectAllMenuItem != null)
+                _canvasSelectAllMenuItem.IsEnabled = _elements.Count > 0;
+        }
+
+        private void Element_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is UIElement visual && _visualToElement.TryGetValue(visual, out var element))
+            {
+                if (!_selection.IsSelected(element))
+                {
+                    _selection.Select(element);
+                }
+            }
+        }
+
         // ═══════════════════════════════════════════════════════
-        //  SÜRÜKLEME (DRAG & DROP + SNAP-TO-GRID)
+        //  SÜRÜKLEME (DRAG & DROP + SNAP-TO-GRID) VE ÇERÇEVE SEÇİMİ
         // ═══════════════════════════════════════════════════════
 
         /// <summary>
         /// Bir eleman üzerinde fare sol tuşu basıldığında:
         /// - Tel modundaysa → HandleWireClick
+        /// - Pin tel çizimi sürüyorsa → HandlePinWireClick
         /// - Çift tıksa → Değer düzenleme diyaloğu
-        /// - Tek tıksa → Sürükleme başlat + elemanı seç
+        /// - Ctrl+tıksa → Seçime ekle/çıkar
+        /// - Normal modda pin üzerindeyse → Tel çizimini başlat
+        /// - Eleman gövdesindeyse → Seç + toplu sürükleme başlat
         /// </summary>
         private void Element_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
@@ -704,10 +864,23 @@ namespace CircuitAnalyzer.WPF
                 return;
             }
 
-            if (sender is UIElement visual && _visualToElement.ContainsKey(visual))
+            // ── Normal modda pin tel çizimi aktifse ──
+            if (_isPinWiring)
             {
-                var element = _visualToElement[visual];
+                if (e.ClickCount == 2 && sender is UIElement dblVisual && _visualToElement.TryGetValue(dblVisual, out var dblElement))
+                {
+                    CancelPinWire();
+                    EditElement(dblElement, dblVisual);
+                    e.Handled = true;
+                    return;
+                }
+                HandlePinWireClick(mousePos);
+                e.Handled = true;
+                return;
+            }
 
+            if (sender is UIElement visual && _visualToElement.TryGetValue(visual, out var element))
+            {
                 // ── Çift tık → Değer düzenleme ──
                 if (e.ClickCount == 2)
                 {
@@ -716,13 +889,38 @@ namespace CircuitAnalyzer.WPF
                     return;
                 }
 
-                // ── Tek tık → Seç + sürükleme başlat ──
-                SelectElement(element, visual);
+                // ── Ctrl+tık → Seçime ekle / çıkar ──
+                if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+                {
+                    _selection.Toggle(element);
+                    TxtStatus.Text = _selection.Count > 0
+                        ? $"{_selection.Count} eleman seçildi"
+                        : "Seçim temizlendi";
+                    e.Handled = true;
+                    return;
+                }
 
+                // ── Normal modda bir pinin yakınına basıldıysa doğrudan tel başlat ──
+                Pin? nearPin = FindNearestPin(mousePos);
+                if (nearPin != null)
+                {
+                    StartPinWire(nearPin);
+                    e.Handled = true;
+                    return;
+                }
+
+                // ── Gövdeye tek tık → Seç + sürükleme başlat ──
+                if (!_selection.IsSelected(element))
+                {
+                    _selection.Select(element);
+                }
+
+                RemovePreviewVisuals();
                 _isDragging = true;
                 _draggedVisual = visual;
                 _draggedElement = element;
                 _dragStartPosition = element.Position;
+                _dragInitialPositions = _selection.Elements.ToDictionary(el => el, el => el.Position);
 
                 double elementX = Canvas.GetLeft(visual);
                 double elementY = Canvas.GetTop(visual);
@@ -731,14 +929,18 @@ namespace CircuitAnalyzer.WPF
                 visual.CaptureMouse();
                 e.Handled = true;
 
-                TxtStatus.Text = $"{element.Id} sürükleniyor... (R: döndür)";
+                TxtStatus.Text = _selection.Count > 1
+                    ? $"{_selection.Count} eleman sürükleniyor..."
+                    : $"{element.Id} sürükleniyor... (R: döndür)";
             }
         }
 
         /// <summary>
         /// Canvas üzerinde fare hareket ettiğinde:
-        /// - Tel modundaysa → pin vurgusu ve önizleme
-        /// - Sürükleme aktifse → elemanı taşı + bağlı telleri güncelle
+        /// - Tel modunda veya pin tel çizimindeyse → pin vurgusu ve önizleme çizgisi
+        /// - Sürükleme aktifse → seçili tüm elemanları aynı grid-snapped delta ile taşı
+        /// - Çerçeve seçimi sürüyorsa → 4px eşiği aşılınca seçim dikdörtgenini güncelle
+        /// - Normal boş gezinmede → pin üzerindeyse vurgula ve imleci Cross yap
         /// </summary>
         private void CircuitCanvas_MouseMove(object sender, MouseEventArgs e)
         {
@@ -747,32 +949,102 @@ namespace CircuitAnalyzer.WPF
             Point snappedPos = GridHelper.Snap(mousePos);
             TxtCoords.Text = $"X: {snappedPos.X:F0}  Y: {snappedPos.Y:F0}";
 
-            if (_isWireMode)
+            if (_isWireMode || _isPinWiring)
             {
                 UpdatePinHighlight(mousePos);
                 UpdateWirePreview(mousePos);
+                CircuitCanvas.Cursor = Cursors.Cross;
                 return;
             }
 
-            if (!_isDragging || _draggedVisual == null || _draggedElement == null)
+            if (_isDragging && _draggedVisual != null && _draggedElement != null)
+            {
+                double newX = GridHelper.Snap(mousePos.X - _dragOffset.X);
+                double newY = GridHelper.Snap(mousePos.Y - _dragOffset.Y);
+
+                double canvasW = CircuitCanvas.ActualWidth > 0 ? CircuitCanvas.ActualWidth : CircuitCanvas.Width;
+                double canvasH = CircuitCanvas.ActualHeight > 0 ? CircuitCanvas.ActualHeight : CircuitCanvas.Height;
+
+                newX = Math.Max(0, Math.Min(newX, canvasW - _draggedElement.VisualWidth));
+                newY = Math.Max(0, Math.Min(newY, canvasH - _draggedElement.VisualHeight));
+
+                double dx = newX - _dragStartPosition.X;
+                double dy = newY - _dragStartPosition.Y;
+
+                foreach (var (el, startPos) in _dragInitialPositions)
+                {
+                    double elNewX = GridHelper.Snap(Math.Max(0, Math.Min(startPos.X + dx, canvasW - el.VisualWidth)));
+                    double elNewY = GridHelper.Snap(Math.Max(0, Math.Min(startPos.Y + dy, canvasH - el.VisualHeight)));
+                    var targetPos = new Point(elNewX, elNewY);
+
+                    if (el.Position != targetPos)
+                    {
+                        _overlay?.Clear();
+                        el.Position = targetPos;
+                    }
+
+                    if (_elementToVisual.TryGetValue(el, out var elVisual))
+                    {
+                        Canvas.SetLeft(elVisual, targetPos.X);
+                        Canvas.SetTop(elVisual, targetPos.Y);
+                    }
+
+                    UpdateConnectedWires(el);
+                }
+
+                UpdateSelectionHighlight();
+                return;
+            }
+
+            if (_isRubberBandPending)
+            {
+                double dist = (mousePos - _rubberBandStart).Length * Math.Max(0.25, _currentZoom);
+                if (!_isRubberBandActive && dist >= RubberBandThreshold)
+                {
+                    _isRubberBandActive = true;
+                    RemovePreviewVisuals();
+                    EnsureRubberBandVisual();
+                }
+
+                if (_isRubberBandActive && _rubberBandRect != null)
+                {
+                    var rect = new Rect(_rubberBandStart, mousePos);
+                    Canvas.SetLeft(_rubberBandRect, rect.X);
+                    Canvas.SetTop(_rubberBandRect, rect.Y);
+                    _rubberBandRect.Width = rect.Width;
+                    _rubberBandRect.Height = rect.Height;
+                }
+                return;
+            }
+
+            // Normal modda pin üzerine gelindiğinde vurgula ve imleci Cross yap
+            UpdatePinHighlight(mousePos);
+            CircuitCanvas.Cursor = _pinHighlight != null ? Cursors.Cross : Cursors.Arrow;
+        }
+
+        private void EnsureRubberBandVisual()
+        {
+            if (_rubberBandRect != null)
                 return;
 
-            double newX = GridHelper.Snap(mousePos.X - _dragOffset.X);
-            double newY = GridHelper.Snap(mousePos.Y - _dragOffset.Y);
+            _rubberBandRect = new Rectangle
+            {
+                StrokeThickness = 1,
+                IsHitTestVisible = false
+            };
+            _rubberBandRect.SetResourceReference(Shape.StrokeProperty, "Brush.Accent");
+            _rubberBandRect.SetResourceReference(Shape.FillProperty, "Brush.Circuit.SelectionFill");
+            Panel.SetZIndex(_rubberBandRect, 900);
+            CircuitCanvas.Children.Add(_rubberBandRect);
+        }
 
-            newX = Math.Max(0, Math.Min(newX, CircuitCanvas.ActualWidth - _draggedElement.VisualWidth));
-            newY = Math.Max(0, Math.Min(newY, CircuitCanvas.ActualHeight - _draggedElement.VisualHeight));
-
-            Canvas.SetLeft(_draggedVisual, newX);
-            Canvas.SetTop(_draggedVisual, newY);
-
-            // Taşıma başladı — eski konumdaki sonuç etiketleri yanıltmasın
-            if (_draggedElement.Position != new Point(newX, newY))
-                _overlay?.Clear();
-            _draggedElement.Position = new Point(newX, newY);
-
-            UpdateConnectedWires(_draggedElement);
-            UpdateSelectionHighlight();
+        private void RemoveRubberBandVisual()
+        {
+            if (_rubberBandRect != null)
+            {
+                CircuitCanvas.Children.Remove(_rubberBandRect);
+                _rubberBandRect = null;
+            }
         }
 
         private void CircuitCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -780,22 +1052,65 @@ namespace CircuitAnalyzer.WPF
             if (_isDragging && _draggedVisual != null && _draggedElement != null)
             {
                 _draggedVisual.ReleaseMouseCapture();
-                bool moved = _draggedElement.Position != _dragStartPosition;
-
-                TxtStatus.Text = $"{_draggedElement.Id} → Konum: " +
-                    $"({_draggedElement.Position.X:F0}, {_draggedElement.Position.Y:F0})";
+                bool moved = _dragInitialPositions.Any(kv => kv.Key.Position != kv.Value);
+                var clickedElement = _draggedElement;
+                int movedCount = _dragInitialPositions.Count;
 
                 _isDragging = false;
                 _draggedVisual = null;
                 _draggedElement = null;
+                _dragInitialPositions.Clear();
 
                 if (moved)
+                {
                     OnCircuitChanged();
+                    TxtStatus.Text = movedCount > 1
+                        ? $"{movedCount} eleman taşındı"
+                        : $"{clickedElement.Id} → Konum: ({clickedElement.Position.X:F0}, {clickedElement.Position.Y:F0})";
+                }
+                else if (_selection.Count > 1)
+                {
+                    // Çoklu seçimdeki bir elemana sürüklemeden tek tıklandıysa yalnızca onu seç
+                    _selection.Select(clickedElement);
+                }
+                return;
+            }
+
+            if (_isRubberBandPending)
+            {
+                CircuitCanvas.ReleaseMouseCapture();
+                _isRubberBandPending = false;
+                Point releasePos = e.GetPosition(CircuitCanvas);
+
+                if (_isRubberBandActive)
+                {
+                    _isRubberBandActive = false;
+                    RemoveRubberBandVisual();
+                    var rect = new Rect(_rubberBandStart, releasePos);
+                    bool additive = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+                    _selection.SelectInRect(rect, _elements, _wires, additive);
+                    TxtStatus.Text = _selection.Count > 0
+                        ? $"{_selection.Count} eleman seçildi"
+                        : "Seçim temizlendi";
+                }
+                else
+                {
+                    RemoveRubberBandVisual();
+                    if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+                    {
+                        DeselectElement();
+                    }
+                    Point snapped = GridHelper.Snap(releasePos);
+                    TxtCoords.Text = $"Tıklama: ({snapped.X:F0}, {snapped.Y:F0})";
+                }
             }
         }
 
         private void CircuitCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            if (_isPanning || Keyboard.IsKeyDown(Key.Space))
+                return;
+
             Point pos = e.GetPosition(CircuitCanvas);
 
             if (_isWireMode)
@@ -804,75 +1119,110 @@ namespace CircuitAnalyzer.WPF
                 return;
             }
 
-            // Boş alana tıklandığında seçimi kaldır
-            DeselectElement();
-            Point snapped = GridHelper.Snap(pos);
-            TxtCoords.Text = $"Tıklama: ({snapped.X:F0}, {snapped.Y:F0})";
+            if (_isPinWiring)
+            {
+                HandlePinWireClick(pos);
+                return;
+            }
+
+            // Normal modda pin yakınına tıklandıysa tel başlat
+            if (Keyboard.Modifiers == ModifierKeys.None)
+            {
+                Pin? nearPin = FindNearestPin(pos);
+                if (nearPin != null)
+                {
+                    StartPinWire(nearPin);
+                    return;
+                }
+            }
+
+            // Boş alanda sürükleme (Rubber-band) veya tek tıkla seçim temizleme başlat
+            _isRubberBandPending = true;
+            _isRubberBandActive = false;
+            _rubberBandStart = pos;
+            CircuitCanvas.CaptureMouse();
         }
 
         // ═══════════════════════════════════════════════════════
         //  SEÇİM MEKANİZMASI
         // ═══════════════════════════════════════════════════════
 
-        /// <summary>
-        /// Bir elemanı "seçili" olarak işaretler.
-        /// Seçili eleman 'R' tuşu ile döndürülebilir.
-        /// </summary>
+        /// <summary>Tek bir elemanı seçer.</summary>
         private void SelectElement(CircuitElement element, UIElement visual)
         {
-            // Önceki seçimi kaldır
-            DeselectElement();
-
-            _selectedElement = element;
-            _selectedVisual = visual;
-
-            // Seçili elemanın etrafına vurgu kutusu
-            _selectionHighlight = new Rectangle
-            {
-                IsHitTestVisible = false,
-                StrokeThickness = 2,
-                RadiusX = 4,
-                RadiusY = 4
-            };
-            _selectionHighlight.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Selection");
-            _selectionHighlight.SetResourceReference(Shape.FillProperty, "Brush.Circuit.SelectionFill");
-            CircuitCanvas.Children.Add(_selectionHighlight);
-            UpdateSelectionHighlight();
+            _selection.Select(element);
         }
 
-        /// <summary>Seçimi kaldırır ve vurgu kutusunu temizler.</summary>
+        /// <summary>Tüm seçimi kaldırır ve vurgu kutularını temizler.</summary>
         private void DeselectElement()
         {
-            if (_selectionHighlight != null)
-            {
-                CircuitCanvas.Children.Remove(_selectionHighlight);
-                _selectionHighlight = null;
-            }
-            _selectedElement = null;
-            _selectedVisual = null;
+            _selection.Clear();
         }
 
+        /// <summary>Tuvaldeki tüm elemanları ve telleri seçer (Ctrl+A).</summary>
+        public void SelectAllElements()
+        {
+            if (_elements.Count == 0 && _wires.Count == 0)
+                return;
+
+            _selection.SelectAll(_elements, _wires);
+            TxtStatus.Text = $"{_selection.Count} eleman seçildi";
+        }
+
+        /// <summary>
+        /// Seçili tüm elemanların etrafındaki vurgu kutularını ve seçili tellerin görünümünü günceller.
+        /// </summary>
         private void UpdateSelectionHighlight()
         {
-            if (_selectionHighlight == null || _selectedElement == null) return;
+            foreach (var rect in _selectionHighlights)
+            {
+                CircuitCanvas.Children.Remove(rect);
+            }
+            _selectionHighlights.Clear();
+
+            _selectedElement = _selection.PrimaryElement;
+            _selectedVisual = _selectedElement != null && _elementToVisual.TryGetValue(_selectedElement, out var vis)
+                ? vis
+                : null;
 
             double pad = 4;
-            double w = _selectedElement.VisualWidth + pad * 2;
-            double h = _selectedElement.VisualHeight + pad * 2;
-
-            _selectionHighlight.Width = w;
-            _selectionHighlight.Height = h;
-            Canvas.SetLeft(_selectionHighlight, _selectedElement.Position.X - pad);
-            Canvas.SetTop(_selectionHighlight, _selectedElement.Position.Y - pad);
-
-            if (_selectedElement.Rotation != 0)
+            foreach (var element in _selection.Elements)
             {
-                _selectionHighlight.RenderTransformOrigin = new Point(0.5, 0.5);
-                _selectionHighlight.RenderTransform = new RotateTransform(_selectedElement.Rotation);
+                double w = element.VisualWidth + pad * 2;
+                double h = element.VisualHeight + pad * 2;
+
+                var highlight = new Rectangle
+                {
+                    IsHitTestVisible = false,
+                    StrokeThickness = 2,
+                    RadiusX = 4,
+                    RadiusY = 4,
+                    Width = w,
+                    Height = h
+                };
+                highlight.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Selection");
+                highlight.SetResourceReference(Shape.FillProperty, "Brush.Circuit.SelectionFill");
+                Canvas.SetLeft(highlight, element.Position.X - pad);
+                Canvas.SetTop(highlight, element.Position.Y - pad);
+
+                if (element.Rotation != 0)
+                {
+                    highlight.RenderTransformOrigin = new Point(0.5, 0.5);
+                    highlight.RenderTransform = new RotateTransform(element.Rotation);
+                }
+
+                CircuitCanvas.Children.Add(highlight);
+                _selectionHighlights.Add(highlight);
             }
-            else
+
+            foreach (var wire in _wires)
             {
-                _selectionHighlight.RenderTransform = null;
+                if (wire.Visual != null)
+                {
+                    bool selected = _selection.IsSelected(wire);
+                    wire.Visual.SetResourceReference(Shape.StrokeProperty, selected ? "Brush.Circuit.Selection" : "Brush.Circuit.Wire");
+                    wire.Visual.StrokeThickness = selected ? 3 : 2;
+                }
             }
         }
 
@@ -880,40 +1230,45 @@ namespace CircuitAnalyzer.WPF
         //  DÖNDÜRME (ROTATION)
         // ═══════════════════════════════════════════════════════
 
-        /// <summary>
-        /// Elemanı 90° saat yönünde döndürür.
-        /// 
-        /// Döndürme mekanizması iki katmanlıdır:
-        /// 
-        /// 1. GÖRSEL KATMAN:
-        ///    RenderTransform ile elemanın Canvas üzerindeki çizimi döner.
-        ///    RenderTransformOrigin = (0.5, 0.5) → merkez etrafında döner.
-        ///    
-        /// 2. ELEKTRİKSEL KATMAN:
-        ///    Pin.AbsolutePosition, elemanın Rotation değerine göre
-        ///    2D döndürme matrisi uygulayarak yeni pin konumlarını hesaplar.
-        ///    Böylece teller doğru noktaya bağlı kalır.
-        /// 
-        /// İki katman senkronize çalışır:
-        ///   RotateElement() → element.Rotation += 90°
-        ///                   → visual.RenderTransform güncelle
-        ///                   → UpdateConnectedWires() → Pin.AbsolutePosition
-        ///                     yeni açıyla otomatik hesaplanır
-        /// </summary>
+        /// <summary>Tek bir elemanı 90° saat yönünde döndürür.</summary>
         private void RotateElement(CircuitElement element, UIElement visual)
         {
-            // Dönüş açısını 90° artır (0 → 90 → 180 → 270 → 0 ...)
             element.Rotation = (element.Rotation + 90) % 360;
-
-            // Görsele döndürme dönüşümü uygula
             ApplyRotationTransform(visual, element.Rotation);
 
-            // Bağlı telleri güncelle (pin pozisyonları değişti)
             UpdateConnectedWires(element);
             UpdateSelectionHighlight();
             OnCircuitChanged();
 
             TxtStatus.Text = $"{element.Id} → {element.Rotation}° döndürüldü";
+        }
+
+        /// <summary>Seçili tüm elemanları kendi merkezleri etrafında 90° döndürür (tek geri-al adımı).</summary>
+        public void RotateSelected()
+        {
+            var selected = _selection.Elements.ToList();
+            if (selected.Count == 0)
+                return;
+
+            if (selected.Count == 1 && _elementToVisual.TryGetValue(selected[0], out var singleVis))
+            {
+                RotateElement(selected[0], singleVis);
+                return;
+            }
+
+            foreach (var element in selected)
+            {
+                element.Rotation = (element.Rotation + 90) % 360;
+                if (_elementToVisual.TryGetValue(element, out var visual))
+                {
+                    ApplyRotationTransform(visual, element.Rotation);
+                }
+                UpdateConnectedWires(element);
+            }
+
+            UpdateSelectionHighlight();
+            OnCircuitChanged();
+            TxtStatus.Text = $"{selected.Count} eleman 90° döndürüldü";
         }
 
         /// <summary>
@@ -932,10 +1287,6 @@ namespace CircuitAnalyzer.WPF
 
         /// <summary>
         /// Değer düzenleme diyaloğunu açar.
-        /// Kullanıcı değerleri değiştirip "Uygula" dediğinde:
-        ///   1. Elemanın özellikleri güncellenir
-        ///   2. Görsel yeniden çizilir (etiketler yeni değerleri gösterir)
-        ///   3. Bağlı teller korunur
         /// </summary>
         private void EditElement(CircuitElement element, UIElement visual)
         {
@@ -944,74 +1295,60 @@ namespace CircuitAnalyzer.WPF
 
             if (editor.ShowDialog() == true)
             {
-                // ★ Görseli yeniden oluştur — etiketler değişti
                 RefreshElementVisual(element, visual);
                 OnCircuitChanged();
                 TxtStatus.Text = $"{element.Id} güncellendi";
             }
         }
 
-        /// <summary>
-        /// Bir elemanın görselini yeniden oluşturur.
-        /// 
-        /// Neden tam yeniden çizim?
-        /// Eleman etiketi (ör: "10µF" → "47µF") görsel Canvas'ın içindeki
-        /// TextBlock'ta yazılıdır. Bunu doğrudan güncellemek yerine,
-        /// tüm görseli yeniden oluşturmak daha güvenilirdir çünkü:
-        ///   - TextBlock referanslarını ayrıca tutmak gereksiz karmaşıklık
-        ///   - CreateVisual() zaten saf fonksiyon — her çağrıda temiz sonuç
-        ///   - Rotation transform otomatik tekrar uygulanır
-        /// </summary>
+        /// <summary>Bir elemanın görselini yeniden oluşturur.</summary>
         private void RefreshElementVisual(CircuitElement element, UIElement oldVisual)
         {
-            // Eski görseli kaldır
             CircuitCanvas.Children.Remove(oldVisual);
             _visualToElement.Remove(oldVisual);
+            _elementToVisual.Remove(element);
 
-            // Yeni görsel oluştur
             UIElement newVisual = element.CreateVisual();
 
             Canvas.SetLeft(newVisual, element.Position.X);
             Canvas.SetTop(newVisual, element.Position.Y);
 
-            // Dönüş varsa uygula
             if (element.Rotation != 0)
             {
                 ApplyRotationTransform(newVisual, element.Rotation);
             }
 
-            // Olayları bağla
             newVisual.MouseLeftButtonDown += Element_MouseLeftButtonDown;
+            newVisual.MouseRightButtonDown += Element_MouseRightButtonDown;
             if (newVisual is FrameworkElement fe)
             {
                 fe.ContextMenu = CreateElementContextMenu(element, newVisual);
             }
 
             _visualToElement[newVisual] = element;
+            _elementToVisual[element] = newVisual;
             CircuitCanvas.Children.Add(newVisual);
 
-            // Seçimi yeni görsele taşı
-            if (_selectedElement == element)
-            {
-                _selectedVisual = newVisual;
-                SelectElement(element, newVisual);
-            }
+            UpdateSelectionHighlight();
         }
 
         // ═══════════════════════════════════════════════════════
-        //  ELEMAN SİLME
+        //  ELEMAN SİLME VE PANO (KOPYALA / KES / YAPIŞTIR / ÇOĞALT)
         // ═══════════════════════════════════════════════════════
 
-        /// <summary>
-        /// Elemanı ve bağlı tüm tellerini Canvas'tan siler.
-        /// </summary>
+        /// <summary>Tek bir elemanı ve bağlı tüm tellerini Canvas'tan siler.</summary>
         private void DeleteElement(CircuitElement element, UIElement visual)
         {
-            // Seçimi temizle
-            if (_selectedElement == element)
-                DeselectElement();
+            bool wasSelected = _selection.IsSelected(element);
+            if (wasSelected)
+            {
+                var remainingElem = _selection.Elements.Where(e => e != element).ToList();
+                var remainingWires = _selection.Wires
+                    .Where(w => w.StartPin.Owner != element && w.EndPin.Owner != element)
+                    .ToList();
+                _selection.Select(remainingElem, remainingWires);
+            }
 
-            // Bağlı telleri bul ve kaldır
             var connectedWires = _wires
                 .Where(w => w.StartPin.Owner == element || w.EndPin.Owner == element)
                 .ToList();
@@ -1023,13 +1360,172 @@ namespace CircuitAnalyzer.WPF
                 _wires.Remove(wire);
             }
 
-            // Görseli kaldır
             CircuitCanvas.Children.Remove(visual);
             _visualToElement.Remove(visual);
+            _elementToVisual.Remove(element);
             _elements.Remove(element);
             OnCircuitChanged();
 
             TxtStatus.Text = $"{element.Id} silindi ({connectedWires.Count} tel de kaldırıldı)";
+        }
+
+        /// <summary>
+        /// Seçili tüm elemanları, onlara bağlı telleri ve seçili telleri tek geri-al adımında siler.
+        /// </summary>
+        public void DeleteSelected()
+        {
+            if (!_selection.HasSelection)
+                return;
+
+            var elementsToRemove = _selection.Elements.ToList();
+            var elementSet = new HashSet<CircuitElement>(elementsToRemove);
+            var wiresToRemove = _wires
+                .Where(w => _selection.IsSelected(w) ||
+                            (w.StartPin.Owner != null && elementSet.Contains(w.StartPin.Owner)) ||
+                            (w.EndPin.Owner != null && elementSet.Contains(w.EndPin.Owner)))
+                .Distinct()
+                .ToList();
+
+            if (elementsToRemove.Count == 1 && _selection.Wires.Count == 0 &&
+                _elementToVisual.TryGetValue(elementsToRemove[0], out var singleVisual))
+            {
+                DeleteElement(elementsToRemove[0], singleVisual);
+                return;
+            }
+
+            _selection.Clear();
+
+            foreach (var wire in wiresToRemove)
+            {
+                if (wire.Visual != null)
+                    CircuitCanvas.Children.Remove(wire.Visual);
+                _wires.Remove(wire);
+            }
+
+            foreach (var element in elementsToRemove)
+            {
+                if (_elementToVisual.TryGetValue(element, out var visual))
+                {
+                    CircuitCanvas.Children.Remove(visual);
+                    _visualToElement.Remove(visual);
+                    _elementToVisual.Remove(element);
+                }
+                _elements.Remove(element);
+            }
+
+            OnCircuitChanged();
+
+            if (elementsToRemove.Count > 0)
+            {
+                TxtStatus.Text = $"{elementsToRemove.Count} eleman silindi ({wiresToRemove.Count} tel de kaldırıldı)";
+            }
+            else if (wiresToRemove.Count > 0)
+            {
+                TxtStatus.Text = $"{wiresToRemove.Count} tel silindi";
+            }
+        }
+
+        /// <summary>Seçili elemanları ve iç tellerini panoya kopyalar (Ctrl+C).</summary>
+        public bool CopySelected()
+        {
+            if (_selection.Count == 0)
+                return false;
+
+            int count = _selection.Count;
+            CircuitClipboard.CopyToClipboard(ClipboardService, _selection.Elements, _wires);
+            _pasteCascadeCount = 0;
+            UpdateCanvasContextMenuState();
+            TxtStatus.Text = $"{count} eleman kopyalandı";
+            return true;
+        }
+
+        /// <summary>Seçili elemanları panoya kopyalar ve tuvalden siler (Ctrl+X, tek geri-al adımı).</summary>
+        public bool CutSelected()
+        {
+            if (_selection.Count == 0)
+                return false;
+
+            int count = _selection.Count;
+            CircuitClipboard.CopyToClipboard(ClipboardService, _selection.Elements, _wires);
+            _pasteCascadeCount = 0;
+            UpdateCanvasContextMenuState();
+            DeleteSelected();
+            TxtStatus.Text = $"{count} eleman kesildi";
+            return true;
+        }
+
+        /// <summary>
+        /// Panodaki devreyi tuvale yapıştırır (Ctrl+V, tek geri-al adımı).
+        /// Fare tuvalin üzerindeyse (veya canvasPosition verilmişse) grup sol-üstü o konuma,
+        /// değilse her yapıştırmada 2 ızgara karesi kaydırılarak yerleştirilir.
+        /// </summary>
+        public bool PasteFromClipboard(Point? canvasPosition = null)
+        {
+            string? payload = ClipboardService.GetCircuitData();
+            if (!CircuitClipboard.IsValidPayload(payload))
+                return false;
+
+            Point offset;
+            if (canvasPosition.HasValue && CircuitClipboard.TryGetTopLeft(payload, out var topLeftExplicit))
+            {
+                Point snappedTarget = GridHelper.Snap(canvasPosition.Value);
+                offset = new Point(snappedTarget.X - topLeftExplicit.X, snappedTarget.Y - topLeftExplicit.Y);
+            }
+            else if (CircuitCanvas.IsMouseOver && CircuitClipboard.TryGetTopLeft(payload, out var topLeftMouse))
+            {
+                Point snappedMouse = GridHelper.Snap(Mouse.GetPosition(CircuitCanvas));
+                offset = new Point(snappedMouse.X - topLeftMouse.X, snappedMouse.Y - topLeftMouse.Y);
+            }
+            else
+            {
+                _pasteCascadeCount++;
+                double step = 2 * GridHelper.GridSize * _pasteCascadeCount;
+                offset = new Point(step, step);
+            }
+
+            var pasted = CircuitClipboard.Paste(payload, _elements.Select(e => e.Id), offset);
+            if (pasted.Elements.Count == 0)
+                return false;
+
+            InsertPastedItems(pasted);
+            TxtStatus.Text = $"{pasted.Elements.Count} eleman yapıştırıldı";
+            return true;
+        }
+
+        /// <summary>
+        /// Seçili elemanları sistem panosuna dokunmadan 2 ızgara karesi ofsetle çoğaltır (Ctrl+D, tek geri-al adımı).
+        /// </summary>
+        public bool DuplicateSelected()
+        {
+            if (_selection.Count == 0)
+                return false;
+
+            string payload = CircuitClipboard.Copy(_selection.Elements, _wires);
+            double step = 2 * GridHelper.GridSize;
+            var pasted = CircuitClipboard.Paste(payload, _elements.Select(e => e.Id), new Point(step, step));
+            if (pasted.Elements.Count == 0)
+                return false;
+
+            InsertPastedItems(pasted);
+            TxtStatus.Text = $"{pasted.Elements.Count} eleman çoğaltıldı";
+            return true;
+        }
+
+        private void InsertPastedItems(PasteResult pasted)
+        {
+            foreach (var element in pasted.Elements)
+            {
+                AddElementToCanvasCore(element);
+            }
+            foreach (var wire in pasted.Wires)
+            {
+                _wires.Add(wire);
+                CircuitCanvas.Children.Add(wire.CreateOrUpdateVisual());
+            }
+
+            SyncCountersFromIds();
+            _selection.Select(pasted.Elements, pasted.Wires);
+            OnCircuitChanged();
         }
 
         // ═══════════════════════════════════════════════════════
@@ -1046,6 +1542,7 @@ namespace CircuitAnalyzer.WPF
 
         private void EnterWireMode()
         {
+            CancelPinWire();
             DeselectElement();
             _isWireMode = true;
             _wireStartPin = null;
@@ -1061,6 +1558,7 @@ namespace CircuitAnalyzer.WPF
         private void ExitWireMode()
         {
             _isWireMode = false;
+            _isPinWiring = false;
             _wireStartPin = null;
             CircuitCanvas.Cursor = Cursors.Arrow;
 
@@ -1073,15 +1571,57 @@ namespace CircuitAnalyzer.WPF
             TxtStatus.Text = "Hazır — Araç kutusundan bir eleman seçin";
         }
 
+        /// <summary>Normal modda bir elemanın ucuna tıklandığında tel çizimini başlatır.</summary>
+        internal bool IsPinWiring => _isPinWiring;
+
+        internal void StartPinWire(Pin startPin)
+        {
+            _isPinWiring = true;
+            _wireStartPin = startPin;
+            CircuitCanvas.Cursor = Cursors.Cross;
+            UpdatePinHighlight(startPin.AbsolutePosition);
+            TxtStatus.Text = "Tel çiziliyor — diğer uca tıklayın (Esc: vazgeç)";
+        }
+
+        /// <summary>Normal modda başlatılan tel çizimini iptal eder ve normal moda döner.</summary>
+        internal void CancelPinWire()
+        {
+            if (!_isPinWiring)
+                return;
+
+            _isPinWiring = false;
+            _wireStartPin = null;
+            RemovePreviewVisuals();
+            CircuitCanvas.Cursor = Cursors.Arrow;
+            TxtStatus.Text = "Tel çizimi iptal edildi";
+        }
+
+        internal void HandlePinWireClick(Point mousePos)
+        {
+            Pin? nearestPin = FindNearestPin(mousePos);
+            if (nearestPin == null || _wireStartPin == null || nearestPin == _wireStartPin)
+            {
+                CancelPinWire();
+                return;
+            }
+
+            Pin startPin = _wireStartPin;
+            _isPinWiring = false;
+            CircuitCanvas.Cursor = Cursors.Arrow;
+            CompleteWire(startPin, nearestPin);
+            TxtStatus.Text = $"Tel oluşturuldu: {startPin.Owner?.Id}.{startPin.Id} → {nearestPin.Owner?.Id}.{nearestPin.Id}";
+        }
+
         /// <summary>
         /// Klavye kısayolları:
         ///   F5 → Çöz
         ///   Ctrl+O → Aç, Ctrl+S → Kaydet, Ctrl+Shift+S → Farklı Kaydet, Ctrl+N → Yeni
         ///   Ctrl+Z → Geri Al, Ctrl+Y / Ctrl+Shift+Z → Yinele
+        ///   Ctrl+C → Kopyala, Ctrl+X → Kes, Ctrl+V → Yapıştır, Ctrl+D → Çoğalt, Ctrl+A → Tümünü Seç
         ///   Ctrl+0 → %100, Ctrl++ / Ctrl+- → Yakınlaştır / Uzaklaştır
-        ///   Delete → Seçili elemanı sil
-        ///   Escape → Tel modunu iptal et
-        ///   R → Seçili elemanı 90° döndür
+        ///   Delete → Seçili elemanları sil
+        ///   Escape → Tel çizimini iptal et / seçimi temizle
+        ///   R → Seçili elemanları 90° döndür
         /// </summary>
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
@@ -1162,6 +1702,46 @@ namespace CircuitAnalyzer.WPF
                 return;
             }
 
+            // ── Ctrl+C: Kopyala ──
+            if (e.Key == Key.C && mods == ModifierKeys.Control && !_isWireMode && !_isPinWiring)
+            {
+                CopySelected();
+                e.Handled = true;
+                return;
+            }
+
+            // ── Ctrl+X: Kes ──
+            if (e.Key == Key.X && mods == ModifierKeys.Control && !_isWireMode && !_isPinWiring)
+            {
+                CutSelected();
+                e.Handled = true;
+                return;
+            }
+
+            // ── Ctrl+V: Yapıştır ──
+            if (e.Key == Key.V && mods == ModifierKeys.Control && !_isWireMode && !_isPinWiring)
+            {
+                PasteFromClipboard();
+                e.Handled = true;
+                return;
+            }
+
+            // ── Ctrl+D: Çoğalt ──
+            if (e.Key == Key.D && mods == ModifierKeys.Control && !_isWireMode && !_isPinWiring)
+            {
+                DuplicateSelected();
+                e.Handled = true;
+                return;
+            }
+
+            // ── Ctrl+A: Tümünü Seç ──
+            if (e.Key == Key.A && mods == ModifierKeys.Control && !_isWireMode && !_isPinWiring)
+            {
+                SelectAllElements();
+                e.Handled = true;
+                return;
+            }
+
             // ── Ctrl+0: %100 Yakınlaştırma ──
             if ((e.Key == Key.D0 || e.Key == Key.NumPad0) && mods == ModifierKeys.Control)
             {
@@ -1192,37 +1772,51 @@ namespace CircuitAnalyzer.WPF
                 Mouse.OverrideCursor = Cursors.Hand;
             }
 
-            // ── Escape: Tel iptal ──
-            if (e.Key == Key.Escape && _isWireMode)
+            // ── Escape: Tel çizimini iptal et veya seçimi temizle ──
+            if (e.Key == Key.Escape)
             {
-                if (_wireStartPin != null)
+                if (_isPinWiring)
                 {
-                    _wireStartPin = null;
-                    RemovePreviewVisuals();
-                    TxtStatus.Text = "TEL MODU — Çizim iptal edildi. Yeni bir pine tıklayın (Esc: çık)";
+                    CancelPinWire();
+                    e.Handled = true;
+                    return;
                 }
-                else
+                if (_isWireMode)
                 {
-                    ExitWireMode();
+                    if (_wireStartPin != null)
+                    {
+                        _wireStartPin = null;
+                        RemovePreviewVisuals();
+                        TxtStatus.Text = "TEL MODU — Çizim iptal edildi. Yeni bir pine tıklayın (Esc: çık)";
+                    }
+                    else
+                    {
+                        ExitWireMode();
+                    }
+                    e.Handled = true;
+                    return;
                 }
+                if (_selection.HasSelection)
+                {
+                    DeselectElement();
+                    TxtStatus.Text = "Seçim temizlendi";
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            // ── Delete: Seçili elemanları ve telleri sil ──
+            if (e.Key == Key.Delete && !_isWireMode && !_isPinWiring && _selection.HasSelection)
+            {
+                DeleteSelected();
                 e.Handled = true;
                 return;
             }
 
-            // ── Delete: Seçili elemanı sil ──
-            if (e.Key == Key.Delete && !_isWireMode &&
-                _selectedElement != null && _selectedVisual != null)
+            // ── R: Seçili elemanları döndür ──
+            if (e.Key == Key.R && mods == ModifierKeys.None && !_isWireMode && !_isPinWiring && _selection.Count > 0)
             {
-                DeleteElement(_selectedElement, _selectedVisual);
-                e.Handled = true;
-                return;
-            }
-
-            // ── R: Seçili elemanı döndür ──
-            if (e.Key == Key.R && !_isWireMode &&
-                _selectedElement != null && _selectedVisual != null)
-            {
-                RotateElement(_selectedElement, _selectedVisual);
+                RotateSelected();
                 e.Handled = true;
             }
         }
@@ -1283,10 +1877,17 @@ namespace CircuitAnalyzer.WPF
         //  PIN ALGILAMA VE GÖRSEL GERİ BİLDİRİM
         // ═══════════════════════════════════════════════════════
 
-        private Pin? FindNearestPin(Point mousePos)
+        internal Pin? FindNearestPin(Point mousePos)
         {
             Pin? nearest = null;
-            double minDist = PinSnapThreshold;
+            double zoom = _currentZoom > 0.01 ? _currentZoom : 1.0;
+            double minDist = PinSnapThreshold / zoom;
+
+            // Normal modda (tel çizimi başlamamışken) uç algılama alanını sınırla: uzaklaştırılmış
+            // görünümde 12/zoom çok büyür ve küçük elemanların (GND, prob) tüm gövdesini kaplar;
+            // o zaman eleman sürüklenemez, her basış tel başlatır.
+            if (!_isWireMode && !_isPinWiring)
+                minDist = Math.Min(minDist, NormalModePinRadiusCap);
 
             foreach (var element in _elements)
             {
@@ -1437,12 +2038,20 @@ namespace CircuitAnalyzer.WPF
         private void ClearCircuit()
         {
             ExitWireMode();
+            CancelPinWire();
+            _isRubberBandPending = false;
+            _isRubberBandActive = false;
+            RemoveRubberBandVisual();
             DeselectElement();
             _overlay?.Clear();
 
             _elements.Clear();
             _wires.Clear();
             _visualToElement.Clear();
+            _elementToVisual.Clear();
+            _selectionHighlights.Clear();
+            _dragInitialPositions.Clear();
+            _pasteCascadeCount = 0;
             _resistorCounter = 0;
             _voltageSourceCounter = 0;
             _acSourceCounter = 0;
@@ -1504,7 +2113,7 @@ namespace CircuitAnalyzer.WPF
             {
                 ClearCircuit();
                 foreach (var element in circuit.Elements)
-                    AddElementToCanvas(element);
+                    AddElementToCanvasCore(element);
                 foreach (var wire in circuit.Wires)
                 {
                     _wires.Add(wire);
