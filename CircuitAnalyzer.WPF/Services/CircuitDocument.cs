@@ -44,7 +44,7 @@ namespace CircuitAnalyzer.WPF.Services
 
         public sealed class ElementData
         {
-            /// <summary>"R", "C", "L", "Z", "V", "VAC", "I", "IAC", "GND", "PROBE"</summary>
+            /// <summary>"R", "C", "L", "Z", "V", "VAC", "I", "IAC", "GND", "PROBE", "J"</summary>
             [JsonPropertyName("type")] public string Type { get; set; } = "";
             [JsonPropertyName("id")] public string Id { get; set; } = "";
             [JsonPropertyName("x")] public double X { get; set; }
@@ -132,6 +132,10 @@ namespace CircuitAnalyzer.WPF.Services
                 case GroundElement:
                     d.Type = "GND";
                     break;
+                case JunctionElement:
+                    d.Type = "J";
+                    d.Rotation = 0;
+                    break;
                 case Resistor: d.Type = "R"; d.Value = e.Value; break;
                 case Capacitor: d.Type = "C"; d.Value = e.Value; break;
                 case Inductor: d.Type = "L"; d.Value = e.Value; break;
@@ -172,7 +176,7 @@ namespace CircuitAnalyzer.WPF.Services
                 var e = FromData(d);
                 e.Id = d.Id;
                 e.Position = new Point(d.X, d.Y);
-                e.Rotation = NormalizeRotation(d.Rotation);
+                e.Rotation = e is JunctionElement ? 0 : NormalizeRotation(d.Rotation);
                 circuit.Elements.Add(e);
                 byId[d.Id] = e;
             }
@@ -181,6 +185,13 @@ namespace CircuitAnalyzer.WPF.Services
             {
                 circuit.Wires.Add(new Wire(PinOf(byId, w.From, w.FromPin), PinOf(byId, w.To, w.ToPin)));
             }
+
+            foreach (var j in circuit.Elements.OfType<JunctionElement>())
+            {
+                var pin = j.Pins[0];
+                j.AttachedWireCount = circuit.Wires.Count(w => w.StartPin == pin || w.EndPin == pin);
+            }
+
             return circuit;
         }
 
@@ -213,6 +224,7 @@ namespace CircuitAnalyzer.WPF.Services
                 case "V": return new VoltageSource { Value = V(d.Value, "gerilim") };
                 case "I": return new CurrentSource { Value = V(d.Value, "akım") };
                 case "GND": return new GroundElement();
+                case "J": return new JunctionElement();
                 case "VAC":
                     return new AcVoltageSource
                     {

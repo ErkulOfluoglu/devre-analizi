@@ -104,6 +104,9 @@ namespace CircuitAnalyzer.WPF.Views
 
             foreach (var element in elements)
             {
+                if (element is JunctionElement)
+                    continue;
+
                 if (element is TestProbe probe)
                 {
                     if (probeValues.TryGetValue(probe.Id, out var pr))
@@ -144,11 +147,19 @@ namespace CircuitAnalyzer.WPF.Views
                 if (node == 0 || pins.Count < 2)
                     continue;
                 var candidates = pins
-                    .Where(p => p.Owner is not TestProbe and not GroundElement)
+                    .Where(p => p.Owner is not TestProbe and not GroundElement and not JunctionElement)
                     .Select(p => p.AbsolutePosition)
                     .ToList();
                 if (candidates.Count == 0)
-                    continue;   // Sadece prob pininden oluşan boş düğüm
+                {
+                    var junctionCandidates = pins
+                        .Where(p => p.Owner is JunctionElement)
+                        .Select(p => p.AbsolutePosition)
+                        .ToList();
+                    if (junctionCandidates.Count < 2)
+                        continue; // Sadece prob veya tek bağlantı noktasından oluşan düğüm
+                    candidates.AddRange(junctionCandidates);
+                }
                 if (wirePoints.TryGetValue(node, out var corners))
                     candidates.AddRange(corners);
                 var anchor = candidates

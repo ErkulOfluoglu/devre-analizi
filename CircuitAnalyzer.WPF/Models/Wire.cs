@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using CircuitAnalyzer.WPF.Services;
 
 namespace CircuitAnalyzer.WPF.Models
 {
@@ -57,9 +58,6 @@ namespace CircuitAnalyzer.WPF.Models
             var start = StartPin.AbsolutePosition;
             var end = EndPin.AbsolutePosition;
 
-            // L-şekli kırılma noktası: önce yatay git, sonra dikey dön
-            var mid = new Point(end.X, start.Y);
-
             if (Visual == null)
             {
                 Visual = new Polyline
@@ -74,16 +72,11 @@ namespace CircuitAnalyzer.WPF.Models
             }
 
             Visual.Points.Clear();
-            Visual.Points.Add(start);
-
-            // Sadece hem X hem Y farklıysa kırılma noktası ekle
-            // Aksi halde düz çizgi yeterli
-            bool needsMidpoint = Math.Abs(start.X - end.X) > 0.5 &&
-                                 Math.Abs(start.Y - end.Y) > 0.5;
-            if (needsMidpoint)
-                Visual.Points.Add(mid);
-
-            Visual.Points.Add(end);
+            var route = WireGeometry.Route(start, end);
+            foreach (var pt in route)
+                Visual.Points.Add(pt);
+            if (Visual.Points.Count == 1)
+                Visual.Points.Add(end);
 
             return Visual;
         }
@@ -94,8 +87,6 @@ namespace CircuitAnalyzer.WPF.Models
         /// </summary>
         public static Polyline CreatePreviewLine(Point start, Point end)
         {
-            var mid = new Point(end.X, start.Y);
-
             var preview = new Polyline
             {
                 StrokeThickness = 2,
@@ -105,14 +96,11 @@ namespace CircuitAnalyzer.WPF.Models
             };
             preview.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.WirePreview");
 
-            preview.Points.Add(start);
-
-            bool needsMidpoint = Math.Abs(start.X - end.X) > 0.5 &&
-                                 Math.Abs(start.Y - end.Y) > 0.5;
-            if (needsMidpoint)
-                preview.Points.Add(mid);
-
-            preview.Points.Add(end);
+            var route = WireGeometry.Route(start, end);
+            foreach (var pt in route)
+                preview.Points.Add(pt);
+            if (preview.Points.Count == 1)
+                preview.Points.Add(end);
 
             return preview;
         }

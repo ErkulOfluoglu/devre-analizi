@@ -86,6 +86,10 @@ namespace CircuitAnalyzer.WPF
             {
                 _ = RunTourShotAsync(ts!);
             }
+            else if (TryGetJunctionShot(args, out var junctionPng))
+            {
+                _ = RunJunctionShotAsync(junctionPng!);
+            }
             else if (SelfTestOptions.TryParse(args, out var selfTest))
             {
                 _ = RunSelfTestAsync(selfTest!);
@@ -172,7 +176,7 @@ namespace CircuitAnalyzer.WPF
                     "Çözücü henüz başlamadı veya başlatılamadı. Lütfen birkaç saniye bekleyin.");
                 return;
             }
-            if (!_elements.Any(e => e is not GroundElement and not TestProbe))
+            if (!_elements.Any(e => e is not GroundElement and not TestProbe and not JunctionElement))
             {
                 AnalysisPanel.ShowError("Devre boş", "Önce araç kutusundan eleman ekleyip tellerle bağlayın.");
                 return;
@@ -367,6 +371,7 @@ namespace CircuitAnalyzer.WPF
                 _wires.Add(wire);
                 CircuitCanvas.Children.Add(wire.CreateOrUpdateVisual());
             }
+            RefreshJunctionWireCounts();
             SyncCountersFromIds();
 
             OnCircuitChanged();
@@ -407,6 +412,7 @@ namespace CircuitAnalyzer.WPF
                 .DefaultIfEmpty(0).Max();
             _groundCounter = Max("GND");
             _probeCounter = Math.Max(Max("VP"), Max("IP"));
+            _junctionCounter = Max("J");
         }
 
         // ═══════════════════════════════════════════════════════
@@ -423,7 +429,8 @@ namespace CircuitAnalyzer.WPF
                    args.Contains("--about-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--shortcuts-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--editor-shot", StringComparer.OrdinalIgnoreCase) ||
-                   args.Contains("--tour-shot", StringComparer.OrdinalIgnoreCase);
+                   args.Contains("--tour-shot", StringComparer.OrdinalIgnoreCase) ||
+                   args.Contains("--junction-shot", StringComparer.OrdinalIgnoreCase);
         }
 
         internal static bool TryGetOnboardingShot(string[] args, out OnboardingShotOptions? options)
@@ -473,6 +480,16 @@ namespace CircuitAnalyzer.WPF
             if (i < 0 || i + 2 >= args.Length || !int.TryParse(args[i + 1], out int step))
                 return false;
             options = new TourShotOptions(step, Path.GetFullPath(args[i + 2]));
+            return true;
+        }
+
+        internal static bool TryGetJunctionShot(string[] args, out string? outputPng)
+        {
+            outputPng = null;
+            int i = Array.FindIndex(args, a => string.Equals(a, "--junction-shot", StringComparison.OrdinalIgnoreCase));
+            if (i < 0 || i + 1 >= args.Length)
+                return false;
+            outputPng = Path.GetFullPath(args[i + 1]);
             return true;
         }
 
@@ -829,6 +846,64 @@ namespace CircuitAnalyzer.WPF
                 SaveScreenshot(outputPng);
                 File.WriteAllText(Path.ChangeExtension(outputPng, ".txt"), TxtStatus.Text);
                 Application.Current.Shutdown(0);
+            }
+            catch (Exception ex)
+            {
+                File.WriteAllText(Path.ChangeExtension(outputPng, ".txt"), $"HATA: {ex}");
+                Application.Current.Shutdown(1);
+            }
+        }
+
+        private async Task RunJunctionShotAsync(string outputPng)
+        {
+            try
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                Left = -20000;
+                Top = 0;
+                ShowActivated = false;
+                Height = 1100;
+
+                var c = new ExampleCircuit
+                {
+                    Name = "T-Bağlantılı RLC Devresi",
+                    Description = "VAC1 – R1 – L1 – C1 seri, C2 üst ucu R1–L1 telinin ortasına (J1) bağlı.",
+                    SuggestedAnalysisType = AnalysisTypes.Nodal,
+                };
+                var vac1 = c.Add(new AcVoltageSource { Amplitude = 10, Frequency = 50, Phase = 0 }, "VAC1", 80, 200, 90);
+                var r1 = c.Add(new Resistor { Value = 100 }, "R1", 160, 100);
+                var l1 = c.Add(new Inductor { Value = 0.1 }, "L1", 400, 100);
+                var c1 = c.Add(new Capacitor { Value = 10e-6 }, "C1", 480, 200, 90);
+                var c2 = c.Add(new Capacitor { Value = 10e-6 }, "C2", 320, 200, 90);
+                var gnd1 = c.Add(new GroundElement(), "GND1", 340, 300);
+
+                c.Connect(r1.Pins[0], vac1.Pins[0]);
+                c.Connect(r1.Pins[1], l1.Pins[0]);
+                c.Connect(l1.Pins[1], c1.Pins[0]);
+                c.Connect(vac1.Pins[1], gnd1.Pins[0]);
+                c.Connect(c1.Pins[1], gnd1.Pins[0]);
+                c.Connect(c2.Pins[1], gnd1.Pins[0]);
+
+                Show();
+                await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                LoadExample(c);
+
+                // C2'nin üst ucundan başlatıp R1–L1 telinin ortasına (360, 120) tıkla
+                StartPinWire(c2.Pins[0]);
+                HandlePinWireClick(new Point(360, 120));
+
+                if (_backendStartTask != null)
+                    await _backendStartTask;
+                if (_api == null)
+                    throw new InvalidOperationException("Çözücü başlamadı");
+
+                await SolveAsync();
+                await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                UpdateLayout();
+
+                SaveScreenshot(outputPng);
+                File.WriteAllText(Path.ChangeExtension(outputPng, ".txt"), TxtStatus.Text);
+                Application.Current.Shutdown(_hasResults ? 0 : 1);
             }
             catch (Exception ex)
             {

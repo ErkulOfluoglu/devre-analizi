@@ -51,7 +51,13 @@ namespace CircuitAnalyzer.WPF.Services
             IReadOnlyList<Wire> wires,
             DateTime? timestamp = null)
         {
-            var allPins = elements.SelectMany(el => el.Pins).ToList();
+            // Bağlantı noktası (JunctionElement) pinlerini sona bırak ki düğüm numaralandırma
+            // sırası doğrudan pin-pin bağlantılı devreyle birebir aynı kalsın.
+            var allPins = elements
+                .Where(el => el is not JunctionElement)
+                .Concat(elements.Where(el => el is JunctionElement))
+                .SelectMany(el => el.Pins)
+                .ToList();
 
             // ═══ Union-Find ═══
             var parent = new Dictionary<Pin, Pin>();
@@ -121,20 +127,21 @@ namespace CircuitAnalyzer.WPF.Services
             var acCurrentSources = elements.OfType<AcCurrentSource>().ToList();
 
             // ═══ Netlist metni ═══
+            int componentCount = elements.Count(el => el is not JunctionElement);
             var sb = new StringBuilder();
             sb.AppendLine("* Circuit Analyzer — Otomatik Netlist");
             sb.AppendLine($"* Tarih: {(timestamp ?? DateTime.Now):yyyy-MM-dd HH:mm}");
-            sb.AppendLine($"* Eleman sayısı: {elements.Count}");
+            sb.AppendLine($"* Eleman sayısı: {componentCount}");
             sb.AppendLine($"* Tel sayısı: {wires.Count}");
             sb.AppendLine($"* Düğüm sayısı: {rootToNode.Count}");
             if (hasGround)
                 sb.AppendLine("* Referans: Node 0 (GND)");
             sb.AppendLine("*");
 
-            // Devre elemanları (GND ve Probe hariç, onlar ayrı yazdırılır)
+            // Devre elemanları (GND, Probe ve bağlantı noktaları hariç)
             foreach (var element in elements)
             {
-                if (element is GroundElement || element is TestProbe)
+                if (element is GroundElement || element is TestProbe || element is JunctionElement)
                     continue;
                 sb.AppendLine(element.ToNetlistEntry(nodeMap));
             }
@@ -148,8 +155,11 @@ namespace CircuitAnalyzer.WPF.Services
             sb.AppendLine("*");
             foreach (var (node, pins) in nodePins.OrderBy(kv => kv.Key))
             {
-                double x = pins.Average(p => p.AbsolutePosition.X);
-                double y = pins.Average(p => p.AbsolutePosition.Y);
+                var posPins = pins.Where(p => p.Owner is not JunctionElement).ToList();
+                if (posPins.Count == 0)
+                    posPins = pins;
+                double x = posPins.Average(p => p.AbsolutePosition.X);
+                double y = posPins.Average(p => p.AbsolutePosition.Y);
                 sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
                     $"* NODEPOS {node} {x:0.#} {y:0.#}"));
             }

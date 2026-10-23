@@ -153,12 +153,41 @@ namespace CircuitAnalyzer.WPF.Services
                 .Distinct()
                 .ToList();
             var elementSet = new HashSet<CircuitElement>(elementList);
+            var wireList = (wires ?? Enumerable.Empty<Wire>())
+                .Where(w => w?.StartPin?.Owner != null && w.EndPin?.Owner != null)
+                .ToList();
 
-            var internalWires = (wires ?? Enumerable.Empty<Wire>())
-                .Where(w => w?.StartPin?.Owner != null &&
-                            w.EndPin?.Owner != null &&
-                            elementSet.Contains(w.StartPin.Owner) &&
-                            elementSet.Contains(w.EndPin.Owner))
+            // Kopyalanan elemanlar arasındaki tellerin geçtiği bağlantı noktalarını (JunctionElement)
+            // otomatik olarak dahil et ki T-bağlantıları kopmasın.
+            bool addedJunction;
+            do
+            {
+                addedJunction = false;
+                var candidateJunctions = wireList
+                    .SelectMany(w => new[] { w.StartPin.Owner!, w.EndPin.Owner! })
+                    .OfType<JunctionElement>()
+                    .Distinct()
+                    .Where(j => !elementSet.Contains(j))
+                    .ToList();
+
+                foreach (var j in candidateJunctions)
+                {
+                    int connectedSelectedCount = wireList.Count(w =>
+                        (w.StartPin.Owner == j && elementSet.Contains(w.EndPin.Owner!)) ||
+                        (w.EndPin.Owner == j && elementSet.Contains(w.StartPin.Owner!)));
+
+                    if (connectedSelectedCount >= 2)
+                    {
+                        elementSet.Add(j);
+                        elementList.Add(j);
+                        addedJunction = true;
+                    }
+                }
+            } while (addedJunction);
+
+            var internalWires = wireList
+                .Where(w => elementSet.Contains(w.StartPin.Owner!) &&
+                            elementSet.Contains(w.EndPin.Owner!))
                 .ToList();
 
             var doc = CircuitDocument.FromCircuit(elementList, internalWires);
@@ -329,6 +358,7 @@ namespace CircuitAnalyzer.WPF.Services
             CurrentSource => "I",
             GroundElement => "GND",
             TestProbe => "VP",
+            JunctionElement => "J",
             _ => "X",
         };
 

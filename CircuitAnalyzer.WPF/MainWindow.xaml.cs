@@ -45,6 +45,7 @@ namespace CircuitAnalyzer.WPF
         private int _impedanceCounter = 0;
         private int _groundCounter = 0;
         private int _probeCounter = 0;
+        private int _junctionCounter = 0;
 
         // ── Sürükleme (Drag) durumu ──
         private bool _isDragging = false;
@@ -73,6 +74,10 @@ namespace CircuitAnalyzer.WPF
         private Pin? _wireStartPin = null;
         private Polyline? _wirePreview = null;
         private Ellipse? _pinHighlight = null;
+        private Ellipse? _junctionPreview = null;
+
+        private sealed record PendingWireSplit(Wire OriginalWire, JunctionElement Junction, Wire FirstPart, Wire SecondPart);
+        private PendingWireSplit? _pendingStartSplit = null;
 
         // ── UIElement ↔ CircuitElement eşleştirmesi ──
         private readonly Dictionary<UIElement, CircuitElement> _visualToElement = new();
@@ -106,6 +111,9 @@ namespace CircuitAnalyzer.WPF
         private const double PinSnapThreshold = 12.0;
         /// <summary>Normal modda uç algılama yarıçapının tuval birimi cinsinden üst sınırı.</summary>
         private const double NormalModePinRadiusCap = 14.0;
+        // ── Tel yakalama eşiği (ekran pikseli ve tuval birimi üst sınırı) ──
+        private const double WireSnapThreshold = 6.0;
+        private const double WireToleranceCap = 8.0;
 
         // ── Dosya ve Geri Al / Yinele durumu ──
         private string? _currentFilePath;
@@ -315,6 +323,7 @@ namespace CircuitAnalyzer.WPF
                 ("R", "Seçili elemanı döndür"),
                 ("Delete", "Seçili elemanı sil"),
                 ("Uca tıkla", "Tel çiz"),
+                ("Tele tıkla", "Telin ortasından bağlantı (T)"),
                 ("Ctrl+tık", "Seçime ekle/çıkar"),
                 ("Boş alanda sürükle", "Toplu seçim"),
                 ("Çift tık", "Değeri düzenle"),
@@ -901,12 +910,17 @@ namespace CircuitAnalyzer.WPF
                 }
 
                 // ── Normal modda bir pinin yakınına basıldıysa doğrudan tel başlat ──
-                Pin? nearPin = FindNearestPin(mousePos);
-                if (nearPin != null)
+                // Not: Bağlantı noktası (JunctionElement) tek pinli olduğundan sürüklenebilmesi için
+                // basışta sürükleme başlatılır; sürüklenmeden bırakılırsa tel çizimine geçilir.
+                if (element is not JunctionElement)
                 {
-                    StartPinWire(nearPin);
-                    e.Handled = true;
-                    return;
+                    Pin? nearPin = FindNearestPin(mousePos);
+                    if (nearPin != null)
+                    {
+                        StartPinWire(nearPin);
+                        e.Handled = true;
+                        return;
+                    }
                 }
 
                 // ── Gövdeye tek tık → Seç + sürükleme başlat ──
@@ -952,7 +966,21 @@ namespace CircuitAnalyzer.WPF
             if (_isWireMode || _isPinWiring)
             {
                 UpdatePinHighlight(mousePos);
-                UpdateWirePreview(mousePos);
+                if (_pinHighlight != null)
+                {
+                    UpdateJunctionPreview(null);
+                    UpdateWirePreview(mousePos, null);
+                }
+                else
+                {
+                    var wireHit = WireGeometry.HitTestWire(_wires, mousePos, GetWireTolerance());
+                    UpdateJunctionPreview(wireHit?.snapped);
+                    UpdateWirePreview(mousePos, wireHit?.snapped);
+                    if (wireHit != null)
+                    {
+                        TxtStatus.Text = "Bu tele bağlamak için tıklayın";
+                    }
+                }
                 CircuitCanvas.Cursor = Cursors.Cross;
                 return;
             }
@@ -1017,9 +1045,19 @@ namespace CircuitAnalyzer.WPF
                 return;
             }
 
-            // Normal modda pin üzerine gelindiğinde vurgula ve imleci Cross yap
+            // Normal modda pin veya tel üzerine gelindiğinde vurgula ve imleci Cross yap
             UpdatePinHighlight(mousePos);
-            CircuitCanvas.Cursor = _pinHighlight != null ? Cursors.Cross : Cursors.Arrow;
+            if (_pinHighlight != null)
+            {
+                UpdateJunctionPreview(null);
+                CircuitCanvas.Cursor = Cursors.Cross;
+            }
+            else
+            {
+                var wireHit = WireGeometry.HitTestWire(_wires, mousePos, GetWireTolerance());
+                UpdateJunctionPreview(wireHit?.snapped);
+                CircuitCanvas.Cursor = wireHit != null ? Cursors.Cross : Cursors.Arrow;
+            }
         }
 
         private void EnsureRubberBandVisual()
@@ -1068,10 +1106,17 @@ namespace CircuitAnalyzer.WPF
                         ? $"{movedCount} eleman taşındı"
                         : $"{clickedElement.Id} → Konum: ({clickedElement.Position.X:F0}, {clickedElement.Position.Y:F0})";
                 }
-                else if (_selection.Count > 1)
+                else
                 {
-                    // Çoklu seçimdeki bir elemana sürüklemeden tek tıklandıysa yalnızca onu seç
-                    _selection.Select(clickedElement);
+                    if (_selection.Count > 1)
+                    {
+                        // Çoklu seçimdeki bir elemana sürüklemeden tek tıklandıysa yalnızca onu seç
+                        _selection.Select(clickedElement);
+                    }
+                    if (clickedElement is JunctionElement junction && junction.Pins.Count > 0)
+                    {
+                        StartPinWire(junction.Pins[0]);
+                    }
                 }
                 return;
             }
@@ -1125,13 +1170,22 @@ namespace CircuitAnalyzer.WPF
                 return;
             }
 
-            // Normal modda pin yakınına tıklandıysa tel başlat
+            // Normal modda pin yakınına veya tel ortasına tıklandıysa tel başlat
             if (Keyboard.Modifiers == ModifierKeys.None)
             {
                 Pin? nearPin = FindNearestPin(pos);
                 if (nearPin != null)
                 {
                     StartPinWire(nearPin);
+                    return;
+                }
+
+                var wireHit = WireGeometry.HitTestWire(_wires, pos, GetWireTolerance());
+                if (wireHit is var (hitWire, snapped))
+                {
+                    UpdateJunctionPreview(null);
+                    _pendingStartSplit = SplitWireOnCanvasCore(hitWire, snapped);
+                    StartPinWire(_pendingStartSplit.Junction.Pins[0]);
                     return;
                 }
             }
@@ -1233,6 +1287,9 @@ namespace CircuitAnalyzer.WPF
         /// <summary>Tek bir elemanı 90° saat yönünde döndürür.</summary>
         private void RotateElement(CircuitElement element, UIElement visual)
         {
+            if (element is JunctionElement)
+                return;
+
             element.Rotation = (element.Rotation + 90) % 360;
             ApplyRotationTransform(visual, element.Rotation);
 
@@ -1246,7 +1303,7 @@ namespace CircuitAnalyzer.WPF
         /// <summary>Seçili tüm elemanları kendi merkezleri etrafında 90° döndürür (tek geri-al adımı).</summary>
         public void RotateSelected()
         {
-            var selected = _selection.Elements.ToList();
+            var selected = _selection.Elements.Where(e => e is not JunctionElement).ToList();
             if (selected.Count == 0)
                 return;
 
@@ -1290,6 +1347,9 @@ namespace CircuitAnalyzer.WPF
         /// </summary>
         private void EditElement(CircuitElement element, UIElement visual)
         {
+            if (element is JunctionElement)
+                return;
+
             var editor = new ElementEditorWindow(element);
             editor.Owner = this;
 
@@ -1364,6 +1424,7 @@ namespace CircuitAnalyzer.WPF
             _visualToElement.Remove(visual);
             _elementToVisual.Remove(element);
             _elements.Remove(element);
+            CleanupJunctionsOnCanvas();
             OnCircuitChanged();
 
             TxtStatus.Text = $"{element.Id} silindi ({connectedWires.Count} tel de kaldırıldı)";
@@ -1413,6 +1474,7 @@ namespace CircuitAnalyzer.WPF
                 _elements.Remove(element);
             }
 
+            CleanupJunctionsOnCanvas();
             OnCircuitChanged();
 
             if (elementsToRemove.Count > 0)
@@ -1523,6 +1585,7 @@ namespace CircuitAnalyzer.WPF
                 CircuitCanvas.Children.Add(wire.CreateOrUpdateVisual());
             }
 
+            RefreshJunctionWireCounts();
             SyncCountersFromIds();
             _selection.Select(pasted.Elements, pasted.Wires);
             OnCircuitChanged();
@@ -1557,6 +1620,7 @@ namespace CircuitAnalyzer.WPF
 
         private void ExitWireMode()
         {
+            RevertPendingStartSplit();
             _isWireMode = false;
             _isPinWiring = false;
             _wireStartPin = null;
@@ -1589,6 +1653,7 @@ namespace CircuitAnalyzer.WPF
             if (!_isPinWiring)
                 return;
 
+            RevertPendingStartSplit();
             _isPinWiring = false;
             _wireStartPin = null;
             RemovePreviewVisuals();
@@ -1598,18 +1663,47 @@ namespace CircuitAnalyzer.WPF
 
         internal void HandlePinWireClick(Point mousePos)
         {
-            Pin? nearestPin = FindNearestPin(mousePos);
-            if (nearestPin == null || _wireStartPin == null || nearestPin == _wireStartPin)
+            if (_wireStartPin == null)
             {
                 CancelPinWire();
                 return;
             }
 
             Pin startPin = _wireStartPin;
+            Pin? nearestPin = FindNearestPin(mousePos);
+
+            if (nearestPin == null)
+            {
+                var wireHit = WireGeometry.HitTestWire(_wires, mousePos, GetWireTolerance());
+                if (wireHit is var (hitWire, snapped))
+                {
+                    var endSplit = SplitWireOnCanvasCore(hitWire, snapped);
+                    _pendingStartSplit = null;
+                    _isPinWiring = false;
+                    CircuitCanvas.Cursor = Cursors.Arrow;
+                    CompleteWire(startPin, endSplit.Junction.Pins[0]);
+                    TxtStatus.Text = $"Tel ortasından bağlandı ({endSplit.Junction.Id})";
+                    return;
+                }
+
+                CancelPinWire();
+                return;
+            }
+
+            if (nearestPin == startPin)
+            {
+                CancelPinWire();
+                return;
+            }
+
+            JunctionElement? startSplitJunction = _pendingStartSplit?.Junction;
+            _pendingStartSplit = null;
             _isPinWiring = false;
             CircuitCanvas.Cursor = Cursors.Arrow;
             CompleteWire(startPin, nearestPin);
-            TxtStatus.Text = $"Tel oluşturuldu: {startPin.Owner?.Id}.{startPin.Id} → {nearestPin.Owner?.Id}.{nearestPin.Id}";
+            TxtStatus.Text = startSplitJunction != null
+                ? $"Tel ortasından bağlandı ({startSplitJunction.Id})"
+                : $"Tel oluşturuldu: {startPin.Owner?.Id}.{startPin.Id} → {nearestPin.Owner?.Id}.{nearestPin.Id}";
         }
 
         /// <summary>
@@ -1785,6 +1879,7 @@ namespace CircuitAnalyzer.WPF
                 {
                     if (_wireStartPin != null)
                     {
+                        RevertPendingStartSplit();
                         _wireStartPin = null;
                         RemovePreviewVisuals();
                         TxtStatus.Text = "TEL MODU — Çizim iptal edildi. Yeni bir pine tıklayın (Esc: çık)";
@@ -1806,8 +1901,14 @@ namespace CircuitAnalyzer.WPF
             }
 
             // ── Delete: Seçili elemanları ve telleri sil ──
-            if (e.Key == Key.Delete && !_isWireMode && !_isPinWiring && _selection.HasSelection)
+            if (e.Key == Key.Delete && !_isWireMode && _selection.HasSelection)
             {
+                if (_isPinWiring)
+                {
+                    if (_pendingStartSplit != null)
+                        return;
+                    CancelPinWire();
+                }
                 DeleteSelected();
                 e.Handled = true;
                 return;
@@ -1836,6 +1937,27 @@ namespace CircuitAnalyzer.WPF
 
             if (nearestPin == null)
             {
+                var wireHit = WireGeometry.HitTestWire(_wires, mousePos, GetWireTolerance());
+                if (wireHit is var (hitWire, snapped))
+                {
+                    if (_wireStartPin == null)
+                    {
+                        UpdateJunctionPreview(null);
+                        _pendingStartSplit = SplitWireOnCanvasCore(hitWire, snapped);
+                        _wireStartPin = _pendingStartSplit.Junction.Pins[0];
+                        TxtStatus.Text = $"TEL MODU — Başlangıç: {_pendingStartSplit.Junction.Id}.Pin0 " +
+                            $"→ Şimdi bitiş pinine tıklayın (Esc: iptal)";
+                        return;
+                    }
+
+                    Pin startPin = _wireStartPin;
+                    var endSplit = SplitWireOnCanvasCore(hitWire, snapped);
+                    _pendingStartSplit = null;
+                    CompleteWire(startPin, endSplit.Junction.Pins[0]);
+                    TxtStatus.Text = $"Tel ortasından bağlandı ({endSplit.Junction.Id})";
+                    return;
+                }
+
                 TxtStatus.Text = "TEL MODU — Pin bulunamadı! Bir elemanın pin noktasına tıklayın";
                 return;
             }
@@ -1854,7 +1976,13 @@ namespace CircuitAnalyzer.WPF
                 return;
             }
 
+            JunctionElement? startSplitJunction = _pendingStartSplit?.Junction;
+            _pendingStartSplit = null;
             CompleteWire(_wireStartPin, nearestPin);
+            if (startSplitJunction != null)
+            {
+                TxtStatus.Text = $"Tel ortasından bağlandı ({startSplitJunction.Id})";
+            }
         }
 
         private void CompleteWire(Pin startPin, Pin endPin)
@@ -1865,12 +1993,169 @@ namespace CircuitAnalyzer.WPF
             var visual = wire.CreateOrUpdateVisual();
             CircuitCanvas.Children.Add(visual);
 
+            RefreshJunctionWireCounts();
             RemovePreviewVisuals();
             _wireStartPin = null;
             OnCircuitChanged();
 
             TxtStatus.Text = $"Tel oluşturuldu: {startPin.Owner?.Id}.{startPin.Id} → " +
                 $"{endPin.Owner?.Id}.{endPin.Id} — Yeni tel çizebilirsiniz (Esc: çık)";
+        }
+
+        internal double GetWireTolerance()
+        {
+            double zoom = _currentZoom > 0.01 ? _currentZoom : 1.0;
+            return Math.Min(WireSnapThreshold / zoom, WireToleranceCap);
+        }
+
+        private void UpdateJunctionPreview(Point? snappedPoint)
+        {
+            if (_junctionPreview != null)
+            {
+                CircuitCanvas.Children.Remove(_junctionPreview);
+                _junctionPreview = null;
+            }
+
+            if (snappedPoint == null)
+                return;
+
+            Point pt = snappedPoint.Value;
+            _junctionPreview = new Ellipse
+            {
+                Width = 10,
+                Height = 10,
+                Fill = Brushes.Transparent,
+                StrokeThickness = 2,
+                IsHitTestVisible = false
+            };
+            _junctionPreview.SetResourceReference(Shape.StrokeProperty, "Brush.Accent");
+
+            Canvas.SetLeft(_junctionPreview, pt.X - 5);
+            Canvas.SetTop(_junctionPreview, pt.Y - 5);
+            CircuitCanvas.Children.Add(_junctionPreview);
+        }
+
+        private PendingWireSplit SplitWireOnCanvasCore(Wire hitWire, Point snappedPoint)
+        {
+            _junctionCounter++;
+            var junction = new JunctionElement
+            {
+                Id = $"J{_junctionCounter}",
+                Position = snappedPoint,
+            };
+            AddElementToCanvasCore(junction);
+
+            var (first, second) = WireGeometry.Split(hitWire, junction);
+            int idx = _wires.IndexOf(hitWire);
+            if (hitWire.Visual != null)
+            {
+                CircuitCanvas.Children.Remove(hitWire.Visual);
+            }
+
+            if (idx >= 0)
+            {
+                _wires.RemoveAt(idx);
+                _wires.Insert(idx, first);
+                _wires.Insert(idx + 1, second);
+            }
+            else
+            {
+                _wires.Add(first);
+                _wires.Add(second);
+            }
+
+            CircuitCanvas.Children.Add(first.CreateOrUpdateVisual());
+            CircuitCanvas.Children.Add(second.CreateOrUpdateVisual());
+            RefreshJunctionWireCounts();
+            SyncCountersFromIds();
+            return new PendingWireSplit(hitWire, junction, first, second);
+        }
+
+        private void RevertPendingStartSplit()
+        {
+            if (_pendingStartSplit == null)
+                return;
+
+            var pending = _pendingStartSplit;
+            _pendingStartSplit = null;
+
+            if (pending.FirstPart.Visual != null)
+                CircuitCanvas.Children.Remove(pending.FirstPart.Visual);
+            if (pending.SecondPart.Visual != null)
+                CircuitCanvas.Children.Remove(pending.SecondPart.Visual);
+
+            int idx = _wires.IndexOf(pending.FirstPart);
+            _wires.Remove(pending.FirstPart);
+            _wires.Remove(pending.SecondPart);
+
+            if (_elementToVisual.TryGetValue(pending.Junction, out var jVis))
+            {
+                CircuitCanvas.Children.Remove(jVis);
+                _visualToElement.Remove(jVis);
+                _elementToVisual.Remove(pending.Junction);
+            }
+            _elements.Remove(pending.Junction);
+
+            if (idx >= 0 && idx <= _wires.Count)
+                _wires.Insert(idx, pending.OriginalWire);
+            else
+                _wires.Add(pending.OriginalWire);
+
+            CircuitCanvas.Children.Add(pending.OriginalWire.CreateOrUpdateVisual());
+            RefreshJunctionWireCounts();
+            SyncCountersFromIds();
+        }
+
+        private void RefreshJunctionWireCounts()
+        {
+            foreach (var j in _elements.OfType<JunctionElement>())
+            {
+                var pin = j.Pins[0];
+                j.AttachedWireCount = _wires.Count(w => w.StartPin == pin || w.EndPin == pin);
+            }
+        }
+
+        private void CleanupJunctionsOnCanvas()
+        {
+            var wiresBefore = _wires.ToList();
+            WireGeometry.CleanupJunctions(_elements, _wires);
+
+            var remainingElements = new HashSet<CircuitElement>(_elements);
+            var removedElements = _elementToVisual.Keys.Where(e => !remainingElements.Contains(e)).ToList();
+            foreach (var el in removedElements)
+            {
+                if (_elementToVisual.TryGetValue(el, out var vis))
+                {
+                    CircuitCanvas.Children.Remove(vis);
+                    _visualToElement.Remove(vis);
+                    _elementToVisual.Remove(el);
+                }
+            }
+
+            var remainingWires = new HashSet<Wire>(_wires);
+            foreach (var oldWire in wiresBefore)
+            {
+                if (!remainingWires.Contains(oldWire) && oldWire.Visual != null)
+                {
+                    CircuitCanvas.Children.Remove(oldWire.Visual);
+                }
+            }
+
+            foreach (var wire in _wires)
+            {
+                if (wire.Visual == null)
+                {
+                    CircuitCanvas.Children.Add(wire.CreateOrUpdateVisual());
+                }
+                else
+                {
+                    wire.CreateOrUpdateVisual();
+                }
+            }
+
+            RefreshJunctionWireCounts();
+            SyncCountersFromIds();
+            UpdateSelectionHighlight();
         }
 
         // ═══════════════════════════════════════════════════════
@@ -1937,7 +2222,7 @@ namespace CircuitAnalyzer.WPF
             CircuitCanvas.Children.Add(_pinHighlight);
         }
 
-        private void UpdateWirePreview(Point mousePos)
+        private void UpdateWirePreview(Point mousePos, Point? wireSnap = null)
         {
             if (_wireStartPin == null) return;
 
@@ -1950,7 +2235,7 @@ namespace CircuitAnalyzer.WPF
             Point start = _wireStartPin.AbsolutePosition;
 
             Pin? nearEnd = FindNearestPin(mousePos);
-            Point end = nearEnd != null ? nearEnd.AbsolutePosition : GridHelper.Snap(mousePos);
+            Point end = nearEnd != null ? nearEnd.AbsolutePosition : (wireSnap ?? GridHelper.Snap(mousePos));
 
             _wirePreview = Wire.CreatePreviewLine(start, end);
             CircuitCanvas.Children.Add(_wirePreview);
@@ -1967,6 +2252,11 @@ namespace CircuitAnalyzer.WPF
             {
                 CircuitCanvas.Children.Remove(_pinHighlight);
                 _pinHighlight = null;
+            }
+            if (_junctionPreview != null)
+            {
+                CircuitCanvas.Children.Remove(_junctionPreview);
+                _junctionPreview = null;
             }
         }
 
@@ -2062,6 +2352,8 @@ namespace CircuitAnalyzer.WPF
             _impedanceCounter = 0;
             _groundCounter = 0;
             _probeCounter = 0;
+            _junctionCounter = 0;
+            _pendingStartSplit = null;
 
             CircuitCanvas.Children.Clear();
         }
@@ -2119,6 +2411,7 @@ namespace CircuitAnalyzer.WPF
                     _wires.Add(wire);
                     CircuitCanvas.Children.Add(wire.CreateOrUpdateVisual());
                 }
+                RefreshJunctionWireCounts();
                 SyncCountersFromIds();
 
                 OnCircuitChanged();
