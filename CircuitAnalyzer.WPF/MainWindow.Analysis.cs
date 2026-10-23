@@ -430,7 +430,8 @@ namespace CircuitAnalyzer.WPF
                    args.Contains("--shortcuts-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--editor-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--tour-shot", StringComparer.OrdinalIgnoreCase) ||
-                   args.Contains("--junction-shot", StringComparer.OrdinalIgnoreCase);
+                   args.Contains("--junction-shot", StringComparer.OrdinalIgnoreCase) ||
+                   args.Contains("--wire-select-shot", StringComparer.OrdinalIgnoreCase);
         }
 
         internal static bool TryGetOnboardingShot(string[] args, out OnboardingShotOptions? options)
@@ -486,7 +487,9 @@ namespace CircuitAnalyzer.WPF
         internal static bool TryGetJunctionShot(string[] args, out string? outputPng)
         {
             outputPng = null;
-            int i = Array.FindIndex(args, a => string.Equals(a, "--junction-shot", StringComparison.OrdinalIgnoreCase));
+            int i = Array.FindIndex(args, a =>
+                string.Equals(a, "--junction-shot", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(a, "--wire-select-shot", StringComparison.OrdinalIgnoreCase));
             if (i < 0 || i + 1 >= args.Length)
                 return false;
             outputPng = Path.GetFullPath(args[i + 1]);
@@ -898,6 +901,12 @@ namespace CircuitAnalyzer.WPF
                     throw new InvalidOperationException("Çözücü başlamadı");
 
                 await SolveAsync();
+
+                // C2 dal telini (360, 180) → (360, 120) tık yoluyla seç
+                var branchMid = new Point(360, 150);
+                HandleCanvasLeftButtonDown(branchMid);
+                HandleCanvasLeftButtonUp(branchMid);
+
                 await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
                 UpdateLayout();
 
