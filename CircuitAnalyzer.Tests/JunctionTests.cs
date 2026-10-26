@@ -18,6 +18,7 @@ namespace CircuitAnalyzer.Tests
     /// yeniden numaralandırma, tel silme sonrası otomatik temizleme/birleştirme,
     /// MainWindow etkileşimi + tek geri-al adımı ve çözücü doğrulaması.
     /// </summary>
+    [Collection(WpfUiCollection.Name)]
     public class JunctionTests : IClassFixture<BackendFixture>
     {
         private readonly BackendFixture _backend;
