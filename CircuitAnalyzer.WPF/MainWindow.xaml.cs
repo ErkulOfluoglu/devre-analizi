@@ -54,6 +54,7 @@ namespace CircuitAnalyzer.WPF
         private Point _dragOffset;
         private Point _dragStartPosition;
         private Dictionary<CircuitElement, Point> _dragInitialPositions = new();
+        private Dictionary<Wire, List<Point>> _dragInitialWaypoints = new();
 
         // ── Seçim durumu (tekli ve çoklu seçim modeli) ──
         private readonly SelectionModel _selection = new();
@@ -84,6 +85,12 @@ namespace CircuitAnalyzer.WPF
         private Polyline? _wirePreview = null;
         private Ellipse? _pinHighlight = null;
         private Ellipse? _junctionPreview = null;
+        private readonly List<Point> _currentWaypoints = new();
+        private readonly Stack<int> _waypointCommitCounts = new();
+        private bool _liveLegVerticalFirst = false;
+        private Point _lastMouseCanvasPos;
+        internal const string DrawingWireStatusText =
+            "Tel çiziliyor — boş yere tıkla: köşe · R: yön çevir · Backspace: köşeyi geri al · Esc: vazgeç";
 
         private sealed record PendingWireSplit(Wire OriginalWire, JunctionElement Junction, Wire FirstPart, Wire SecondPart);
         private PendingWireSplit? _pendingStartSplit = null;
@@ -340,6 +347,9 @@ namespace CircuitAnalyzer.WPF
                 ("R", "Seçili elemanı döndür"),
                 ("Delete", "Seçili elemanı sil"),
                 ("Uca tıkla", "Tel çiz"),
+                ("Boş yere tıkla", "Tel çizerken köşe ekle"),
+                ("R (tel çizerken)", "Köşe yönünü çevir"),
+                ("Backspace", "Son köşeyi geri al"),
                 ("Tele tıkla", "Teli seç (Delete: sil)"),
                 ("Telden sürükle", "Telin ortasından yeni tel (T)"),
                 ("Ctrl+tık", "Seçime ekle/çıkar"),
@@ -985,61 +995,109 @@ namespace CircuitAnalyzer.WPF
 
             if (sender is UIElement visual && _visualToElement.TryGetValue(visual, out var element))
             {
-                // ── Çift tık → Değer düzenleme ──
-                if (e.ClickCount == 2)
-                {
-                    EditElement(element, visual);
-                    e.Handled = true;
-                    return;
-                }
-
-                // ── Ctrl+tık → Seçime ekle / çıkar ──
-                if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
-                {
-                    _selection.Toggle(element);
-                    TxtStatus.Text = FormatSelectionStatus();
-                    e.Handled = true;
-                    return;
-                }
-
-                // ── Normal modda bir pinin yakınına basıldıysa doğrudan tel başlat ──
-                // Not: Bağlantı noktası (JunctionElement) tek pinli olduğundan sürüklenebilmesi için
-                // basışta sürükleme başlatılır; sürüklenmeden bırakılırsa tel çizimine geçilir.
-                if (element is not JunctionElement)
-                {
-                    Pin? nearPin = FindNearestPin(mousePos);
-                    if (nearPin != null)
-                    {
-                        StartPinWire(nearPin);
-                        e.Handled = true;
-                        return;
-                    }
-                }
-
-                // ── Gövdeye tek tık → Seç + sürükleme başlat ──
-                if (!_selection.IsSelected(element))
-                {
-                    _selection.Select(element);
-                }
-
-                RemovePreviewVisuals();
-                _isDragging = true;
-                _draggedVisual = visual;
-                _draggedElement = element;
-                _dragStartPosition = element.Position;
-                _dragInitialPositions = _selection.Elements.ToDictionary(el => el, el => el.Position);
-
-                double elementX = Canvas.GetLeft(visual);
-                double elementY = Canvas.GetTop(visual);
-                _dragOffset = new Point(mousePos.X - elementX, mousePos.Y - elementY);
-
-                visual.CaptureMouse();
+                HandleElementLeftButtonDown(element, visual, mousePos, e.ClickCount, Keyboard.Modifiers);
                 e.Handled = true;
-
-                TxtStatus.Text = _selection.Count > 1
-                    ? $"{_selection.Count} eleman sürükleniyor..."
-                    : $"{element.Id} sürükleniyor... (R: döndür)";
             }
+        }
+
+        internal void HandleElementLeftButtonDown(
+            CircuitElement element,
+            Point mousePos,
+            int clickCount = 1,
+            ModifierKeys? modifiers = null)
+        {
+            if (_elementToVisual.TryGetValue(element, out var visual))
+            {
+                HandleElementLeftButtonDown(element, visual, mousePos, clickCount, modifiers);
+            }
+        }
+
+        private void HandleElementLeftButtonDown(
+            CircuitElement element,
+            UIElement visual,
+            Point mousePos,
+            int clickCount = 1,
+            ModifierKeys? modifiers = null)
+        {
+            ModifierKeys mods = modifiers ?? Keyboard.Modifiers;
+
+            if (_isWireMode)
+            {
+                HandleWireClick(mousePos);
+                return;
+            }
+
+            if (_isPinWiring)
+            {
+                if (clickCount == 2)
+                {
+                    CancelPinWire();
+                    EditElement(element, visual);
+                    return;
+                }
+                HandlePinWireClick(mousePos);
+                return;
+            }
+
+            // ── Çift tık → Değer düzenleme ──
+            if (clickCount == 2)
+            {
+                EditElement(element, visual);
+                return;
+            }
+
+            // ── Ctrl+tık → Seçime ekle / çıkar ──
+            if (mods.HasFlag(ModifierKeys.Control))
+            {
+                _selection.Toggle(element);
+                TxtStatus.Text = FormatSelectionStatus();
+                return;
+            }
+
+            // ── Normal modda bir pinin yakınına basıldıysa doğrudan tel başlat ──
+            // Not: Bağlantı noktası (JunctionElement) tek pinli olduğundan sürüklenebilmesi için
+            // basışta sürükleme başlatılır; sürüklenmeden bırakılırsa tel çizimine geçilir.
+            if (element is not JunctionElement)
+            {
+                Pin? nearPin = FindNearestPin(mousePos);
+                if (nearPin != null)
+                {
+                    StartPinWire(nearPin);
+                    return;
+                }
+            }
+
+            // ── Gövdeye tek tık → Seç + sürükleme başlat ──
+            if (!_selection.IsSelected(element))
+            {
+                _selection.Select(element);
+            }
+
+            RemovePreviewVisuals();
+            _isDragging = true;
+            _draggedVisual = visual;
+            _draggedElement = element;
+            _dragStartPosition = element.Position;
+            _dragInitialPositions = _selection.Elements.ToDictionary(el => el, el => el.Position);
+            _dragInitialWaypoints = _wires
+                .Where(w => w.Waypoints.Count > 0 &&
+                            w.StartPin.Owner != null &&
+                            w.EndPin.Owner != null &&
+                            _dragInitialPositions.ContainsKey(w.StartPin.Owner) &&
+                            _dragInitialPositions.ContainsKey(w.EndPin.Owner))
+                .ToDictionary(w => w, w => w.Waypoints.ToList());
+
+            double elementX = Canvas.GetLeft(visual);
+            double elementY = Canvas.GetTop(visual);
+            if (double.IsNaN(elementX)) elementX = element.Position.X;
+            if (double.IsNaN(elementY)) elementY = element.Position.Y;
+            _dragOffset = new Point(mousePos.X - elementX, mousePos.Y - elementY);
+
+            visual.CaptureMouse();
+
+            TxtStatus.Text = _selection.Count > 1
+                ? $"{_selection.Count} eleman sürükleniyor..."
+                : $"{element.Id} sürükleniyor... (R: döndür)";
         }
 
         /// <summary>
@@ -1057,6 +1115,7 @@ namespace CircuitAnalyzer.WPF
 
         internal void HandleCanvasMouseMove(Point mousePos)
         {
+            _lastMouseCanvasPos = mousePos;
             Point snappedPos = GridHelper.Snap(mousePos);
             TxtCoords.Text = $"X: {snappedPos.X:F0}  Y: {snappedPos.Y:F0}";
 
@@ -1087,6 +1146,10 @@ namespace CircuitAnalyzer.WPF
                 {
                     UpdateJunctionPreview(null);
                     UpdateWirePreview(mousePos, null);
+                    if (_wireStartPin != null)
+                    {
+                        TxtStatus.Text = DrawingWireStatusText;
+                    }
                 }
                 else
                 {
@@ -1096,6 +1159,10 @@ namespace CircuitAnalyzer.WPF
                     if (wireHit != null)
                     {
                         TxtStatus.Text = "Bu tele bağlamak için tıklayın";
+                    }
+                    else if (_wireStartPin != null)
+                    {
+                        TxtStatus.Text = DrawingWireStatusText;
                     }
                 }
                 CircuitCanvas.Cursor = Cursors.Cross;
@@ -1133,7 +1200,23 @@ namespace CircuitAnalyzer.WPF
                         Canvas.SetLeft(elVisual, targetPos.X);
                         Canvas.SetTop(elVisual, targetPos.Y);
                     }
+                }
 
+                // Her iki uç elemanı da taşınan seçimdeyse telin ara köşelerini (Waypoints) aynı delta ile kaydır
+                foreach (var (wire, initWps) in _dragInitialWaypoints)
+                {
+                    if (wire.StartPin.Owner != null && _dragInitialPositions.TryGetValue(wire.StartPin.Owner, out var ownerStart))
+                    {
+                        Vector delta = wire.StartPin.Owner.Position - ownerStart;
+                        for (int i = 0; i < initWps.Count && i < wire.Waypoints.Count; i++)
+                        {
+                            wire.Waypoints[i] = GridHelper.Snap(new Point(initWps[i].X + delta.X, initWps[i].Y + delta.Y));
+                        }
+                    }
+                }
+
+                foreach (var (el, _) in _dragInitialPositions)
+                {
                     UpdateConnectedWires(el);
                 }
 
@@ -1232,6 +1315,7 @@ namespace CircuitAnalyzer.WPF
                 _draggedVisual = null;
                 _draggedElement = null;
                 _dragInitialPositions.Clear();
+                _dragInitialWaypoints.Clear();
 
                 if (moved)
                 {
@@ -1520,7 +1604,7 @@ namespace CircuitAnalyzer.WPF
         /// <summary>Tek bir elemanı 90° saat yönünde döndürür.</summary>
         private void RotateElement(CircuitElement element, UIElement visual)
         {
-            if (element is JunctionElement)
+            if (element is JunctionElement || _isWireMode || _isPinWiring)
                 return;
 
             element.Rotation = (element.Rotation + 90) % 360;
@@ -1536,6 +1620,9 @@ namespace CircuitAnalyzer.WPF
         /// <summary>Seçili tüm elemanları kendi merkezleri etrafında 90° döndürür (tek geri-al adımı).</summary>
         public void RotateSelected()
         {
+            if (_isWireMode || _isPinWiring)
+                return;
+
             var selected = _selection.Elements.Where(e => e is not JunctionElement).ToList();
             if (selected.Count == 0)
                 return;
@@ -1850,6 +1937,7 @@ namespace CircuitAnalyzer.WPF
         {
             CancelPinWire();
             DeselectElement();
+            ResetCurrentWireState();
             _isWireMode = true;
             _wireStartPin = null;
             CircuitCanvas.Cursor = Cursors.Cross;
@@ -1864,6 +1952,7 @@ namespace CircuitAnalyzer.WPF
         private void ExitWireMode()
         {
             RevertPendingStartSplit();
+            ResetCurrentWireState();
             _isWireMode = false;
             _isPinWiring = false;
             _wireStartPin = null;
@@ -1881,6 +1970,25 @@ namespace CircuitAnalyzer.WPF
         /// <summary>Normal modda bir elemanın ucuna tıklandığında tel çizimini başlatır.</summary>
         internal bool IsPinWiring => _isPinWiring;
 
+        /// <summary>Bir tel çizimi şu anda aktif mi (başlangıç ucu seçilmiş mi)?</summary>
+        internal bool IsDrawingWire => (_isPinWiring || _isWireMode) && _wireStartPin != null;
+
+        /// <summary>Aktif tel çizimindeki somutlaştırılmış ara köşe noktaları.</summary>
+        internal IReadOnlyList<Point> CurrentWaypoints => _currentWaypoints;
+
+        /// <summary>Aktif tel çizimindeki canlı kolun yönü (true = önce dikey, false = önce yatay).</summary>
+        internal bool LiveLegVerticalFirst => _liveLegVerticalFirst;
+
+        /// <summary>Aktif tel önizleme çizgisi.</summary>
+        internal Polyline? WirePreview => _wirePreview;
+
+        private void ResetCurrentWireState()
+        {
+            _currentWaypoints.Clear();
+            _waypointCommitCounts.Clear();
+            _liveLegVerticalFirst = false;
+        }
+
         /// <summary>Bir teli verilen noktada bağlantı noktası ile bölerek yeni tel çizimini başlatır.</summary>
         internal void StartPinWireFromWire(Wire wireToSplit, Point snappedPoint)
         {
@@ -1893,11 +2001,13 @@ namespace CircuitAnalyzer.WPF
         internal void StartPinWire(Pin startPin)
         {
             SetHoveredWire(null);
+            ResetCurrentWireState();
             _isPinWiring = true;
             _wireStartPin = startPin;
+            _lastMouseCanvasPos = startPin.AbsolutePosition;
             CircuitCanvas.Cursor = Cursors.Cross;
             UpdatePinHighlight(startPin.AbsolutePosition);
-            TxtStatus.Text = "Tel çiziliyor — diğer uca tıklayın (Esc: vazgeç)";
+            TxtStatus.Text = DrawingWireStatusText;
         }
 
         /// <summary>Normal modda başlatılan tel çizimini iptal eder ve normal moda döner.</summary>
@@ -1907,6 +2017,7 @@ namespace CircuitAnalyzer.WPF
                 return;
 
             RevertPendingStartSplit();
+            ResetCurrentWireState();
             _isPinWiring = false;
             _wireStartPin = null;
             RemovePreviewVisuals();
@@ -1914,8 +2025,77 @@ namespace CircuitAnalyzer.WPF
             TxtStatus.Text = "Tel çizimi iptal edildi";
         }
 
+        /// <summary>
+        /// Çizim sırasında boş tuvale tıklandığında mevcut kolu sabitler:
+        /// tıklanan nokta (ve kol L-şeklindeyse onun köşesi) ara köşe noktası olarak kaydedilir.
+        /// </summary>
+        internal void AddWireWaypoint(Point snappedPt)
+        {
+            if (_wireStartPin == null)
+                return;
+
+            Point anchor = _currentWaypoints.Count > 0
+                ? _currentWaypoints[^1]
+                : _wireStartPin.AbsolutePosition;
+
+            if (WireGeometry.PointsCoincide(snappedPt, anchor))
+                return;
+
+            double dx = Math.Abs(anchor.X - snappedPt.X);
+            double dy = Math.Abs(anchor.Y - snappedPt.Y);
+
+            if (dx > 0.5 && dy > 0.5)
+            {
+                Point corner = _liveLegVerticalFirst
+                    ? new Point(anchor.X, snappedPt.Y)
+                    : new Point(snappedPt.X, anchor.Y);
+                _currentWaypoints.Add(corner);
+                _currentWaypoints.Add(snappedPt);
+                _waypointCommitCounts.Push(2);
+            }
+            else
+            {
+                _currentWaypoints.Add(snappedPt);
+                _waypointCommitCounts.Push(1);
+            }
+
+            UpdateWirePreview(_lastMouseCanvasPos);
+            TxtStatus.Text = DrawingWireStatusText;
+        }
+
+        /// <summary>
+        /// Çizim sırasında R tuşuna basıldığında fareyi izleyen canlı kolun yönünü çevirir
+        /// (önce yatay ↔ önce dikey) ve önizlemeyi günceller.
+        /// </summary>
+        internal void FlipLiveWireLegOrientation()
+        {
+            if (!IsDrawingWire)
+                return;
+
+            _liveLegVerticalFirst = !_liveLegVerticalFirst;
+            UpdateWirePreview(_lastMouseCanvasPos);
+            TxtStatus.Text = DrawingWireStatusText;
+        }
+
+        /// <summary>
+        /// Çizim sırasında Backspace tuşuna basıldığında son eklenen ara köşeyi
+        /// (ve birlikte eklendiyse örtük L-köşesini) geri alır; köşe yoksa hiçbir şey yapmaz.
+        /// </summary>
+        internal void RemoveLastWireWaypoint()
+        {
+            if (!IsDrawingWire || _currentWaypoints.Count == 0)
+                return;
+
+            int count = _waypointCommitCounts.Count > 0 ? _waypointCommitCounts.Pop() : 1;
+            int removeCount = Math.Min(count, _currentWaypoints.Count);
+            _currentWaypoints.RemoveRange(_currentWaypoints.Count - removeCount, removeCount);
+            UpdateWirePreview(_lastMouseCanvasPos);
+            TxtStatus.Text = DrawingWireStatusText;
+        }
+
         internal void HandlePinWireClick(Point mousePos)
         {
+            _lastMouseCanvasPos = mousePos;
             if (_wireStartPin == null)
             {
                 CancelPinWire();
@@ -1939,7 +2119,8 @@ namespace CircuitAnalyzer.WPF
                     return;
                 }
 
-                CancelPinWire();
+                // Boş tuvale tıklandı → mevcut kolu sabitleyip ara köşe (waypoint) ekle
+                AddWireWaypoint(GridHelper.Snap(mousePos));
                 return;
             }
 
@@ -2139,6 +2320,7 @@ namespace CircuitAnalyzer.WPF
                     if (_wireStartPin != null)
                     {
                         RevertPendingStartSplit();
+                        ResetCurrentWireState();
                         _wireStartPin = null;
                         RemovePreviewVisuals();
                         TxtStatus.Text = "TEL MODU — Çizim iptal edildi. Yeni bir pine tıklayın (Esc: çık)";
@@ -2159,6 +2341,17 @@ namespace CircuitAnalyzer.WPF
                 }
             }
 
+            // ── Backspace: Tel çizimi sırasında son köşeyi geri al ──
+            if (e.Key == Key.Back && mods == ModifierKeys.None)
+            {
+                if (IsDrawingWire)
+                {
+                    RemoveLastWireWaypoint();
+                    e.Handled = true;
+                }
+                return;
+            }
+
             // ── Delete: Seçili elemanları ve telleri sil ──
             if (e.Key == Key.Delete && !_isWireMode && _selection.HasSelection)
             {
@@ -2173,11 +2366,20 @@ namespace CircuitAnalyzer.WPF
                 return;
             }
 
-            // ── R: Seçili elemanları döndür ──
-            if (e.Key == Key.R && mods == ModifierKeys.None && !_isWireMode && !_isPinWiring && _selection.Count > 0)
+            // ── R: Tel çizerken canlı kolun yönünü çevir; normal modda seçili elemanları döndür ──
+            if (e.Key == Key.R && mods == ModifierKeys.None)
             {
-                RotateSelected();
-                e.Handled = true;
+                if (IsDrawingWire)
+                {
+                    FlipLiveWireLegOrientation();
+                    e.Handled = true;
+                    return;
+                }
+                if (!_isWireMode && !_isPinWiring && _selection.Count > 0)
+                {
+                    RotateSelected();
+                    e.Handled = true;
+                }
             }
         }
 
@@ -2190,8 +2392,80 @@ namespace CircuitAnalyzer.WPF
             }
         }
 
-        private void HandleWireClick(Point mousePos)
+        internal bool HandleKeyDown(Key key, ModifierKeys mods = ModifierKeys.None)
         {
+            if (IsModalOverlayOpen)
+                return false;
+
+            if (key == Key.Escape)
+            {
+                if (_isWirePressPending)
+                {
+                    _isWirePressPending = false;
+                    _pressedWire = null;
+                    CircuitCanvas.ReleaseMouseCapture();
+                }
+                if (_isPinWiring)
+                {
+                    CancelPinWire();
+                    return true;
+                }
+                if (_isWireMode)
+                {
+                    if (_wireStartPin != null)
+                    {
+                        RevertPendingStartSplit();
+                        ResetCurrentWireState();
+                        _wireStartPin = null;
+                        RemovePreviewVisuals();
+                        TxtStatus.Text = "TEL MODU — Çizim iptal edildi. Yeni bir pine tıklayın (Esc: çık)";
+                    }
+                    else
+                    {
+                        ExitWireMode();
+                    }
+                    return true;
+                }
+                if (_selection.HasSelection)
+                {
+                    DeselectElement();
+                    TxtStatus.Text = "Seçim temizlendi";
+                    return true;
+                }
+                return false;
+            }
+
+            if (key == Key.Back && mods == ModifierKeys.None)
+            {
+                if (IsDrawingWire)
+                {
+                    RemoveLastWireWaypoint();
+                    return true;
+                }
+                return false;
+            }
+
+            if (key == Key.R && mods == ModifierKeys.None)
+            {
+                if (IsDrawingWire)
+                {
+                    FlipLiveWireLegOrientation();
+                    return true;
+                }
+                if (!_isWireMode && !_isPinWiring && _selection.Count > 0)
+                {
+                    RotateSelected();
+                    return true;
+                }
+                return false;
+            }
+
+            return false;
+        }
+
+        internal void HandleWireClick(Point mousePos)
+        {
+            _lastMouseCanvasPos = mousePos;
             Pin? nearestPin = FindNearestPin(mousePos);
 
             if (nearestPin == null)
@@ -2201,11 +2475,11 @@ namespace CircuitAnalyzer.WPF
                 {
                     if (_wireStartPin == null)
                     {
+                        ResetCurrentWireState();
                         UpdateJunctionPreview(null);
                         _pendingStartSplit = SplitWireOnCanvasCore(hitWire, snapped);
                         _wireStartPin = _pendingStartSplit.Junction.Pins[0];
-                        TxtStatus.Text = $"TEL MODU — Başlangıç: {_pendingStartSplit.Junction.Id}.Pin0 " +
-                            $"→ Şimdi bitiş pinine tıklayın (Esc: iptal)";
+                        TxtStatus.Text = DrawingWireStatusText;
                         return;
                     }
 
@@ -2217,15 +2491,21 @@ namespace CircuitAnalyzer.WPF
                     return;
                 }
 
+                if (_wireStartPin != null)
+                {
+                    AddWireWaypoint(GridHelper.Snap(mousePos));
+                    return;
+                }
+
                 TxtStatus.Text = "TEL MODU — Pin bulunamadı! Bir elemanın pin noktasına tıklayın";
                 return;
             }
 
             if (_wireStartPin == null)
             {
+                ResetCurrentWireState();
                 _wireStartPin = nearestPin;
-                TxtStatus.Text = $"TEL MODU — Başlangıç: {nearestPin.Owner?.Id}.Pin{nearestPin.Id} " +
-                    $"→ Şimdi bitiş pinine tıklayın (Esc: iptal)";
+                TxtStatus.Text = DrawingWireStatusText;
                 return;
             }
 
@@ -2246,7 +2526,13 @@ namespace CircuitAnalyzer.WPF
 
         private void CompleteWire(Pin startPin, Pin endPin)
         {
-            var wire = new Wire(startPin, endPin);
+            var waypoints = new List<Point>(_currentWaypoints);
+            while (waypoints.Count > 0 && WireGeometry.PointsCoincide(waypoints[0], startPin.AbsolutePosition))
+                waypoints.RemoveAt(0);
+            while (waypoints.Count > 0 && WireGeometry.PointsCoincide(waypoints[^1], endPin.AbsolutePosition))
+                waypoints.RemoveAt(waypoints.Count - 1);
+
+            var wire = new Wire(startPin, endPin, waypoints, _liveLegVerticalFirst);
             _wires.Add(wire);
 
             var visual = wire.CreateOrUpdateVisual();
@@ -2255,6 +2541,7 @@ namespace CircuitAnalyzer.WPF
             RefreshJunctionWireCounts();
             RemovePreviewVisuals();
             _wireStartPin = null;
+            ResetCurrentWireState();
             OnCircuitChanged();
 
             TxtStatus.Text = $"Tel oluşturuldu: {startPin.Owner?.Id}.{startPin.Id} → " +
@@ -2497,7 +2784,7 @@ namespace CircuitAnalyzer.WPF
             Pin? nearEnd = FindNearestPin(mousePos);
             Point end = nearEnd != null ? nearEnd.AbsolutePosition : (wireSnap ?? GridHelper.Snap(mousePos));
 
-            _wirePreview = Wire.CreatePreviewLine(start, end);
+            _wirePreview = Wire.CreatePreviewLine(start, _currentWaypoints, end, _liveLegVerticalFirst);
             CircuitCanvas.Children.Add(_wirePreview);
         }
 
@@ -2605,6 +2892,8 @@ namespace CircuitAnalyzer.WPF
             _elementToVisual.Clear();
             _selectionHighlights.Clear();
             _dragInitialPositions.Clear();
+            _dragInitialWaypoints.Clear();
+            ResetCurrentWireState();
             _pasteCascadeCount = 0;
             _resistorCounter = 0;
             _voltageSourceCounter = 0;
@@ -3003,6 +3292,13 @@ namespace CircuitAnalyzer.WPF
                 minY = Math.Min(minY, Math.Min(wire.StartPin.AbsolutePosition.Y, wire.EndPin.AbsolutePosition.Y));
                 maxX = Math.Max(maxX, Math.Max(wire.StartPin.AbsolutePosition.X, wire.EndPin.AbsolutePosition.X));
                 maxY = Math.Max(maxY, Math.Max(wire.StartPin.AbsolutePosition.Y, wire.EndPin.AbsolutePosition.Y));
+                foreach (var wp in wire.Waypoints)
+                {
+                    minX = Math.Min(minX, wp.X);
+                    minY = Math.Min(minY, wp.Y);
+                    maxX = Math.Max(maxX, wp.X);
+                    maxY = Math.Max(maxY, wp.Y);
+                }
             }
 
             double margin = 30.0;
@@ -3149,6 +3445,13 @@ namespace CircuitAnalyzer.WPF
                 minY = Math.Min(minY, Math.Min(w.StartPin.AbsolutePosition.Y, w.EndPin.AbsolutePosition.Y));
                 maxX = Math.Max(maxX, Math.Max(w.StartPin.AbsolutePosition.X, w.EndPin.AbsolutePosition.X));
                 maxY = Math.Max(maxY, Math.Max(w.StartPin.AbsolutePosition.Y, w.EndPin.AbsolutePosition.Y));
+                foreach (var wp in w.Waypoints)
+                {
+                    minX = Math.Min(minX, wp.X);
+                    minY = Math.Min(minY, wp.Y);
+                    maxX = Math.Max(maxX, wp.X);
+                    maxY = Math.Max(maxY, wp.Y);
+                }
             }
 
             double vw = CanvasScrollViewer.ViewportWidth > 0 ? CanvasScrollViewer.ViewportWidth : CanvasScrollViewer.ActualWidth;
@@ -3193,6 +3496,13 @@ namespace CircuitAnalyzer.WPF
                 minY = Math.Min(minY, Math.Min(w.StartPin.AbsolutePosition.Y, w.EndPin.AbsolutePosition.Y));
                 maxX = Math.Max(maxX, Math.Max(w.StartPin.AbsolutePosition.X, w.EndPin.AbsolutePosition.X));
                 maxY = Math.Max(maxY, Math.Max(w.StartPin.AbsolutePosition.Y, w.EndPin.AbsolutePosition.Y));
+                foreach (var wp in w.Waypoints)
+                {
+                    minX = Math.Min(minX, wp.X);
+                    minY = Math.Min(minY, wp.Y);
+                    maxX = Math.Max(maxX, wp.X);
+                    maxY = Math.Max(maxY, wp.Y);
+                }
             }
 
             double vw = CanvasScrollViewer.ViewportWidth > 0 ? CanvasScrollViewer.ViewportWidth : CanvasScrollViewer.ActualWidth;

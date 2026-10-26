@@ -67,6 +67,12 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("from_pin")] public int FromPin { get; set; }
             [JsonPropertyName("to")] public string To { get; set; } = "";
             [JsonPropertyName("to_pin")] public int ToPin { get; set; }
+            [JsonPropertyName("points")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public List<double[]>? Points { get; set; }
+            [JsonPropertyName("vertical_first")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+            public bool VerticalFirst { get; set; }
         }
 
         public sealed class AnalysisData
@@ -104,6 +110,10 @@ namespace CircuitAnalyzer.WPF.Services
                 {
                     From = a.Id, FromPin = a.Pins.IndexOf(w.StartPin),
                     To = b.Id, ToPin = b.Pins.IndexOf(w.EndPin),
+                    Points = w.Waypoints is { Count: > 0 }
+                        ? w.Waypoints.Select(p => new[] { p.X, p.Y }).ToList()
+                        : null,
+                    VerticalFirst = w.LastLegVerticalFirst,
                 });
             }
             return doc;
@@ -183,7 +193,21 @@ namespace CircuitAnalyzer.WPF.Services
 
             foreach (var w in Wires)
             {
-                circuit.Wires.Add(new Wire(PinOf(byId, w.From, w.FromPin), PinOf(byId, w.To, w.ToPin)));
+                var wire = new Wire(PinOf(byId, w.From, w.FromPin), PinOf(byId, w.To, w.ToPin))
+                {
+                    LastLegVerticalFirst = w.VerticalFirst,
+                };
+                if (w.Points != null)
+                {
+                    foreach (var pt in w.Points)
+                    {
+                        if (pt != null && pt.Length >= 2 && double.IsFinite(pt[0]) && double.IsFinite(pt[1]))
+                        {
+                            wire.Waypoints.Add(new Point(pt[0], pt[1]));
+                        }
+                    }
+                }
+                circuit.Wires.Add(wire);
             }
 
             foreach (var j in circuit.Elements.OfType<JunctionElement>())

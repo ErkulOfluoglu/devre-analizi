@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Shapes;
@@ -15,15 +16,8 @@ namespace CircuitAnalyzer.WPF.Models
     ///   - Bu yüzden CircuitElement'ten miras almaz — ayrı bir sınıftır
     /// 
     /// Yönlendirme (Routing):
-    /// Tel, L-şeklinde (orthogonal) çizilir:
-    /// 
-    ///   Pin1 ━━━━━━━━━━┓
-    ///                  ┃
-    ///                  ┗━━━━━━ Pin2
-    /// 
-    /// Önce yatay (horizontal), sonra dikey (vertical) gider.
-    /// Eğer iki pin aynı Y'deyse → düz yatay çizgi.
-    /// Eğer iki pin aynı X'teyse → düz dikey çizgi.
+    /// Tel, 90° dik açılı (orthogonal) parçalarla çizilir. Ara köşe noktaları
+    /// (Waypoints) yoksa L-şeklinde, varsa ara köşelerden geçerek yönlendirilir.
     /// </summary>
     public class Wire
     {
@@ -32,6 +26,17 @@ namespace CircuitAnalyzer.WPF.Models
 
         /// <summary>Telin bittiği pin</summary>
         public Pin EndPin { get; set; }
+
+        /// <summary>
+        /// Telin ızgaraya oturtulmuş ara köşe noktaları (tuval koordinatları, boş olabilir).
+        /// </summary>
+        public List<Point> Waypoints { get; set; } = new();
+
+        /// <summary>
+        /// Son kolun (EndPin'e giden parçanın) yönü:
+        /// false (varsayılan) = önce yatay sonra dikey; true = önce dikey sonra yatay.
+        /// </summary>
+        public bool LastLegVerticalFirst { get; set; }
 
         /// <summary>
         /// Polyline görsel nesnesi — Canvas üzerinde güncelleme için referans tutulur.
@@ -43,6 +48,17 @@ namespace CircuitAnalyzer.WPF.Models
         {
             StartPin = startPin;
             EndPin = endPin;
+        }
+
+        public Wire(Pin startPin, Pin endPin, IEnumerable<Point>? waypoints, bool lastLegVerticalFirst = false)
+        {
+            StartPin = startPin;
+            EndPin = endPin;
+            if (waypoints != null)
+            {
+                Waypoints.AddRange(waypoints);
+            }
+            LastLegVerticalFirst = lastLegVerticalFirst;
         }
 
         /// <summary>
@@ -72,7 +88,7 @@ namespace CircuitAnalyzer.WPF.Models
             }
 
             Visual.Points.Clear();
-            var route = WireGeometry.Route(start, end);
+            var route = WireGeometry.Route(start, Waypoints, end, LastLegVerticalFirst);
             foreach (var pt in route)
                 Visual.Points.Add(pt);
             if (Visual.Points.Count == 1)
@@ -86,6 +102,16 @@ namespace CircuitAnalyzer.WPF.Models
         /// Kesik çizgi (dashed) ve yarı saydam stilindedir.
         /// </summary>
         public static Polyline CreatePreviewLine(Point start, Point end)
+            => CreatePreviewLine(start, null, end, false);
+
+        /// <summary>
+        /// Ara köşe noktaları ve son kol yönü ile tel önizleme çizgisini oluşturur.
+        /// </summary>
+        public static Polyline CreatePreviewLine(
+            Point start,
+            IReadOnlyList<Point>? waypoints,
+            Point end,
+            bool lastLegVerticalFirst = false)
         {
             var preview = new Polyline
             {
@@ -96,7 +122,7 @@ namespace CircuitAnalyzer.WPF.Models
             };
             preview.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.WirePreview");
 
-            var route = WireGeometry.Route(start, end);
+            var route = WireGeometry.Route(start, waypoints, end, lastLegVerticalFirst);
             foreach (var pt in route)
                 preview.Points.Add(pt);
             if (preview.Points.Count == 1)

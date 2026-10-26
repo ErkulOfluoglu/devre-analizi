@@ -325,6 +325,15 @@ namespace CircuitAnalyzer.WPF.Services
                 }
             }
 
+            foreach (var wire in restored.Wires)
+            {
+                for (int i = 0; i < wire.Waypoints.Count; i++)
+                {
+                    var wp = wire.Waypoints[i];
+                    wire.Waypoints[i] = GridHelper.Snap(new Point(wp.X + offset.X, wp.Y + offset.Y));
+                }
+            }
+
             return new PasteResult(restored.Elements, restored.Wires);
         }
 

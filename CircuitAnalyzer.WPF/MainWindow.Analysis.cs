@@ -90,6 +90,10 @@ namespace CircuitAnalyzer.WPF
             {
                 _ = RunJunctionShotAsync(junctionPng!);
             }
+            else if (TryGetBendShot(args, out var bendPng))
+            {
+                _ = RunBendShotAsync(bendPng!);
+            }
             else if (SelfTestOptions.TryParse(args, out var selfTest))
             {
                 _ = RunSelfTestAsync(selfTest!);
@@ -431,7 +435,8 @@ namespace CircuitAnalyzer.WPF
                    args.Contains("--editor-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--tour-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--junction-shot", StringComparer.OrdinalIgnoreCase) ||
-                   args.Contains("--wire-select-shot", StringComparer.OrdinalIgnoreCase);
+                   args.Contains("--wire-select-shot", StringComparer.OrdinalIgnoreCase) ||
+                   args.Contains("--bend-shot", StringComparer.OrdinalIgnoreCase);
         }
 
         internal static bool TryGetOnboardingShot(string[] args, out OnboardingShotOptions? options)
@@ -490,6 +495,16 @@ namespace CircuitAnalyzer.WPF
             int i = Array.FindIndex(args, a =>
                 string.Equals(a, "--junction-shot", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(a, "--wire-select-shot", StringComparison.OrdinalIgnoreCase));
+            if (i < 0 || i + 1 >= args.Length)
+                return false;
+            outputPng = Path.GetFullPath(args[i + 1]);
+            return true;
+        }
+
+        internal static bool TryGetBendShot(string[] args, out string? outputPng)
+        {
+            outputPng = null;
+            int i = Array.FindIndex(args, a => string.Equals(a, "--bend-shot", StringComparison.OrdinalIgnoreCase));
             if (i < 0 || i + 1 >= args.Length)
                 return false;
             outputPng = Path.GetFullPath(args[i + 1]);
@@ -906,6 +921,73 @@ namespace CircuitAnalyzer.WPF
                 var branchMid = new Point(360, 150);
                 HandleCanvasLeftButtonDown(branchMid);
                 HandleCanvasLeftButtonUp(branchMid);
+
+                await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                UpdateLayout();
+
+                SaveScreenshot(outputPng);
+                File.WriteAllText(Path.ChangeExtension(outputPng, ".txt"), TxtStatus.Text);
+                Application.Current.Shutdown(_hasResults ? 0 : 1);
+            }
+            catch (Exception ex)
+            {
+                File.WriteAllText(Path.ChangeExtension(outputPng, ".txt"), $"HATA: {ex}");
+                Application.Current.Shutdown(1);
+            }
+        }
+
+        private async Task RunBendShotAsync(string outputPng)
+        {
+            try
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                Left = -20000;
+                Top = 0;
+                ShowActivated = false;
+                Height = 1100;
+
+                var c = new ExampleCircuit
+                {
+                    Name = "Köşeli Tel ve T-Bağlantı Devresi",
+                    Description = "R1–L1 teli R2'nin etrafından köşelerle dolaşır; R2 sağ ucu bükümlü tel koluna T-bağlantı (J1) ile bağlanır.",
+                    SuggestedAnalysisType = AnalysisTypes.Nodal,
+                };
+                var vac1 = c.Add(new AcVoltageSource { Amplitude = 10, Frequency = 50, Phase = 0 }, "VAC1", 60, 220, 90);
+                var r1 = c.Add(new Resistor { Value = 100 }, "R1", 140, 140);
+                var r2 = c.Add(new Resistor { Value = 220 }, "R2", 260, 140);
+                var l1 = c.Add(new Inductor { Value = 0.1 }, "L1", 400, 140);
+                var c1 = c.Add(new Capacitor { Value = 10e-6 }, "C1", 220, 240, 90);
+                var c2 = c.Add(new Capacitor { Value = 10e-6 }, "C2", 440, 240, 90);
+                var gnd1 = c.Add(new GroundElement(), "GND1", 340, 340);
+
+                c.Connect(r1.Pins[0], vac1.Pins[0]);
+                c.Connect(r2.Pins[0], c1.Pins[0]);
+                c.Connect(l1.Pins[1], c2.Pins[0]);
+                c.Connect(vac1.Pins[1], gnd1.Pins[0]);
+                c.Connect(c1.Pins[1], gnd1.Pins[0]);
+                c.Connect(c2.Pins[1], gnd1.Pins[0]);
+
+                Show();
+                await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                LoadExample(c);
+
+                // R1 sağ ucundan (220, 160) başlayıp R2'nin üstünden köşelerle L1 sol ucuna (400, 160) tel çiz
+                StartPinWire(r1.Pins[1]);
+                HandlePinWireClick(new Point(240, 100));
+                HandlePinWireClick(new Point(380, 100));
+                HandlePinWireClick(new Point(380, 160));
+                HandlePinWireClick(l1.Pins[0].AbsolutePosition);
+
+                // R2 sağ ucundan (340, 160) başlayıp üstteki bükümlü tel koluna (340, 100) T-bağlantısı (J1) indir
+                StartPinWire(r2.Pins[1]);
+                HandlePinWireClick(new Point(340, 100));
+
+                if (_backendStartTask != null)
+                    await _backendStartTask;
+                if (_api == null)
+                    throw new InvalidOperationException("Çözücü başlamadı");
+
+                await SolveAsync();
 
                 await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
                 UpdateLayout();
