@@ -2,3 +2,4 @@
 -r requirements.txt
 pytest>=8.0
 httpx>=0.27  # fastapi.testclient için
+pytest-xdist>=3.5  # testleri birden çok çekirdekte çalıştırır (pytest.ini: -n 6)
