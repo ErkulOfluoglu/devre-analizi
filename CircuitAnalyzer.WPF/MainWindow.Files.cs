@@ -345,11 +345,13 @@ namespace CircuitAnalyzer.WPF
                 AnalysisTypes.Thevenin => "Thevenin eşdeğeri",
                 AnalysisTypes.Norton => "Norton eşdeğeri",
                 AnalysisTypes.Superposition => "Süperpozisyon yöntemi",
+                AnalysisTypes.Millman => "Millman teoremi",
+                AnalysisTypes.SourceTransform => "Kaynak dönüşümü",
                 _ => settings.Type ?? "Düğüm gerilimleri yöntemi"
             };
 
             string? terminals = null;
-            if (settings.Type == AnalysisTypes.Thevenin || settings.Type == AnalysisTypes.Norton)
+            if (settings.Type != null && AnalysisPanel.UsesTerminals(settings.Type))
             {
                 terminals = $"{settings.TerminalPositive ?? "?"} - {settings.TerminalNegative ?? "?"}";
             }

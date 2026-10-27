@@ -271,6 +271,31 @@ def build_explanation(
                                dn.solve_section, _dependent_check, _currents)
     else:
         method_builders = (_known_nodes, _kcl, _solve, _currents)
+    if analysis_type in (AnalysisType.MILLMAN, AnalysisType.SOURCE_TRANSFORM):
+        # Döngüsel içe aktarmayı önlemek için yerel import
+        from explainer.millman import build_millman
+        from explainer.source_transform import build_source_transform
+        if analysis_type == AnalysisType.MILLMAN:
+            extra, why = build_millman(ctx)
+            title, what, fb_type = "Millman Teoremi", "Millman teoremi", AnalysisType.NODAL
+            advice = ("“Düğüm Gerilimleri” yöntemini seçebilirsiniz; aynı sonuçları şimdi o "
+                      "yöntemle anlatıyoruz.")
+        else:
+            extra, why = build_source_transform(ctx)
+            title, what, fb_type = "Kaynak Dönüşümü", "kaynak dönüşümü yöntemi", AnalysisType.THEVENIN
+            advice = ("“Thevenin Eşdeğeri” yöntemini seçebilirsiniz; aynı eşdeğeri şimdi o "
+                      "yöntemle anlatıyoruz.")
+        if extra is not None and analysis_type == AnalysisType.SOURCE_TRANSFORM:
+            # Eşdeğer, dönüşüm bölümlerinde bulunur; tam çözümün düğüm/güç bölümleri eklenmez
+            return [s.build() for s in _intro(ctx) + extra if s.blocks]
+        if extra is not None:
+            method_builders = (lambda c: extra,)
+        else:
+            fallback = _Section(title)
+            fallback.note(f"Bu devrede {what} uygulanamadı: {why} {advice}")
+            analysis_type = ctx.analysis_type = fb_type
+            method_builders = (lambda c: [fallback],) + method_builders
+
     if analysis_type == AnalysisType.MESH:
         # Döngüsel içe aktarmayı önlemek için yerel import
         from explainer.mesh_narrative import build_mesh_sections, verify
@@ -434,6 +459,18 @@ def _intro(ctx: _Ctx) -> List[_Section]:
             "eşdeğerini bulmak: bir akım kaynağı (In) ve ona paralel bir "
             + ("direnç (Rn)" if ctx.is_dc else "empedans (Zn)")
             + ". Önce düğüm gerilimlerini çözeceğiz."
+        )
+    elif ctx.analysis_type == AnalysisType.MILLMAN:
+        s.text(
+            "Millman teoremiyle çözeceğiz: devre iki ana düğüm arasına paralel bağlı kollardan "
+            "oluşuyor. Önce bu iki düğüm arasındaki gerilimi tek bir formülle bulacağız, sonra her "
+            "kolun akımını Ohm yasasıyla hesaplayacağız."
+        )
+    elif ctx.analysis_type == AnalysisType.SOURCE_TRANSFORM and ctx.terminals:
+        a, b = ctx.terminals.node_positive, ctx.terminals.node_negative
+        s.text(
+            f"Amaç: Düğüm {a} (+) ile Düğüm {b} (−) arasındaki Thevenin/Norton eşdeğerini, devreyi "
+            "kaynak dönüşümleriyle (gerilim kaynağı ⇄ akım kaynağı) adım adım sadeleştirerek bulmak."
         )
     elif ctx.analysis_type == AnalysisType.SUPERPOSITION:
         s.text(
@@ -1182,6 +1219,22 @@ def _port_reduction_section(ctx: _Ctx, title: str, symbol: str,
             elif step.kind == "parallel":
                 s.text(f"{step.elements[0]} ve {step.elements[1]} aynı iki düğüm arasında, paralel:")
                 s.math(step.formula.replace("-", MINUS))
+            elif step.kind == "delta_y":
+                s.text(
+                    f"Seri/paralel birleştirme kalmadı; {', '.join(step.elements)} "
+                    f"üçgen (Δ) bağlı (Düğüm {', '.join(step.nodes)} arası) → "
+                    "yıldıza (Y) dönüştürelim:"
+                )
+                for line in step.formula.splitlines():
+                    s.math(line.replace("-", MINUS))
+            elif step.kind == "y_delta":
+                s.text(
+                    f"Seri/paralel birleştirme kalmadı; {', '.join(step.elements)} "
+                    "yıldız (Y) bağlı → üçgene (Δ, "
+                    f"Düğüm {', '.join(step.nodes)} arası) dönüştürelim:"
+                )
+                for line in step.formula.splitlines():
+                    s.math(line.replace("-", MINUS))
             else:
                 s.math(f"• {step.formula}")
         s.result(f"{symbol} = {rect(expected, 'Ω') if not ctx.is_dc else eng(expected.real, 'Ω')}")

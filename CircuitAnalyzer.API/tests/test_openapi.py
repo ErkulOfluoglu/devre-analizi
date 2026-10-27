@@ -51,7 +51,8 @@ def test_enum_definitions(client):
     schemas = res.json()["components"]["schemas"]
 
     assert schemas["AnalysisMode"]["enum"] == ["DC", "AC_TIME", "AC_PHASOR"]
-    assert schemas["AnalysisType"]["enum"] == ["NODAL", "MESH", "THEVENIN", "NORTON", "SUPERPOSITION"]
+    assert schemas["AnalysisType"]["enum"] == ["NODAL", "MESH", "THEVENIN", "NORTON", "SUPERPOSITION",
+                                                  "MILLMAN", "SOURCE_TRANSFORM"]
 
 
 def test_all_schema_properties_have_descriptions(client):

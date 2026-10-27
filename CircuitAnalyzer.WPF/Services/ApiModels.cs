@@ -23,6 +23,8 @@ namespace CircuitAnalyzer.WPF.Services
         public const string Norton = "NORTON";
         public const string Mesh = "MESH";
         public const string Superposition = "SUPERPOSITION";
+        public const string Millman = "MILLMAN";
+        public const string SourceTransform = "SOURCE_TRANSFORM";
     }
 
     public sealed class TerminalsDto

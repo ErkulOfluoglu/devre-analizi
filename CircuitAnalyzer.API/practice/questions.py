@@ -202,7 +202,7 @@ def build_questions(
     if analysis_type == AnalysisType.SUPERPOSITION and contributions:
         return _superposition_questions(q, contributions, unknown_nodes, v_scale, has_dep)
 
-    if analysis_type == AnalysisType.THEVENIN and results.thevenin is not None and terminals:
+    if analysis_type in (AnalysisType.THEVENIN, AnalysisType.SOURCE_TRANSFORM) and results.thevenin is not None and terminals:
         a, b = terminals.node_positive, terminals.node_negative
         th = results.thevenin
         vth = complex(th.vth.real, th.vth.imaginary)

@@ -113,6 +113,8 @@
                     <ComboBoxItem Content="Norton Eşdeğeri"/>
                     <ComboBoxItem Content="Çevre Akımları"/>
                     <ComboBoxItem Content="Süperpozisyon"/>
+                    <ComboBoxItem Content="Millman"/>
+                    <ComboBoxItem Content="Kaynak Dönüşümü"/>
                 </ComboBox>
 
                 <!-- Terminaller (Thevenin/Norton için) -->

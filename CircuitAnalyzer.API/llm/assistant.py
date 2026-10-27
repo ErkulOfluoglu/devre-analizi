@@ -35,6 +35,8 @@ _METHOD_NAMES = {
     AnalysisType.THEVENIN: "Thevenin eşdeğeri",
     AnalysisType.NORTON: "Norton eşdeğeri",
     AnalysisType.SUPERPOSITION: "Süperpozisyon",
+    AnalysisType.MILLMAN: "Millman teoremi",
+    AnalysisType.SOURCE_TRANSFORM: "Kaynak dönüşümü (Thevenin/Norton eşdeğerine ulaşma)",
 }
 
 _RULES = """Sen meslek yüksekokulu elektronik öğrencilerine devre analizi anlatan sabırlı bir öğretmensin.
@@ -192,7 +194,8 @@ def build_messages(
     practice_questions: Sequence[PracticeQuestion],
 ) -> List[Dict[str, str]]:
     method = _METHOD_NAMES.get(analysis_type, analysis_type.value)
-    if terminals is not None and analysis_type in (AnalysisType.THEVENIN, AnalysisType.NORTON):
+    if terminals is not None and analysis_type in (AnalysisType.THEVENIN, AnalysisType.NORTON,
+                                                  AnalysisType.SOURCE_TRANSFORM):
         method += f" ({_node(terminals.node_positive)} – {_node(terminals.node_negative)} terminalleri)"
     ctx = [_RULES, "", circuit_text(parsed, is_dc, frequency), f"Yöntem: {method}", ""]
     if practice:

@@ -49,8 +49,11 @@ class AnalysisType(str, Enum):
     SUPERPOSITION: Süperpozisyon — her bağımsız kaynağın etkisi ayrı ayrı
               (kendi frekansında) bulunup toplanır; farklı frekanslı
               kaynaklar zaman domeninde toplanır
+    MILLMAN:  Millman teoremi — iki ana düğüm arasındaki paralel kollar (yalnızca DC)
+    SOURCE_TRANSFORM: Kaynak dönüşümü — seçilen iki terminalden Thevenin/Norton eşdeğerine
+              gerilim↔akım kaynağı dönüşümleriyle ulaşılır (yalnızca DC)
 
-    Not: 'thevenin_terminals' alanı hem THEVENIN hem de NORTON analizi için
+    Not: 'thevenin_terminals' alanı THEVENIN, NORTON ve SOURCE_TRANSFORM analizi için
     hedef port (terminal çifti) tanımlamasında ortak kullanılır.
     """
     NODAL = "NODAL"
@@ -58,6 +61,8 @@ class AnalysisType(str, Enum):
     THEVENIN = "THEVENIN"
     NORTON = "NORTON"
     SUPERPOSITION = "SUPERPOSITION"
+    MILLMAN = "MILLMAN"
+    SOURCE_TRANSFORM = "SOURCE_TRANSFORM"
 
 
 # ═══════════════════════════════════════════════════════
@@ -289,13 +294,13 @@ class AnalysisRequest(BaseModel):
 
     analysis_type: AnalysisType = Field(
         default=AnalysisType.NODAL,
-        description="Çözüm yöntemi: NODAL (Düğüm gerilimleri), MESH (Çevre akımları), THEVENIN (Thevenin eşdeğeri) veya NORTON (Norton eşdeğeri)",
+        description="Çözüm yöntemi: NODAL (Düğüm gerilimleri), MESH (Çevre akımları), THEVENIN (Thevenin eşdeğeri), NORTON (Norton eşdeğeri), SUPERPOSITION, MILLMAN (Millman teoremi) veya SOURCE_TRANSFORM (kaynak dönüşümü)",
         examples=["NODAL"],
     )
 
     thevenin_terminals: Optional[TheveninTerminals] = Field(
         default=None,
-        description="Thevenin veya Norton analizi yapılırken eşdeğer devrenin hesaplanacağı iki terminal düğümü.",
+        description="Thevenin, Norton veya kaynak dönüşümü analizi yapılırken eşdeğer devrenin hesaplanacağı iki terminal düğümü.",
         examples=[{"node_positive": "2", "node_negative": "0"}],
     )
 

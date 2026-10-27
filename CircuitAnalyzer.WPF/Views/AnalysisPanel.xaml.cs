@@ -256,6 +256,14 @@ public partial class AnalysisPanel : UserControl
         {
             CmbAnalysisType.SelectedIndex = 4;
         }
+        else if (string.Equals(analysisType, AnalysisTypes.Millman, StringComparison.OrdinalIgnoreCase))
+        {
+            CmbAnalysisType.SelectedIndex = 5;
+        }
+        else if (string.Equals(analysisType, AnalysisTypes.SourceTransform, StringComparison.OrdinalIgnoreCase))
+        {
+            CmbAnalysisType.SelectedIndex = 6;
+        }
         else
         {
             CmbAnalysisType.SelectedIndex = 0;
@@ -281,19 +289,9 @@ public partial class AnalysisPanel : UserControl
             ?? CmbAnalysisType.SelectedItem as string
             ?? "";
 
-        string analysisType = AnalysisTypes.Nodal;
-        if (selectedText.Contains("Thevenin", StringComparison.OrdinalIgnoreCase))
-            analysisType = AnalysisTypes.Thevenin;
-        else if (selectedText.Contains("Norton", StringComparison.OrdinalIgnoreCase))
-            analysisType = AnalysisTypes.Norton;
-        else if (selectedText.Contains("Çevre", StringComparison.OrdinalIgnoreCase))
-            analysisType = AnalysisTypes.Mesh;
-        else if (selectedText.Contains("Süperpozisyon", StringComparison.OrdinalIgnoreCase))
-            analysisType = AnalysisTypes.Superposition;
-
         return new CircuitDocument.AnalysisData
         {
-            Type = analysisType,
+            Type = AnalysisTypeFromText(selectedText),
             TerminalPositive = GetSelectedTerminal(CmbTerminalPositive),
             TerminalNegative = GetSelectedTerminal(CmbTerminalNegative),
             Frequency = TxtFrequency?.Text,
@@ -332,11 +330,33 @@ public partial class AnalysisPanel : UserControl
             ?? CmbAnalysisType.SelectedItem as string
             ?? "";
 
-        bool isTheveninOrNorton = selectedText.Contains("Thevenin", StringComparison.OrdinalIgnoreCase)
-                               || selectedText.Contains("Norton", StringComparison.OrdinalIgnoreCase);
-
-        RowTerminals.Visibility = isTheveninOrNorton ? Visibility.Visible : Visibility.Collapsed;
+        RowTerminals.Visibility = UsesTerminals(AnalysisTypeFromText(selectedText))
+            ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    /// <summary>Yöntem listesindeki yazıdan API analiz türünü (AnalysisTypes) bulur.</summary>
+    internal static string AnalysisTypeFromText(string selectedText)
+    {
+        if (selectedText.Contains("Thevenin", StringComparison.OrdinalIgnoreCase))
+            return AnalysisTypes.Thevenin;
+        if (selectedText.Contains("Norton", StringComparison.OrdinalIgnoreCase))
+            return AnalysisTypes.Norton;
+        if (selectedText.Contains("Çevre", StringComparison.OrdinalIgnoreCase))
+            return AnalysisTypes.Mesh;
+        if (selectedText.Contains("Süperpozisyon", StringComparison.OrdinalIgnoreCase))
+            return AnalysisTypes.Superposition;
+        if (selectedText.Contains("Millman", StringComparison.OrdinalIgnoreCase))
+            return AnalysisTypes.Millman;
+        if (selectedText.Contains("Kaynak Dönüşümü", StringComparison.OrdinalIgnoreCase))
+            return AnalysisTypes.SourceTransform;
+        return AnalysisTypes.Nodal;
+    }
+
+    /// <summary>Bu yöntem terminal çifti (+ ve −) ister mi?</summary>
+    internal static bool UsesTerminals(string analysisType) =>
+        analysisType == AnalysisTypes.Thevenin
+        || analysisType == AnalysisTypes.Norton
+        || analysisType == AnalysisTypes.SourceTransform;
 
     public bool TryGetOptions(out SolveOptions? options, out string? error)
     {
@@ -347,34 +367,8 @@ public partial class AnalysisPanel : UserControl
             ?? CmbAnalysisType.SelectedItem as string
             ?? "";
 
-        string analysisType;
-        bool isTheveninOrNorton;
-
-        if (selectedText.Contains("Thevenin", StringComparison.OrdinalIgnoreCase))
-        {
-            analysisType = AnalysisTypes.Thevenin;
-            isTheveninOrNorton = true;
-        }
-        else if (selectedText.Contains("Norton", StringComparison.OrdinalIgnoreCase))
-        {
-            analysisType = AnalysisTypes.Norton;
-            isTheveninOrNorton = true;
-        }
-        else if (selectedText.Contains("Çevre", StringComparison.OrdinalIgnoreCase))
-        {
-            analysisType = AnalysisTypes.Mesh;
-            isTheveninOrNorton = false;
-        }
-        else if (selectedText.Contains("Süperpozisyon", StringComparison.OrdinalIgnoreCase))
-        {
-            analysisType = AnalysisTypes.Superposition;
-            isTheveninOrNorton = false;
-        }
-        else
-        {
-            analysisType = AnalysisTypes.Nodal;
-            isTheveninOrNorton = false;
-        }
+        string analysisType = AnalysisTypeFromText(selectedText);
+        bool isTheveninOrNorton = UsesTerminals(analysisType);
 
         string? pos = null;
         string neg = "0";

@@ -634,14 +634,16 @@ def solve_circuit(
         results.probe_results = probe_results
 
     # ── Adım 6: Thevenin / Norton (opsiyonel) ──
-    if analysis_type in (AnalysisType.THEVENIN, AnalysisType.NORTON):
+    if analysis_type in (AnalysisType.THEVENIN, AnalysisType.NORTON,
+                         AnalysisType.SOURCE_TRANSFORM):
         if thevenin_terminals is None:
             errors.append(
                 f"⚠ {analysis_type.value} analizi için terminal çifti "
                 "gerekli. Lütfen 'thevenin_terminals' alanında "
                 "node_positive (ve isteğe bağlı node_negative) belirtin."
             )
-        elif analysis_type == AnalysisType.THEVENIN:
+        elif analysis_type in (AnalysisType.THEVENIN, AnalysisType.SOURCE_TRANSFORM):
+            # Kaynak dönüşümü Thevenin eşdeğerine ulaşır; çözücünün Thevenin sonucu doğrulamada kullanılır
             results.thevenin = _solve_thevenin(
                 cct, thevenin_terminals, is_dc, frequency, steps, errors
             )
@@ -700,7 +702,8 @@ def solve_circuit(
     # ── Adım 6.7: Bağımlı kaynaklı Thevenin/Norton için ek sayılar ──
     port_extras = None
     if (has_dependent and thevenin_terminals is not None
-            and analysis_type in (AnalysisType.THEVENIN, AnalysisType.NORTON)
+            and analysis_type in (AnalysisType.THEVENIN, AnalysisType.NORTON,
+                                  AnalysisType.SOURCE_TRANSFORM)
             and (results.thevenin is not None or results.norton is not None)):
         try:
             port_extras = _solve_port_extras(

@@ -127,8 +127,9 @@ def test_port_across_voltage_source_has_zero_impedance():
     assert any("kısa devre ile birleşti" in n for n in red.zeroing_notes)
 
 
-def test_irreducible_network_wheatstone():
-    # Kaynaksız Wheatstone köprüsü terminallerden seri/paralel ile indirgenemez
+def test_wheatstone_reduces_with_delta_y():
+    # Kaynaksız Wheatstone köprüsü seri/paralel ile indirgenemez; Δ→Y dönüşümüyle biter.
+    # Dengeli köprü (hepsi 1k): (1k+1k) ∥ (1k+1k) = 1k
     net = (
         "R1 1 2 1k\n"
         "R2 1 3 1k\n"
@@ -138,5 +139,6 @@ def test_irreducible_network_wheatstone():
     )
     red = reduce_port_impedance(parse_netlist(net), "1", "0", is_dc=True)
 
-    assert red.complete is False
-    assert red.impedance is None
+    assert red.complete is True
+    assert red.impedance == pytest.approx(1000)
+    assert any(s.kind == "delta_y" for s in red.steps)
