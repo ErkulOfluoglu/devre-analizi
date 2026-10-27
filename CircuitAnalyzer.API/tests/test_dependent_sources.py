@@ -571,6 +571,26 @@ def test_intro_names_every_dependent_type(solve, dep, name):
     assert f"{dep.split()[0]}: {name}" in text
 
 
+def test_gain_that_cancels_the_loop_resistance_is_reported_once_in_turkish(client):
+    """
+    Kullanıcının denediği devre: V1 12 V, R1 2 Ω, R2 4 Ω, R3 6 Ω, E1 (+ ucu GND'de) = k·V_R2.
+    KVL: 12 + k·4I = (2 + 4 + 6)·I → k = 3'te 12 = 0 (tekil), k = 2'de I = 3 A.
+    Tekil durumda her düğüm için ayrı İngilizce lcapy hatası yerine tek Türkçe açıklama (HTTP 422).
+    """
+    net = "V1 1 0 DC 12\nR1 1 2 2\nR2 2 3 4\nR3 3 4 6\nE1 0 4 V(R2) {k}" + GND
+
+    r = client.post("/analyze", json={"netlist": net.format(k=3), "mode": "DC"})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert "tek bir çözümü yok" in detail and "Bağımlı kaynağın kazancı" in detail
+    assert "invertible" not in detail
+
+    r = client.post("/analyze", json={"netlist": net.format(k=2), "mode": "DC"})
+    assert r.status_code == 200
+    nv = r.json()["results"]["node_voltages"]
+    assert nv["2"]["value"] == pytest.approx(6.0) and nv["4"]["value"] == pytest.approx(-24.0)
+
+
 def test_reversed_control_is_defined_by_the_drawn_polarity(solve):
     """
     V(-R2): ekranda R2'nin + işareti n− ucunda çizilir. Anlatım eksi yazmaz,

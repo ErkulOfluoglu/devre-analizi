@@ -32,7 +32,7 @@ from models.response import (
 )
 from practice.checker import check_answer
 from parser.netlist_parser import parse_netlist, to_lcapy_netlist
-from solver.circuit_solver import solve_circuit
+from solver.circuit_solver import solve_circuit, UNSOLVABLE_PREFIX
 
 
 # ═══════════════════════════════════════════════════════
@@ -207,6 +207,11 @@ async def analyze_circuit(
         target_probes=probes if probes else None,
         warnings=warnings
     )
+
+    # Tekil devre: sonuç yok, tek Türkçe açıklamayla "Devre çözülemedi"
+    unsolvable = next((m for m in errors if m.startswith(UNSOLVABLE_PREFIX)), None)
+    if unsolvable:
+        raise HTTPException(status_code=422, detail=unsolvable[len(UNSOLVABLE_PREFIX):])
 
     has_problem = any("⚠" in m for m in errors + warnings)
     return AnalysisResponse(

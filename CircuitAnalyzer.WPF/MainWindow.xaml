@@ -182,41 +182,41 @@
 
                         <Button x:Name="BtnAddVcvs"
                                 Style="{DynamicResource Button.Nav}"
-                                ToolTip="Gerilim Kontrollü Gerilim Kaynağı (GKGK, E): çıkış gerilimi = kazanç · kontrol gerilimi"
+                                ToolTip="Gerilim Kontrollü Gerilim Kaynağı (GKGK): çıkış gerilimi = kazanç · kontrol gerilimi. Devrede E1, E2… diye adlandırılır."
                                 Click="BtnAddVcvs_Click">
                             <StackPanel Orientation="Horizontal">
                                 <controls:Icon Data="{DynamicResource Icon.DepVcvs}" Width="20" Height="20" Margin="0,0,12,0"/>
-                                <TextBlock Text="GKGK (E)" VerticalAlignment="Center"/>
+                                <TextBlock Text="GKGK" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
                         <Button x:Name="BtnAddVccs"
                                 Style="{DynamicResource Button.Nav}"
-                                ToolTip="Gerilim Kontrollü Akım Kaynağı (GKAK, G): çıkış akımı = kazanç · kontrol gerilimi"
+                                ToolTip="Gerilim Kontrollü Akım Kaynağı (GKAK): çıkış akımı = kazanç · kontrol gerilimi. Devrede G1, G2… diye adlandırılır."
                                 Click="BtnAddVccs_Click">
                             <StackPanel Orientation="Horizontal">
                                 <controls:Icon Data="{DynamicResource Icon.DepVccs}" Width="20" Height="20" Margin="0,0,12,0"/>
-                                <TextBlock Text="GKAK (G)" VerticalAlignment="Center"/>
+                                <TextBlock Text="GKAK" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
                         <Button x:Name="BtnAddCcvs"
                                 Style="{DynamicResource Button.Nav}"
-                                ToolTip="Akım Kontrollü Gerilim Kaynağı (AKGK, H): çıkış gerilimi = kazanç · kontrol akımı"
+                                ToolTip="Akım Kontrollü Gerilim Kaynağı (AKGK): çıkış gerilimi = kazanç · kontrol akımı. Devrede H1, H2… diye adlandırılır."
                                 Click="BtnAddCcvs_Click">
                             <StackPanel Orientation="Horizontal">
                                 <controls:Icon Data="{DynamicResource Icon.DepCcvs}" Width="20" Height="20" Margin="0,0,12,0"/>
-                                <TextBlock Text="AKGK (H)" VerticalAlignment="Center"/>
+                                <TextBlock Text="AKGK" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
                         <Button x:Name="BtnAddCccs"
                                 Style="{DynamicResource Button.Nav}"
-                                ToolTip="Akım Kontrollü Akım Kaynağı (AKAK, F): çıkış akımı = kazanç · kontrol akımı"
+                                ToolTip="Akım Kontrollü Akım Kaynağı (AKAK): çıkış akımı = kazanç · kontrol akımı. Devrede F1, F2… diye adlandırılır."
                                 Click="BtnAddCccs_Click">
                             <StackPanel Orientation="Horizontal">
                                 <controls:Icon Data="{DynamicResource Icon.DepCccs}" Width="20" Height="20" Margin="0,0,12,0"/>
-                                <TextBlock Text="AKAK (F)" VerticalAlignment="Center"/>
+                                <TextBlock Text="AKAK" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 

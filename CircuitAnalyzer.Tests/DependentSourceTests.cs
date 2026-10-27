@@ -603,6 +603,59 @@ public class DependentSourceTests
         });
     }
 
+    [Fact]
+    public void ControlMarkers_StayLeftOfVerticalAndAboveHorizontalElements_AwayFromResultLabels()
+    {
+        RunOnSta(() =>
+        {
+            // Çözüm sonrası akım etiketleri dikey elemanda sağa, yatayda alta yazılır; düğüm
+            // rozetleri pinlerin sağındadır. İşaretler hep karşı tarafta olmalı (90° ve 270°, 0° ve 180°).
+            foreach (double rotation in new double[] { 90, 270 })
+            {
+                var r = new Resistor { Id = "R2", Position = new Point(200, 200), Rotation = rotation };
+                double axisX = r.Pins[0].AbsolutePosition.X;
+                foreach (var marker in ControlMarkers.Create(r, voltage: true, reversed: false))
+                {
+                    var tb = (TextBlock)marker;
+                    tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    Assert.True(Canvas.GetLeft(tb) + tb.DesiredSize.Width <= axisX, $"{rotation}°: işaret eksenin solunda değil");
+                }
+            }
+            foreach (double rotation in new double[] { 0, 180 })
+            {
+                var r = new Resistor { Id = "R2", Position = new Point(200, 200), Rotation = rotation };
+                double axisY = r.Pins[0].AbsolutePosition.Y;
+                foreach (var marker in ControlMarkers.Create(r, voltage: true, reversed: false))
+                {
+                    var tb = (TextBlock)marker;
+                    tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    Assert.True(Canvas.GetTop(tb) + tb.DesiredSize.Height <= axisY, $"{rotation}°: işaret eksenin üstünde değil");
+                }
+            }
+        });
+    }
+
+    [Fact]
+    public void ElementBodies_AreGrabbable_SoThinSymbolsLikeGroundCanBeDragged()
+    {
+        RunOnSta(() =>
+        {
+            // Arka plansız Canvas yalnızca çizgilerde fare olayı alır; GND neredeyse sürüklenemiyordu
+            foreach (CircuitElement element in new CircuitElement[] { new GroundElement(), new Capacitor(), new DependentSource() })
+            {
+                var visual = element.CreateVisual();
+                MainWindow.MakeBodyGrabbable(element, visual);
+                Assert.NotNull(((Panel)visual).Background);
+            }
+
+            // Bağlantı noktası kendi küçük tutma alanını kullanır, kutusu boyanmaz
+            var junction = new JunctionElement();
+            var jVisual = junction.CreateVisual();
+            MainWindow.MakeBodyGrabbable(junction, jVisual);
+            Assert.Null(((Panel)jVisual).Background);
+        });
+    }
+
     // ═══════════════════════════════════════════════════════
     //  DÜZENLEYİCİ
     // ═══════════════════════════════════════════════════════

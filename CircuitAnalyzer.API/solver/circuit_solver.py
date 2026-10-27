@@ -542,6 +542,14 @@ def solve_circuit(
 
     is_dc = (mode == AnalysisMode.DC)
 
+    # ── Adım 2.2: Çözülebilirlik denetimi ──
+    # Tekil sistemde her düğüm ve akım için ayrı ayrı İngilizce lcapy hatası çıkıyordu;
+    # tek bir Türkçe açıklamayla dur (main.py bunu "Devre çözülemedi" yanıtına çevirir).
+    reason = _unsolvable_reason(cct, parsed, is_dc, frequency)
+    if reason:
+        errors.append(UNSOLVABLE_PREFIX + reason)
+        return results, steps, errors
+
     # ── Adım 2.4: Seri/Paralel tanıma (topoloji) ──
     try:
         pinned = set()
@@ -737,6 +745,48 @@ def solve_circuit(
 # ═══════════════════════════════════════════════════════
 #  DÜĞÜM GERİLİMLERİ
 # ═══════════════════════════════════════════════════════
+
+# Çözülemeyen (tekil) devre hatasının işareti; main.py bu önekle başlayan hatayı
+# "Devre çözülemedi" yanıtına (HTTP 422) çevirir.
+UNSOLVABLE_PREFIX = "⛔ "
+
+
+def _unsolvable_reason(cct, parsed: ParsedCircuit, is_dc: bool,
+                       frequency: Optional[float]) -> Optional[str]:
+    """
+    Devre denklemleri tekilse (tek bir çözüm yoksa) öğrenciye Türkçe açıklama döndürür,
+    çözülebiliyorsa None. lcapy tekil sistemde "MNA A matrix is not invertible" verir.
+    """
+    nodes = sorted({n for e in parsed.elements
+                    for n in (e.node_positive, e.node_negative)} - {"0"})
+    if not nodes:
+        return None
+    try:
+        _extract_numeric(cct[nodes[0]].V, is_dc, frequency)
+        return None
+    except Exception as e:
+        msg = str(e).lower()
+        if "invertible" not in msg and "singular" not in msg:
+            return None   # başka tür hata: olağan akış kendi mesajını üretir
+
+    lines = ["Bu devrenin tek bir çözümü yok: devre denklemleri birbiriyle çelişiyor "
+             "ya da bilinmeyenleri bulmaya yetmiyor (tekil sistem).", "", "Olası nedenler:"]
+    if any(e.element_type in DEPENDENT_SOURCES for e in parsed.elements):
+        lines.append("• Bağımlı kaynağın kazancı, devredeki dirençlerin etkisini tam olarak "
+                     "sıfırlıyor olabilir. Örneğin tek çevrede R1 + R2 + R3 − k·R = 0 olursa "
+                     "kaynak sıfır dirençle kısa devre edilmiş gibi olur. Kazancı ya da bir "
+                     "direnç değerini değiştirmeyi deneyin.")
+    lines += [
+        "• İki gerilim kaynağı doğrudan paralel bağlı ya da bir gerilim kaynağı kısa devre edilmiş olabilir.",
+        "• İki akım kaynağı doğrudan seri bağlı olabilir.",
+        "• Devrenin bir kısmı GND'ye hiçbir yolla bağlı olmayabilir (boşta kalan eleman).",
+    ]
+    if is_dc and any(e.element_type in (ElementType.CAPACITOR, ElementType.INDUCTOR)
+                     for e in parsed.elements):
+        lines.append("• DC analizde bobin kısa devre, kondansatör açık devre sayılır; "
+                     "bu da yukarıdaki durumlardan birini oluşturabilir.")
+    return "\n".join(lines)
+
 
 def _solve_node_voltages(
     cct, parsed: ParsedCircuit, is_dc: bool,

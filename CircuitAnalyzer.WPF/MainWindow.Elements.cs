@@ -335,10 +335,22 @@ namespace CircuitAnalyzer.WPF
         /// Bir CircuitElement'i ve görselini Canvas'a ekler (OnCircuitChanged çağırmaz;
         /// toplu yükleme ve yapıştırma işlemlerinde tek geri-al adımı üretmek için kullanılır).
         /// </summary>
+        /// <summary>
+        /// Elemanın kutusunun tamamını fareyle tutulabilir yapar. Arka plansız Canvas yalnızca
+        /// çizgilerin üstünde fare olayı alır; GND gibi ince çizgili simgeler bu yüzden
+        /// neredeyse sürüklenemiyordu. Bağlantı noktası kendi tutma alanını çizer, dokunulmaz.
+        /// </summary>
+        internal static void MakeBodyGrabbable(CircuitElement element, UIElement visual)
+        {
+            if (element is not JunctionElement && visual is Panel panel && panel.Background == null)
+                panel.Background = Brushes.Transparent;
+        }
+
         private UIElement AddElementToCanvasCore(CircuitElement element)
         {
             _elements.Add(element);
             UIElement visual = element.CreateVisual();
+            MakeBodyGrabbable(element, visual);
 
             Canvas.SetLeft(visual, element.Position.X);
             Canvas.SetTop(visual, element.Position.Y);
@@ -671,6 +683,7 @@ namespace CircuitAnalyzer.WPF
             _elementToVisual.Remove(element);
 
             UIElement newVisual = element.CreateVisual();
+            MakeBodyGrabbable(element, newVisual);
 
             Canvas.SetLeft(newVisual, element.Position.X);
             Canvas.SetTop(newVisual, element.Position.Y);

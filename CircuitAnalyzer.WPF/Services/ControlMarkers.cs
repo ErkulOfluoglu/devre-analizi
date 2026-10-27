@@ -47,9 +47,10 @@ namespace CircuitAnalyzer.WPF.Services
                 return markers;
             axis.Normalize();
 
-            // Elemanın kendi "üst" yüzü, dönüşle birlikte döner: (0,-1) saat yönünde θ kadar
-            double angle = control.Rotation * Math.PI / 180.0;
-            Vector across = new Vector(Math.Sin(angle), -Math.Cos(angle));
+            // Yatay elemanda üst, dikey elemanda sol yüz: çözüm sonrası akım etiketleri yatayda
+            // alta, dikeyde sağa; düğüm rozetleri de pinlerin sağına çizilir (ResultOverlay).
+            // Elemanın dönüşüne göre seçilseydi 90°/180°'de işaretler bunların altında kalırdı.
+            Vector across = Math.Abs(axis.X) >= Math.Abs(axis.Y) ? new Vector(0, -1) : new Vector(-1, 0);
             if (otherSide)
                 across = -across;
 
