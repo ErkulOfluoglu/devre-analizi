@@ -54,6 +54,10 @@ def build_superposition_sections(ctx: _Ctx, contributions: List[Contribution]) -
            "akımlar, her kaynağın TEK BAŞINA oluşturduklarının toplamıdır. Her adımda "
            "yalnızca bir kaynak bırakılır; diğerleri sıfırlanır: gerilim kaynağı → kısa "
            "devre, akım kaynağı → açık devre.")
+    if ctx.has_dependent:
+        s.text("Bağımlı kaynaklar (" + ", ".join(e.id for e in ctx.dependents()) + ") bağımsız "
+               "kaynak değildir: SIFIRLANMAZ, her adımda devrede aktif kalır (kontrol "
+               "büyüklükleri o adımdaki devreden hesaplanır).")
     for k, c in enumerate(contributions, 1):
         s.math(f"{k}. adım: yalnız {c.source.id} ({_domain(c)}) → katkılar {mark(k)} ile "
                f"gösterilir (ör: V₂{mark(k)})")
@@ -74,10 +78,16 @@ def build_superposition_sections(ctx: _Ctx, contributions: List[Contribution]) -
             sections.append(sec)
             continue
 
-        sub = build_explanation(
-            c.parsed, c.is_dc, c.frequency, AnalysisType.NODAL, None,
-            c.node_voltages, c.element_currents, AnalysisResults(),
-        )
+        if ctx.has_dependent:
+            # Alt devre denklemleri bağımlı kaynakları henüz bilmez; yalnızca
+            # çözücü sonuçları gösterilir (tek not girişte verildi)
+            sec.text("Bağımlı kaynaklar bu adımda da aktif; alt devre çözücüyle çözüldü.")
+            sub = []
+        else:
+            sub = build_explanation(
+                c.parsed, c.is_dc, c.frequency, AnalysisType.NODAL, None,
+                c.node_voltages, c.element_currents, AnalysisResults(),
+            )
         for sub_sec in sub:
             if sub_sec.title not in _SUB_SECTIONS:
                 continue

@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from parser.netlist_parser import (
-    CURRENT_SOURCES, DC_SOURCES, SINE_SOURCES, VOLTAGE_SOURCES,
+    CURRENT_SOURCES, DC_SOURCES, DEPENDENT_SOURCES, SINE_SOURCES, VOLTAGE_SOURCES,
     ParsedCircuit, ParsedElement,
 )
 
@@ -51,10 +51,22 @@ def _source_frequency(e: ParsedElement, global_frequency: Optional[float]) -> Op
 def build_subcircuits(
     parsed: ParsedCircuit, global_frequency: Optional[float]
 ) -> List[Contribution]:
-    """Her bağımsız kaynak için 'yalnız o kaynak aktif' alt devresini kurar."""
+    """
+    Her bağımsız kaynak için 'yalnız o kaynak aktif' alt devresini kurar.
+
+    ★ Bağımlı kaynaklar (E, G, H, F) SIFIRLANMAZ: süperpozisyonda yalnızca
+      bağımsız kaynaklar tek tek devre dışı bırakılır, bağımlı kaynaklar her
+      alt devrede aktif kalır (kontrol büyüklükleri o alt devrede yeniden
+      hesaplanır). Bağımsız kaynak yoksa hiç katkı yoktur (tüm sonuçlar 0).
+    """
     sources = [e for e in parsed.elements
                if e.element_type in VOLTAGE_SOURCES + CURRENT_SOURCES
                and abs(e.params.get("amplitude", e.value)) > 0]
+    # Bağımlı bir kaynağın kontrol elemanı olan bağımsız akım kaynağı sıfırlanınca
+    # devreden çıkarılırsa kontrol büyüklüğü (ör: uçlarındaki gerilim) tanımsız
+    # kalır → bu durumda 0 A'lık kaynak olarak (yine açık devre) bırakılır.
+    controls = {e.params["control_id"] for e in parsed.elements
+                if e.element_type in DEPENDENT_SOURCES}
     contributions = []
     for active in sources:
         sub = copy.deepcopy(parsed)
@@ -71,6 +83,13 @@ def build_subcircuits(
                 e.element_type = DC_SOURCES[0]
                 kept.append(e)
                 zeroed.append(f"{e.id} gerilim kaynağı → kısa devre")
+            elif e.id in controls:
+                e.value = 0.0
+                e.params = {"superposition_zeroed": True}
+                e.element_type = CURRENT_SOURCES[0]
+                kept.append(e)
+                zeroed.append(f"{e.id} akım kaynağı → açık devre (0 A'lık kaynak olarak "
+                              "bırakıldı; bağımlı kaynağın kontrol elemanı)")
             else:
                 zeroed.append(f"{e.id} akım kaynağı → açık devre (çıkarıldı)")
         sub.elements = kept
@@ -92,7 +111,8 @@ def solve_contributions(
     # Döngüsel içe aktarmayı önlemek için yerel import
     from lcapy import Circuit
     from parser.netlist_parser import to_lcapy_netlist
-    from solver.circuit_solver import _extract_numeric
+    from solver.circuit_solver import _extract_numeric, lcapy_element_current
+    from parser.netlist_parser import lcapy_sense_map
 
     contributions = build_subcircuits(parsed, global_frequency)
     for c in contributions:
@@ -105,11 +125,11 @@ def solve_contributions(
             c.node_voltages["0"] = 0j
             for n in nodes - {"0"}:
                 c.node_voltages[n] = complex(_extract_numeric(cct[n].V, c.is_dc, c.frequency))
+            sense = lcapy_sense_map(c.parsed)
             for e in c.parsed.elements:
-                i = complex(_extract_numeric(cct[e.id].I, c.is_dc, c.frequency))
-                if e.element_type in CURRENT_SOURCES:
-                    i = -i   # bkz. circuit_solver: lcapy'ye uçlar ters yazılır
-                c.element_currents[e.id] = i
+                # Yön/işaret kuralları (akım kaynağı, G/F ölçüm kaynağı): circuit_solver
+                c.element_currents[e.id] = complex(
+                    lcapy_element_current(cct, e, sense, c.is_dc, c.frequency))
         except Exception as ex:   # pragma: no cover - lcapy hata ayrıntısı
             c.error = f"{c.source.id} alt devresi çözülemedi: {ex}"
     return contributions

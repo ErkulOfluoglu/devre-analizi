@@ -18,6 +18,8 @@ namespace CircuitAnalyzer.WPF
         private int _acSourceCounter = 0;
         private int _currentSourceCounter = 0;
         private int _acCurrentSourceCounter = 0;
+        /// <summary>Bağımlı kaynak sayaçları: dizin = (int)DependentSourceKind (E, G, H, F).</summary>
+        private readonly int[] _dependentCounters = new int[4];
         private int _capacitorCounter = 0;
         private int _inductorCounter = 0;
         private int _impedanceCounter = 0;
@@ -284,6 +286,39 @@ namespace CircuitAnalyzer.WPF
 
             TxtStatus.Text = $"{acSource.Id} eklendi — {acSource.Amplitude}A, " +
                 $"{acSource.Frequency}Hz, ∠{acSource.Phase}° — Sürükle/Sağ-tık/Çift-tık";
+        }
+
+        private void BtnAddVcvs_Click(object sender, RoutedEventArgs e) => AddDependentSource(DependentSourceKind.Vcvs);
+        private void BtnAddVccs_Click(object sender, RoutedEventArgs e) => AddDependentSource(DependentSourceKind.Vccs);
+        private void BtnAddCcvs_Click(object sender, RoutedEventArgs e) => AddDependentSource(DependentSourceKind.Ccvs);
+        private void BtnAddCccs_Click(object sender, RoutedEventArgs e) => AddDependentSource(DependentSourceKind.Cccs);
+
+        /// <summary>
+        /// Bağımlı kaynak ekler (E1, G1, H1, F1…). Kontrol elemanı çift tıklayınca açılan
+        /// düzenleyiciden seçilir; seçilene kadar çözülemez.
+        /// </summary>
+        internal DependentSource AddDependentSource(DependentSourceKind kind)
+        {
+            ExitWireMode();
+            int index = (int)kind;
+            _dependentCounters[index]++;
+
+            var source = new DependentSource(kind)
+            {
+                Id = $"{DependentSource.PrefixOf(kind)}{_dependentCounters[index]}",
+                Gain = 2
+            };
+
+            var center = GetViewportCenterInCanvas();
+            double centerX = GridHelper.Snap(center.X - 40 + index * 40);
+            double centerY = GridHelper.Snap(center.Y + 100);
+            centerY += (_dependentCounters[index] - 1) * GridHelper.GridSize * 3;
+
+            source.Position = new Point(centerX, centerY);
+            AddElementToCanvas(source);
+
+            TxtStatus.Text = $"{source.Id} ({source.KindName}) eklendi — Çift-tıkla kontrol elemanını ve kazancı seç";
+            return source;
         }
 
         /// <summary>
@@ -617,7 +652,7 @@ namespace CircuitAnalyzer.WPF
             if (element is JunctionElement)
                 return;
 
-            var editor = new ElementEditorWindow(element);
+            var editor = new ElementEditorWindow(element, _elements);
             editor.Owner = this;
 
             if (editor.ShowDialog() == true)
@@ -802,6 +837,7 @@ namespace CircuitAnalyzer.WPF
             _acSourceCounter = 0;
             _currentSourceCounter = 0;
             _acCurrentSourceCounter = 0;
+            Array.Clear(_dependentCounters);
             _capacitorCounter = 0;
             _inductorCounter = 0;
             _impedanceCounter = 0;
@@ -810,6 +846,7 @@ namespace CircuitAnalyzer.WPF
             _junctionCounter = 0;
             _pendingStartSplit = null;
 
+            _controlMarkers.Clear();
             CircuitCanvas.Children.Clear();
         }
     }

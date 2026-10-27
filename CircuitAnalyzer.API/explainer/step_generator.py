@@ -28,6 +28,7 @@ from models.response import SolutionStep
 from parser.netlist_parser import (
     ParsedCircuit, ParsedElement, ElementType,
     VOLTAGE_SOURCES, CURRENT_SOURCES, DC_SOURCES,
+    DEPENDENT_SOURCES, DEPENDENT_STEPS_NOTE,
 )
 
 
@@ -335,6 +336,16 @@ def generate_kcl_steps(
           (düğümleri birleştiren 0 V kısıt).
         • AC modda paydada empedans: Z_C = 1/(jωC), Z_L = jωL.
     """
+    if any(e.element_type in DEPENDENT_SOURCES for e in parsed.elements):
+        # KCL terimleri bağımlı kaynakları henüz bilmez (yanlış denklem yazmamak
+        # için üretilmez); sonuçlar lcapy'den gelir ve doğrudur.
+        return [SolutionStep(
+            step_number=0,
+            title="KCL — Düğüm Denklemleri",
+            description=DEPENDENT_STEPS_NOTE,
+            equations=[],
+        )]
+
     omega = None if is_dc or frequency is None else 2 * math.pi * frequency
     numeric_ok = is_dc or omega is not None
 

@@ -17,6 +17,10 @@ her satırı regex ile eşleştirir ve ParsedCircuit veri yapısına dönüştü
         VAC1 1 0 AC_PHASOR(10, 30)    → AC Kaynak (fazör alanı)
         Z1 2 3 COMPLEX(50, 30)        → Empedans (dikdörtgensel)
         Z1 2 3 POLAR(58.31, 30.96)    → Empedans (kutupsal)
+        E1 3 0 V(R2) 3                → Gerilim kontrollü gerilim kaynağı (GKGK)
+        G1 3 0 V(-R2) 1m              → Gerilim kontrollü akım kaynağı    (GKAK)
+        H1 3 0 I(R2) 100              → Akım kontrollü gerilim kaynağı    (AKGK)
+        F1 3 0 I(V1) 2                → Akım kontrollü akım kaynağı       (AKAK)
         * PROBE VP1 V(2)              → Gerilim probu
         * PROBE IP1 I(R1)             → Akım probu
         * GND1 — Referans toprak      → GND yorumu (Node 0 C#'ta atanır)
@@ -25,6 +29,7 @@ her satırı regex ile eşleştirir ve ParsedCircuit veri yapısına dönüştü
 import re
 import math
 import cmath
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Tuple
 from enum import Enum
@@ -48,6 +53,18 @@ class ElementType(str, Enum):
     CURRENT_DC = "I_DC"
     CURRENT_AC_SINE = "I_AC_SINE"
     CURRENT_AC_PHASOR = "I_AC_PHASOR"
+    # Bağımlı (kontrollü) kaynaklar — çıkışları başka bir elemanın gerilimi
+    # veya akımıyla orantılıdır: çıkış = kazanç · kontrol büyüklüğü.
+    #   E: gerilim kontrollü gerilim kaynağı (GKGK)   E1 n+ n- V(ctrl) k
+    #   G: gerilim kontrollü akım kaynağı    (GKAK)   G1 n+ n- V(ctrl) k
+    #   H: akım kontrollü gerilim kaynağı    (AKGK)   H1 n+ n- I(ctrl) k
+    #   F: akım kontrollü akım kaynağı       (AKAK)   F1 n+ n- I(ctrl) k
+    # Akım çıkışlı olanlarda (G, F) yön kuralı bağımsız akım kaynaklarıyla
+    # aynıdır: akım kaynak İÇİNDEN n+ → n−; dış devreye n− ucundan çıkar.
+    VCVS = "E"
+    VCCS = "G"
+    CCVS = "H"
+    CCCS = "F"
 
 
 # ── Kaynak grupları (tüm modüller buradan kullanır) ──
@@ -61,6 +78,31 @@ ALL_SOURCES = VOLTAGE_SOURCES + CURRENT_SOURCES
 DC_SOURCES = (ElementType.DC_SOURCE, ElementType.CURRENT_DC)
 SINE_SOURCES = (ElementType.AC_SOURCE_SINE, ElementType.CURRENT_AC_SINE)
 PHASOR_SOURCES = (ElementType.AC_SOURCE_PHASOR, ElementType.CURRENT_AC_PHASOR)
+# Bağımlı kaynaklar ALL_SOURCES'a DAHİL DEĞİLDİR: bağımsız kaynak değildirler
+# (frekansı/değeri yoktur, süperpozisyonda sıfırlanmazlar, KCL'de sabit terim
+# olamazlar). Bunları tanımak için bu grubu kullanın.
+DEPENDENT_SOURCES = (
+    ElementType.VCVS, ElementType.VCCS, ElementType.CCVS, ElementType.CCCS,
+)
+# Çıkışı gerilim / akım olanlar ve kontrol büyüklüğü akım olanlar
+DEPENDENT_VOLTAGE_OUTPUT = (ElementType.VCVS, ElementType.CCVS)
+DEPENDENT_CURRENT_OUTPUT = (ElementType.VCCS, ElementType.CCCS)
+DEPENDENT_CURRENT_CONTROLLED = (ElementType.CCVS, ElementType.CCCS)
+
+# Bağımlı kaynakların Türkçe adı ve kontrol cümlesi (anlatım / asistan için)
+DEPENDENT_NAMES = {
+    ElementType.VCVS: "Gerilim kontrollü gerilim kaynağı",
+    ElementType.VCCS: "Gerilim kontrollü akım kaynağı",
+    ElementType.CCVS: "Akım kontrollü gerilim kaynağı",
+    ElementType.CCCS: "Akım kontrollü akım kaynağı",
+}
+
+# Bağımlı kaynaklı devrelerde düğüm/çevre denklemlerinin adım adım gösterimi
+# henüz yoktur; anlatım bunun yerine bu tek notu verir (sonuçlar çözücüden gelir).
+DEPENDENT_STEPS_NOTE = (
+    "Bu devrede bağımlı kaynak var; düğüm/çevre denklemlerinin adım adım "
+    "gösterimi bir sonraki sürümde eklenecek. Sonuçlar doğrudur."
+)
 
 
 @dataclass
@@ -112,6 +154,9 @@ class ParsedCircuit:
     node_count: int = 0
     raw_netlist: str = ""
     warnings: List[str] = field(default_factory=list)
+    # Devreyi çözülemez kılan Türkçe hatalar (ör: bağımlı kaynağın kontrol
+    # elemanı yok). API bunları HTTP 400 olarak döndürür; yanlış sonuç vermez.
+    errors: List[str] = field(default_factory=list)
     # İsteğe bağlı çizim konumları (* NODEPOS n x y) — çevre akımlarının
     # ekranda saat yönünde seçilmesi için; hesaplamayı etkilemez
     node_positions: Dict[str, Tuple[float, float]] = field(default_factory=dict)
@@ -235,6 +280,15 @@ _PATTERNS = {
         r"^(Z\w+)\s+(\w+)\s+(\w+)\s+POLAR\(([^)]*)\)\s*$", re.IGNORECASE
     ),
 
+    # ── Bağımlı kaynaklar ──
+    # E1 3 0 V(R2) 3   G1 3 0 V(-R2) 0.5m   H1 3 0 I(R2) 100   F1 3 0 I(V1) 2
+    # Gruplar: (1)=ID, (2)=n+, (3)=n−, (4)=V|I, (5)='-' (ters çevirme) veya '',
+    #          (6)=kontrol elemanı, (7)=kazanç
+    "dependent": re.compile(
+        r"^([EFGH]\w*)\s+(\w+)\s+(\w+)\s+([VI])\(\s*(-?)\s*(\w+)\s*\)\s+([\w.eE+-]+)\s*$",
+        re.IGNORECASE
+    ),
+
     # ── Ölçüm Probu (Yorum satırı) ──
     "probe": re.compile(
         r"^\*\s*PROBE\s+(\w+)\s+([VI])\(([^)]+)\)\s*$"
@@ -300,9 +354,13 @@ def parse_netlist(netlist_text: str) -> ParsedCircuit:
         element = _parse_element_line(line, line_num, circuit)
         if element:
             circuit.elements.append(element)
-            all_nodes.add(element.node_positive)
-            all_nodes.add(element.node_negative)
 
+    # Bağımlı kaynakların kontrol elemanları (satır sırasından bağımsız denetlenir)
+    _validate_dependents(circuit)
+
+    for element in circuit.elements:
+        all_nodes.add(element.node_positive)
+        all_nodes.add(element.node_negative)
     circuit.node_count = len(all_nodes)
     return circuit
 
@@ -406,6 +464,20 @@ def _parse_element_line(
     if m:
         return _parse_impedance_polar(m)
 
+    # ── Bağımlı kaynak: E1 3 0 V(R2) 3 ──
+    m = _PATTERNS["dependent"].match(line)
+    if m:
+        return _parse_dependent(m, line_num, circuit)
+
+    # E/F/G/H ile başlayan ama biçimi bozuk satır: sessizce atlanırsa devre
+    # kaynaksız çözülür ve yanlış sonuç çıkar → hata olarak bildir.
+    if line[0].upper() in "EFGH":
+        _reject(circuit,
+                f"Satır {line_num}: Bağımlı kaynak satırı anlaşılamadı → '{line}'. "
+                "Beklenen biçim: E1 <n+> <n-> V(<kontrol>) <kazanç> "
+                "(H ve F için I(<kontrol>)).")
+        return None
+
     # Tanınmayan satır → uyarı
     circuit.warnings.append(
         f"Satır {line_num}: Tanınmayan format → '{line}'"
@@ -416,6 +488,91 @@ def _parse_element_line(
 # ═══════════════════════════════════════════════════════
 #  ÖZEL FORMAT PARSER'LARI
 # ═══════════════════════════════════════════════════════
+
+def _reject(circuit: ParsedCircuit, message: str) -> None:
+    """Çözümü engelleyen Türkçe hata: hem uyarılara hem hatalara yazılır."""
+    circuit.warnings.append(message)
+    circuit.errors.append(message)
+
+
+def _parse_dependent(
+    m: re.Match, line_num: int, circuit: ParsedCircuit
+) -> Optional[ParsedElement]:
+    """
+    Bağımlı kaynak satırını ayrıştırır.
+
+    E1 3 0 V(R2) 3     → V(3) − V(0) = 3 · V_R2          (V_R2 = V(R2.n+) − V(R2.n−))
+    G1 3 0 V(-R2) 1m   → kaynak akımı = 1m · (−V_R2)      (n+ → n−, kaynak içinden)
+    H1 3 0 I(R2) 100   → V(3) − V(0) = 100 · I_R2         (I_R2: R2'nin n+ → n− akımı)
+    F1 3 0 I(V1) 2     → kaynak akımı = 2 · I_V1          (n+ → n−, kaynak içinden)
+
+    params: control_id, control_kind ("V"|"I"), control_sign (±1), gain.
+    Kontrol elemanının varlığı burada denetlenmez (satır sırası serbest);
+    bunu parse_netlist sonunda _validate_dependents yapar.
+    """
+    elem_id = m.group(1)
+    kind = ElementType(elem_id[0].upper())
+    letter = m.group(4).upper()
+    expected = "I" if kind in DEPENDENT_CURRENT_CONTROLLED else "V"
+    if letter != expected:
+        what = "akım" if expected == "I" else "gerilim"
+        _reject(circuit,
+                f"Satır {line_num}: {elem_id} bir {DEPENDENT_NAMES[kind].lower()}dır; "
+                f"kontrol büyüklüğü {what} olduğundan {expected}(...) yazılmalı, "
+                f"{letter}(...) yazılmış.")
+        return None
+    try:
+        gain = parse_spice_value(m.group(7))
+    except ValueError:
+        _reject(circuit,
+                f"Satır {line_num}: {elem_id} kazancı sayı olarak okunamadı → '{m.group(7)}'.")
+        return None
+    return ParsedElement(
+        id=elem_id,
+        element_type=kind,
+        node_positive=m.group(2),
+        node_negative=m.group(3),
+        value=gain,
+        params={
+            "control_id": m.group(6),
+            "control_kind": letter,
+            "control_sign": -1 if m.group(5) else 1,
+            "gain": gain,
+        },
+    )
+
+
+def _validate_dependents(circuit: ParsedCircuit) -> None:
+    """
+    Bağımlı kaynakların kontrol elemanlarını denetler. Geçersiz olanlar
+    (bilinmeyen eleman, kendi kendini kontrol, kontrol edilemeyen eleman)
+    devreden çıkarılır ve Türkçe hata üretilir; böylece çözücü eksik bir
+    devreyi yanlış sonuçla çözmez.
+    """
+    while True:
+        by_id = {e.id.upper(): e for e in circuit.elements}
+        bad = None
+        for e in circuit.elements:
+            if e.element_type not in DEPENDENT_SOURCES:
+                continue
+            ref = e.params["control_id"]
+            ctrl = by_id.get(ref.upper())
+            if ctrl is e or ref.upper() == e.id.upper():
+                bad = (e, f"{e.id} kendi kendini kontrol edemez (kontrol elemanı olarak "
+                          "başka bir elemanı seçin).")
+            elif ctrl is None:
+                bad = (e, f"{e.id} bağımlı kaynağının kontrol elemanı '{ref}' devrede "
+                          "bulunamadı. Kontrol elemanının numarasını (Id) kontrol edin.")
+            else:
+                e.params["control_id"] = ctrl.id    # büyük/küçük harfi eleman kimliğine uydur
+            if bad:
+                break
+        if bad is None:
+            return
+        elem, message = bad
+        circuit.elements.remove(elem)
+        _reject(circuit, message)
+
 
 def _parse_ac_sine(m: re.Match) -> ParsedElement:
     """
@@ -558,6 +715,17 @@ def to_lcapy_netlist(circuit: ParsedCircuit, frequency: float = None) -> str:
         - AC kaynak: 'V1 1 0 ac {10*exp(j*pi/6)}'
         - Empedans:  'Z1 1 2 {50+30j}'  (lcapy Z elemanını destekler)
 
+    Bağımlı kaynaklar (ölçüldü, lcapy davranışı):
+        E1 n+ n- c+ c- {k}       V(n+)−V(n−) = k·(V(c+)−V(c−))
+        G1 n- n+ c+ c- {k}       akım İLK düğümden çıkar → uçlar ters yazılır
+        H1 n+ n- Vsrc {k}        V(n+)−V(n−) = k·I(Vsrc)
+        F1 n+ n- Vsrc {k}        akım İKİNCİ düğümden çıkar (SPICE düzeni)
+      lcapy H/F için kontrol olarak bir GERİLİM KAYNAĞI adı ister. Kontrol
+      bağımsız gerilim kaynağı değilse (R, C, L, Z, I, E, F, G, H) elemanın
+      n− ucuyla arasına 0 V'luk gizli bir ölçüm kaynağı konur (bkz.
+      lcapy_sense_map). G ve F elemanlarının akımını lcapy doğrudan vermediği
+      için onlara da konur. Gizli düğüm/kaynak adları sonuçlara ÇIKMAZ.
+
     Args:
         circuit: Ayrıştırılmış devre yapısı
         frequency: AC analiz frekansı (Hz) — opsiyonel
@@ -566,9 +734,20 @@ def to_lcapy_netlist(circuit: ParsedCircuit, frequency: float = None) -> str:
         str: lcapy-uyumlu Netlist metni
     """
     lines = []
+    sense = lcapy_sense_map(circuit)
+    by_id = {e.id: e for e in circuit.elements}
 
-    for elem in circuit.elements:
-        if elem.element_type == ElementType.RESISTOR:
+    for orig in circuit.elements:
+        elem = orig
+        if orig.id in sense:
+            # n− ucu gizli düğüme taşınır; 0 V'luk ölçüm kaynağı gizli düğümle
+            # gerçek n− arasına girer: I(ölçüm) = eleman içinden n+ → n− akım
+            elem = dataclasses.replace(orig, node_negative=sense[orig.id][1])
+
+        if elem.element_type in DEPENDENT_SOURCES:
+            lines.append(_dependent_lcapy_line(elem, by_id, sense))
+
+        elif elem.element_type == ElementType.RESISTOR:
             lines.append(
                 f"{elem.id} {elem.node_positive} {elem.node_negative} {elem.value}"
             )
@@ -657,4 +836,82 @@ def to_lcapy_netlist(circuit: ParsedCircuit, frequency: float = None) -> str:
                         f"ac {{{amp}*exp(j*{math.radians(phase_deg):.6f})}}"
                     )
 
+        if orig.id in sense:
+            sense_name, hidden = sense[orig.id]
+            lines.append(f"{sense_name} {hidden} {orig.node_negative} {{0}}")
+
     return "\n".join(lines)
+
+
+def lcapy_sense_map(circuit: ParsedCircuit) -> Dict[str, Tuple[str, str]]:
+    """
+    0 V'luk gizli ölçüm kaynağı gereken elemanlar: {eleman: (kaynak adı, gizli düğüm)}.
+
+    Gereken elemanlar:
+      • akım kontrollü bir kaynağın (H, F) kontrol elemanı — bağımsız gerilim
+        kaynağı DEĞİLSE (lcapy kontrol olarak gerilim kaynağı adı ister;
+        bağımsız gerilim kaynağının akımı zaten uygulamanın raporladığı
+        element_currents ile aynı işaretlidir, doğrudan kullanılır),
+      • akım çıkışlı her bağımlı kaynak (G, F): lcapy bunların akımını
+        vermez; gizli kaynağın akımı = eleman içinden n+ → n− akım.
+
+    Adlar elemanlarla/düğümlerle çakışmayacak şekilde seçilir.
+    """
+    by_id = {e.id: e for e in circuit.elements}
+    wanted: List[str] = []
+    for e in circuit.elements:
+        if e.element_type in DEPENDENT_CURRENT_OUTPUT and e.id not in wanted:
+            wanted.append(e.id)
+        if e.element_type in DEPENDENT_CURRENT_CONTROLLED:
+            ctrl = by_id.get(e.params.get("control_id"))
+            if (ctrl is not None and ctrl.element_type not in VOLTAGE_SOURCES
+                    and ctrl.id not in wanted):
+                wanted.append(ctrl.id)
+
+    used_ids = {e.id.upper() for e in circuit.elements}
+    used_nodes = {n for e in circuit.elements for n in (e.node_positive, e.node_negative)}
+    result: Dict[str, Tuple[str, str]] = {}
+    for eid in wanted:
+        name, node = f"Vsense_{eid}", f"_s_{eid}"
+        while name.upper() in used_ids:
+            name += "_"
+        while node in used_nodes:
+            node += "_"
+        used_ids.add(name.upper())
+        used_nodes.add(node)
+        result[eid] = (name, node)
+    return result
+
+
+def _dependent_lcapy_line(
+    elem: ParsedElement,
+    by_id: Dict[str, ParsedElement],
+    sense: Dict[str, Tuple[str, str]],
+) -> str:
+    """
+    Bağımlı kaynağın lcapy satırı. elem.node_negative, ölçüm kaynağı varsa
+    zaten gizli düğümle değiştirilmiş olarak gelir (bkz. to_lcapy_netlist).
+
+    Kontrol işareti kazanca katılır: E1 … V(-R2) 3 → kazanç −3.
+    """
+    p = elem.params
+    gain = p["gain"] * p["control_sign"]
+    ctrl = by_id[p["control_id"]]
+    t = elem.element_type
+
+    if t in (ElementType.VCVS, ElementType.VCCS):
+        # Kontrol gerilimi = V(ctrl.n+) − V(ctrl.n−) (gerçek düğümler; gizli
+        # düğüm ölçüm kaynağından dolayı n− ile aynı gerilimdedir)
+        c_pos, c_neg = ctrl.node_positive, ctrl.node_negative
+        if t == ElementType.VCVS:
+            return (f"{elem.id} {elem.node_positive} {elem.node_negative} "
+                    f"{c_pos} {c_neg} {{{gain}}}")
+        # G: lcapy akımı İLK düğümden çıkarır → sözleşmedeki (n− ucundan çıkar)
+        # davranış için uçlar ters yazılır
+        return (f"{elem.id} {elem.node_negative} {elem.node_positive} "
+                f"{c_pos} {c_neg} {{{gain}}}")
+
+    # H / F: kontrol akımı bir gerilim kaynağından okunur
+    ctrl_name = sense[ctrl.id][0] if ctrl.id in sense else ctrl.id
+    return (f"{elem.id} {elem.node_positive} {elem.node_negative} "
+            f"{ctrl_name} {{{gain}}}")

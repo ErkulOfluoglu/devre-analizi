@@ -35,6 +35,8 @@ from models.response import (
 )
 from parser.netlist_parser import (
     ALL_SOURCES, CURRENT_SOURCES, DC_SOURCES, SINE_SOURCES,
+    DEPENDENT_CURRENT_CONTROLLED, DEPENDENT_CURRENT_OUTPUT, DEPENDENT_NAMES,
+    DEPENDENT_SOURCES, DEPENDENT_STEPS_NOTE,
     ElementType, ParsedCircuit, ParsedElement,
 )
 
@@ -104,10 +106,19 @@ class _Ctx:
         return self.parsed.elements
 
     def passive(self) -> List[ParsedElement]:
-        return [e for e in self.elements if e.element_type not in _SOURCES]
+        return [e for e in self.elements
+                if e.element_type not in _SOURCES and e.element_type not in DEPENDENT_SOURCES]
 
     def sources(self) -> List[ParsedElement]:
+        """Bağımsız kaynaklar (bağımlı kaynaklar için dependents())."""
         return [e for e in self.elements if e.element_type in _SOURCES]
+
+    def dependents(self) -> List[ParsedElement]:
+        return [e for e in self.elements if e.element_type in DEPENDENT_SOURCES]
+
+    @property
+    def has_dependent(self) -> bool:
+        return any(e.element_type in DEPENDENT_SOURCES for e in self.elements)
 
     def label(self, e: ParsedElement) -> str:
         """Denklemdeki adı: direnç R1, empedans Z1, C/L için Z_C1."""
@@ -135,7 +146,7 @@ class _Ctx:
 
     def conducts(self, e: ParsedElement) -> bool:
         """KCL terimi oluşturan pasif eleman mı? (DC'de C açık, L kısıt)"""
-        if e.element_type in _SOURCES:
+        if e.element_type in _SOURCES or e.element_type in DEPENDENT_SOURCES:
             return False
         if self.is_dc and e.element_type in (ElementType.CAPACITOR, ElementType.INDUCTOR):
             return False
@@ -199,6 +210,10 @@ def build_explanation(
         v=nodes, i={k: complex(v) for k, v in raw_currents.items()},
         results=results,
     )
+    if ctx.has_dependent:
+        # Düğüm/çevre denklemleri bağımlı kaynakları henüz bilmez → o bölümler
+        # atlanır, tek not verilir; sonuçlar çözücüden (lcapy) gelir.
+        return _build_dependent_explanation(ctx, superposition)
     ctx.known, ctx.groups, ctx.constraints = _node_groups(parsed, is_dc)
 
     method_builders = (_known_nodes, _kcl, _solve, _currents)
@@ -240,6 +255,88 @@ def build_explanation(
     return [s.build() for s in sections if s.blocks]
 
 
+def _build_dependent_explanation(ctx: _Ctx, superposition) -> List[ExplanationSection]:
+    """
+    Bağımlı kaynaklı devrenin anlatımı: tanıtım + çözücü sonuçları + güç/Thevenin/
+    Norton/KCL kontrolü (bunlar yalnızca çözülmüş değerlere dayanır, bağımlı
+    kaynaktan etkilenmez). Düğüm/çevre denklemleri ve Ohm yasası türetmeleri
+    kurulmaz; bunun yerine DEPENDENT_STEPS_NOTE tek kez verilir.
+    """
+    if ctx.analysis_type == AnalysisType.SUPERPOSITION:
+        # Toplam sonuçlar süperpozisyon bölümündedir (bkz. build_explanation)
+        from explainer.superposition_narrative import build_superposition_sections
+        if superposition:
+            tail = build_superposition_sections(ctx, superposition)
+        else:
+            s = _Section("Süperpozisyon")
+            s.text("Süperpozisyonda yalnızca BAĞIMSIZ kaynaklar tek tek devre dışı bırakılır; "
+                   "bağımlı kaynaklar her adımda aktif kalır.")
+            s.note("Bu devrede etkin (sıfırdan farklı) bağımsız kaynak yok. Bağımlı kaynaklar "
+                   "tek başına enerji sağlayamaz: tüm gerilim ve akımlar sıfırdır.")
+            tail = [s]
+        return [s.build() for s in _intro(ctx) + tail if s.blocks]
+
+    sections: List[_Section] = []
+    for builder in (
+        _intro,
+        _impedances,
+        _dependent_solution,
+        _currents,
+        _thevenin,
+        _norton,
+        _power,
+        _kcl_check,
+        _time_domain,
+        _summary,
+    ):
+        sections.extend(builder(ctx))
+    return [s.build() for s in sections if s.blocks]
+
+
+def _control_text(ctx: _Ctx, e: ParsedElement) -> str:
+    """
+    Bağımlı kaynağın kontrol büyüklüğü: 'V_R2' / 'I_R2'.
+    Ters çevrilmiş kontrolde (V(-R2)) eksi yazılmaz: ekrandaki +/− işaretleri ve
+    ok da ters çizilir, V_R2'nin tanımı (_dependent_lines) o yöne göre yapılır.
+    """
+    p = e.params
+    return f"{p['control_kind']}_{p['control_id']}"
+
+
+def _dependent_lines(ctx: _Ctx) -> List[str]:
+    """
+    Her bağımlı kaynak için bir satır: adı + neyle kontrol edildiği.
+        E1: Gerilim kontrollü gerilim kaynağı, E1 = 3·V_R2 (V_R2 = V₂ − V₀)
+    """
+    by_id = {e.id: e for e in ctx.elements}
+    lines = []
+    for e in ctx.dependents():
+        gain = e.params["gain"]
+        t = e.element_type
+        unit = {ElementType.VCCS: "S", ElementType.CCVS: "Ω"}.get(t)
+        gain_txt = eng(gain, unit) if unit else num(gain)
+        ctrl = by_id.get(e.params["control_id"])
+        if ctrl:
+            # Ters kontrolde (+) ucu elemanın n− ucudur — ekrandaki işaretlerle aynı
+            plus, minus = ctrl.node_positive, ctrl.node_negative
+            if e.params["control_sign"] < 0:
+                plus, minus = minus, plus
+        if e.params["control_kind"] == "V":
+            c_desc = (f"V_{ctrl.id} = {node_v(plus)} {MINUS} {node_v(minus)}"
+                      if ctrl else "")
+        else:
+            c_desc = (f"I_{ctrl.id} = {ctrl.id} elemanından Düğüm {plus} → "
+                      f"Düğüm {minus} yönünde geçen akım" if ctrl else "")
+        out_desc = ""
+        if t in DEPENDENT_CURRENT_OUTPUT:
+            out_desc = (f"; akımı kaynak içinde Düğüm {e.node_positive} → "
+                        f"Düğüm {e.node_negative} yönünde")
+        lines.append(
+            f"{e.id}: {DEPENDENT_NAMES[t]}, {e.id} = {num(gain)}·{_control_text(ctx, e)}"
+            f" (kazanç {gain_txt}; {c_desc}){out_desc}")
+    return lines
+
+
 # ═══════════════════════════════════════════════════════
 #  1. DEVREYİ TANIYALIM
 # ═══════════════════════════════════════════════════════
@@ -270,6 +367,12 @@ def _intro(ctx: _Ctx) -> List[_Section]:
         s.text(f"Kaynaklar: {', '.join(src_texts)}.")
     if passives:
         s.text(f"Pasif elemanlar: {', '.join(passives)}.")
+    if ctx.has_dependent:
+        s.text("Bağımlı (kontrollü) kaynaklar: çıkışları başka bir elemanın gerilimi veya "
+               "akımıyla orantılıdır (çıkış = kazanç · kontrol büyüklüğü).")
+        for line in _dependent_lines(ctx):
+            s.math(f"• {line}")
+        s.note(DEPENDENT_STEPS_NOTE)
 
     nodes = sorted(ctx.v, key=lambda n: (len(n), n))
     s.text(
@@ -303,6 +406,11 @@ def _intro(ctx: _Ctx) -> List[_Section]:
         s.text(
             "Süperpozisyon yöntemiyle çözeceğiz: her kaynağın etkisini, diğer "
             "kaynaklar sıfırlanmışken ayrı ayrı bulup sonuçları toplayacağız."
+        )
+    elif ctx.has_dependent:
+        s.text(
+            "Düğüm gerilimleri ve eleman akımları çözücü tarafından bulundu; aşağıda "
+            "sonuçları Ohm yasası ve KCL ile birlikte inceleyeceğiz."
         )
     elif ctx.analysis_type == AnalysisType.MESH:
         s.text(
@@ -766,9 +874,73 @@ def _currents(ctx: _Ctx) -> List[_Section]:
         else:
             s.math(f"{e.id} kaynağının verdiği akım: {polar(-cur, 'A')} "
                    f"(kaynak içinde {_flow_text(n, p)} yönü referans)")
-    if any(e.id in ctx.i and e.element_type not in CURRENT_SOURCES for e in ctx.sources()):
+    for e in ctx.dependents():
+        if e.id not in ctx.i:
+            continue
+        cur = ctx.i[e.id]
+        p, n = e.node_positive, e.node_negative
+        vd = ctx.node_value(p) - ctx.node_value(n)
+        if e.element_type in DEPENDENT_CURRENT_OUTPUT:
+            s.math(f"{e.id} bağımlı akım kaynağı: I = {ctx.val(cur, 'A')} (kaynak içinde "
+                   f"{_flow_text(p, n)}); uçlarındaki gerilim "
+                   f"{node_v(p)} {MINUS} {node_v(n)} = {ctx.val(vd, 'V')}")
+        elif not ctx.is_dc:
+            s.math(f"{e.id} kaynağının verdiği akım: {polar(-cur, 'A')} "
+                   f"(kaynak içinde {_flow_text(n, p)} yönü referans)")
+        elif abs(cur.real) < 1e-15:
+            s.math(f"I_{e.id} = 0 ({e.id} bağımlı kaynağından akım çekilmiyor)")
+        elif cur.real < 0:
+            s.math(f"{e.id} bağımlı kaynağı devreye {eng(-cur.real, 'A')} verir "
+                   f"(kaynak içinde {_flow_text(n, p)}, + ucundan dışarı)")
+        else:
+            s.math(f"{e.id} bağımlı kaynağından {eng(cur.real, 'A')} akım içeri girer "
+                   f"({_flow_text(p, n)}) — bu kaynak güç çekiyor")
+    if any(e.id in ctx.i and e.element_type not in CURRENT_SOURCES for e in ctx.sources()) or any(
+            e.id in ctx.i and e.element_type not in DEPENDENT_CURRENT_OUTPUT for e in ctx.dependents()):
         s.note("Gerilim kaynağının akımı, kaynağa bağlı elemanların akımlarından KCL ile bulunur.")
     return [s] if len(s.blocks) > 1 else []
+
+
+# ═══════════════════════════════════════════════════════
+#  6b. BAĞIMLI KAYNAKLI DEVRE: ÇÖZÜCÜ SONUCU VE KONTROL
+# ═══════════════════════════════════════════════════════
+
+def _dependent_solution(ctx: _Ctx) -> List[_Section]:
+    """Düğüm gerilimleri (çözücü sonucu) ve bağımlı kaynakların kontrolü."""
+    s = _Section("Düğüm Gerilimleri (Çözücü Sonucu)")
+    s.text("Bağımlı kaynağın çıkışı devredeki bir gerilime/akıma bağlı olduğundan denklemler "
+           "birlikte çözülür; çözücünün bulduğu düğüm gerilimleri:")
+    for n in sorted((n for n in ctx.v if n != "0"), key=lambda n: (len(n), n)):
+        s.result(f"{node_v(n)} = {ctx.val(ctx.node_value(n), 'V')}")
+
+    by_id = {e.id: e for e in ctx.elements}
+    chk = _Section("Bağımlı Kaynakların Kontrolü")
+    chk.text("Bulunan değerlerle her bağımlı kaynağın çıkışı, kontrol büyüklüğünden yeniden hesaplanır:")
+    for e in ctx.dependents():
+        p = e.params
+        ctrl = by_id.get(p["control_id"])
+        if ctrl is None:
+            continue
+        if p["control_kind"] == "V":
+            cv, cu = ctx.node_value(ctrl.node_positive) - ctx.node_value(ctrl.node_negative), "V"
+        elif ctrl.id in ctx.i:
+            cv, cu = ctx.i[ctrl.id], "A"
+        else:
+            continue
+        cv = cv * p["control_sign"]
+        out = p["gain"] * cv
+        if e.element_type in DEPENDENT_CURRENT_OUTPUT:
+            actual, ou = ctx.i.get(e.id), "A"
+        else:
+            actual, ou = ctx.node_value(e.node_positive) - ctx.node_value(e.node_negative), "V"
+        if actual is None or not _close(out, actual, 1e-5):
+            continue   # tutarsızsa yanlış bir türetme göstermeyiz
+        chk.math(f"{e.id} = {num(p['gain'])}·{_control_text(ctx, e)} = {num(p['gain'])} · "
+                 f"{paren(ctx.val(cv, cu))} = {ctx.val(out, ou)}")
+    if len(chk.blocks) > 1:
+        chk.check("Bağımlı kaynak çıkışları, kontrol büyüklükleriyle tutarlı ✓")
+        return [s, chk]
+    return [s]
 
 
 # ═══════════════════════════════════════════════════════
@@ -806,6 +978,17 @@ def _port_reduction_section(ctx: _Ctx, title: str, symbol: str,
             else:
                 s.math(f"• {step.formula}")
         s.result(f"{symbol} = {rect(expected, 'Ω') if not ctx.is_dc else eng(expected.real, 'Ω')}")
+    elif expected is not None and ctx.has_dependent:
+        s.text(
+            "Devrede bağımlı kaynak var. Bağımlı kaynak sıfırlanmaz (devrede aktif kalır) ve "
+            "çıkışı terminallerden uygulanan kaynağa tepki verir; bu yüzden eşdeğer "
+            "direnç seri/paralel indirgemeyle bulunamaz. Bağımsız kaynaklar sıfırlanıp "
+            "terminallere bir test kaynağı bağlanır ve Z = V_test / I_test hesaplanır "
+            "(ya da Z = Voc / Isc). Çözücünün bu yöntemle bulduğu sonuç:")
+        s.result(f"{symbol} = {rect(expected, 'Ω') if not ctx.is_dc else eng(expected.real, 'Ω')}")
+        if expected.real < -1e-12:
+            s.note("Eşdeğer direnç negatif çıktı: bağımlı kaynak terminallere enerji verir; "
+                   "pasif bir devrede bu olmaz, aktif (bağımlı kaynaklı) devrede olabilir.")
     elif expected is not None:
         s.text(
             "Bu devre terminallerden bakıldığında basit seri/paralel adımlarla "
@@ -958,6 +1141,21 @@ def _power(ctx: _Ctx) -> List[_Section]:
             s.math(f"S_{e.id} = ½·V·I* = {rect(supplied, 'VA')} → P = {eng(supplied.real, 'W')}, "
                    f"Q = {eng(supplied.imag, 'VAR')}, |S| = {eng(abs(supplied), 'VA')} (verilen)")
 
+    for e in ctx.dependents():
+        ep = pw.elements.get(e.id)
+        if ep is None or ep.apparent_power < 1e-15:
+            continue
+        # Bağımlı kaynak güç verebilir de çekebilir de (işareti sonuç belirler)
+        if ctx.is_dc:
+            v_across = (ctx.node_value(e.node_positive) - ctx.node_value(e.node_negative)).real
+            s.math(f"P_{e.id} = V·I = {eng(abs(v_across), 'V')} · "
+                   f"{eng(abs(ctx.i.get(e.id, 0).real), 'A')} = {eng(abs(ep.active_power), 'W')} "
+                   f"({'verilen' if ep.active_power < 0 else 'çekilen'}; bağımlı kaynak)")
+        else:
+            net = complex(-ep.active_power, -ep.reactive_power)
+            s.math(f"S_{e.id} = ½·V·I* = {rect(net, 'VA')} → P = {eng(net.real, 'W')}, "
+                   f"Q = {eng(net.imag, 'VAR')} (bağımlı kaynağın net verdiği)")
+
     sup = complex(pw.total_supplied.real, pw.total_supplied.imaginary)
     absb = complex(pw.total_absorbed.real, pw.total_absorbed.imaginary)
     if ctx.is_dc:
@@ -984,8 +1182,9 @@ def _power(ctx: _Ctx) -> List[_Section]:
 
 def _kcl_check(ctx: _Ctx) -> List[_Section]:
     s = _Section("Kontrol: Düğümlerde Akım Dengesi")
-    for node in sorted({n for g in ctx.groups for n in g} | {n for n in ctx.known if n != "0"},
-                       key=lambda n: (len(n), n)):
+    check_nodes = ({n for n in ctx.v if n != "0"} if ctx.has_dependent
+                   else {n for g in ctx.groups for n in g} | {n for n in ctx.known if n != "0"})
+    for node in sorted(check_nodes, key=lambda n: (len(n), n)):
         flows = []   # (eleman, düğümden çıkan akım)
         for e in ctx.elements:
             if e.id not in ctx.i:

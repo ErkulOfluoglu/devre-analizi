@@ -29,7 +29,9 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Set, Tuple
 
 from models.response import SolutionStep
-from parser.netlist_parser import ParsedCircuit, ElementType, VOLTAGE_SOURCES, CURRENT_SOURCES
+from parser.netlist_parser import (
+    ParsedCircuit, ElementType, VOLTAGE_SOURCES, CURRENT_SOURCES, DEPENDENT_SOURCES,
+)
 
 
 _UNIT = {"R": "Ω", "L": "H", "C": "F", "Z": "Ω"}
@@ -103,12 +105,27 @@ def _build_branches(
         (kollar, DC'de açık devre sayılan C'ler, indirgenemeyen elemanlar)
     """
     branches, open_caps, blockers = [], [], []
+    # Bağımlı kaynakların kontrol elemanları (V(R2) / I(R2) ölçüldüğü eleman):
+    # başka bir elemanla birleştirilirse kontrol büyüklüğünün anlamı kaybolur
+    controls = _control_ids(parsed)
     for e in parsed.elements:
         kind = _PASSIVE.get(e.element_type)
         if kind is None:
-            # Kaynak: düğüm derecesine sayılır ama indirgenmez
+            # Kaynak (bağımsız veya bağımlı): düğüm derecesine sayılır ama
+            # indirgenmez; bağımlı kaynak bağlı olduğu düğümde seri birleştirmeyi
+            # de engeller
             branches.append(Branch(e.id, e.node_positive, e.node_negative,
                                    "SRC", reducible=False, members=[e.id]))
+            continue
+        if e.id in controls:
+            if is_dc and kind == "C":
+                open_caps.append(e.id)
+                continue
+            z = (e.params.get("impedance", complex(e.value)) if kind == "Z"
+                 else _impedance(kind, e.value, omega))
+            branches.append(Branch(e.id, e.node_positive, e.node_negative, kind,
+                                   value=None if kind == "Z" else e.value, z=z,
+                                   reducible=False, members=[e.id]))
             continue
         if is_dc and kind == "C":
             open_caps.append(e.id)
@@ -129,6 +146,12 @@ def _build_branches(
                                z=_impedance(kind, e.value, omega),
                                members=[e.id]))
     return branches, open_caps, blockers
+
+
+def _control_ids(parsed: ParsedCircuit) -> Set[str]:
+    """Bağımlı kaynakların kontrol elemanı olan eleman kimlikleri."""
+    return {e.params["control_id"] for e in parsed.elements
+            if e.element_type in DEPENDENT_SOURCES}
 
 
 class _Namer:
@@ -327,6 +350,13 @@ def generate_topology_step(
             f"\n\nDC analizde bobinler ({', '.join(blockers)}) kısa devredir; "
             "bu adımda indirgenmemiştir."
         )
+    dependents = [e.id for e in parsed.elements if e.element_type in DEPENDENT_SOURCES]
+    if dependents:
+        description += (
+            f"\n\nBağımlı kaynaklar ({', '.join(dependents)}) ve kontrol elemanları "
+            f"({', '.join(sorted(_control_ids(parsed)))}) indirgemeye katılmaz; bağımlı "
+            "kaynağın bağlı olduğu düğümler üzerinden seri birleştirme yapılmaz."
+        )
     if pinned_nodes:
         others = sorted(set(pinned_nodes) - {"0"})
         if others:
@@ -453,6 +483,20 @@ def reduce_port_impedance(
 
     pos, neg = find(node_positive), find(node_negative)
     result.node_positive, result.node_negative = pos, neg
+
+    # Bağımlı kaynak varsa seri/paralel indirgeme GEÇERSİZDİR: bağımlı kaynak
+    # sıfırlanmaz (kontrol büyüklüğü terminallerden uygulanan test kaynağına
+    # tepki verir), Rth saf pasif bir ağ gibi indirgenemez. Hiçbir indirgeme
+    # iddia etmeden dön (complete=False).
+    dependents = [e for e in parsed.elements if e.element_type in DEPENDENT_SOURCES]
+    if dependents:
+        for e in dependents:
+            result.zeroing_notes.append(
+                f"{e.id} bağımlı kaynak olduğu için SIFIRLANMAZ: devrede aktif kalır "
+                "(çıkışı kontrol ettiği büyüklüğe bağlı olarak değişir)."
+            )
+        return result
+
     if pos == neg:
         result.zeroing_notes.append(
             "Terminaller kısa devre ile birleşti — terminallerden bakılan "

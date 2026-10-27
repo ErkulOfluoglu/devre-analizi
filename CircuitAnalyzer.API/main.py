@@ -83,6 +83,28 @@ app.add_middleware(
 
 
 # ═══════════════════════════════════════════════════════
+#  ORTAK DENETİM
+# ═══════════════════════════════════════════════════════
+
+def _raise_if_netlist_invalid(parsed) -> None:
+    """
+    Boş netlist veya çözümü engelleyen hata (ör: bağımlı kaynağın kontrol
+    elemanı yok) varsa HTTP 400 + Türkçe açıklama. Hatalı satır sessizce
+    atlanıp devre eksik çözülürse yanlış sonuç çıkacağı için burada durulur.
+    """
+    if parsed.errors:
+        raise HTTPException(
+            status_code=400,
+            detail="Netlist hatası: " + " ".join(parsed.errors)
+        )
+    if not parsed.elements:
+        raise HTTPException(
+            status_code=400,
+            detail="Netlist'te hiçbir devre elemanı bulunamadı."
+        )
+
+
+# ═══════════════════════════════════════════════════════
 #  ENDPOINT'LER
 # ═══════════════════════════════════════════════════════
 
@@ -162,11 +184,7 @@ async def analyze_circuit(
             detail=f"Netlist ayrıştırma hatası: {str(e)}"
         )
 
-    if not parsed.elements:
-        raise HTTPException(
-            status_code=400,
-            detail="Netlist'te hiçbir devre elemanı bulunamadı."
-        )
+    _raise_if_netlist_invalid(parsed)
 
     # Netlist'teki prob bilgilerini request'teki ile birleştir
     probes = list(request.target_probes or [])
@@ -262,7 +280,8 @@ async def parse_only(
         "has_ground": parsed.has_ground,
         "node_count": parsed.node_count,
         "lcapy_netlist": lcapy_text,
-        "warnings": parsed.warnings
+        "warnings": parsed.warnings,
+        "errors": parsed.errors
     }
 
 
@@ -444,8 +463,7 @@ def llm_ask(request: LlmAskRequest):
         parsed = parse_netlist(request.netlist)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Netlist ayrıştırma hatası: {str(e)}")
-    if not parsed.elements:
-        raise HTTPException(status_code=400, detail="Netlist'te hiçbir devre elemanı bulunamadı.")
+    _raise_if_netlist_invalid(parsed)
 
     results, _, _ = solve_circuit(
         parsed=parsed, mode=request.mode, frequency=request.frequency,

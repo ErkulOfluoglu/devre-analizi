@@ -46,6 +46,97 @@ namespace CircuitAnalyzer.WPF.Services
     /// </summary>
     public static class NetlistBuilder
     {
+        /// <summary>
+        /// Bağımlı kaynakların kontrol elemanlarını denetler. Çözmeden önce çağrılır: sorun varsa
+        /// ilk sorunun Türkçe mesajını döndürür (arka uç çağrılmaz), yoksa null.
+        /// </summary>
+        public static string? ValidateDependentSources(IEnumerable<CircuitElement> elements)
+        {
+            var list = elements.ToList();
+            foreach (var dep in list.OfType<DependentSource>())
+            {
+                string name = dep.Id;
+                string control = (dep.ControlElementId ?? string.Empty).Trim();
+
+                if (control.Length == 0)
+                    return $"{name} için kontrol eden eleman seçilmemiş";
+
+                if (string.Equals(control, dep.Id, StringComparison.OrdinalIgnoreCase))
+                    return $"{name} kendi kendini kontrol edemez";
+
+                var target = list.FirstOrDefault(e => string.Equals(e.Id, control, StringComparison.OrdinalIgnoreCase));
+                if (target == null)
+                    return $"{name}{GenitiveSuffix(name)} kontrol ettiği {control} devrede yok";
+
+                if (!DependentSource.CanBeControl(target))
+                    return $"{name}{GenitiveSuffix(name)} kontrol ettiği {control} iki uçlu bir devre elemanı değil";
+            }
+
+            // Aynı elemanın aynı büyüklüğü (V_R2 ya da I_R2) iki kaynakta ters yönlerde tanımlanamaz:
+            // ekranda tek bir +/− (ya da ok) çizildiği için ikinci kaynağın etiketi yanıltıcı olurdu
+            var conflict = list.OfType<DependentSource>()
+                .GroupBy(d => (Control: (d.ControlElementId ?? string.Empty).Trim().ToUpperInvariant(), d.IsVoltageControlled))
+                .FirstOrDefault(g => g.Select(d => d.ControlReversed).Distinct().Count() > 1);
+            if (conflict != null)
+            {
+                var first = conflict.First();
+                string quantity = $"{(first.IsVoltageControlled ? "V" : "I")}_{first.ControlElementId.Trim()}";
+                return $"{string.Join(" ve ", conflict.Select(d => d.Id))} aynı {quantity} büyüklüğünü " +
+                       "ters yönlerde kullanıyor; birinde “Yönü ters çevir” seçimini değiştirin";
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Kimliğin ("E1", "G12") okunuşuna göre tamlayan eki: E1'in, E2'nin, E3'ün, G10'un …
+        /// Kesme işaretiyle birlikte döner.
+        /// </summary>
+        internal static string GenitiveSuffix(string id)
+        {
+            if (string.IsNullOrEmpty(id) || !char.IsDigit(id[^1]))
+                return "'in";
+
+            int end = id.Length;
+            int start = end;
+            while (start > 0 && char.IsDigit(id[start - 1]))
+                start--;
+            if (!int.TryParse(id.AsSpan(start, end - start), out int number))
+                return "'in";
+
+            // Sayının okunuşunun son sesli harfine göre (bir→in, iki→nin, üç→ün, dört→ün, beş→in,
+            // altı→nın, yedi→nin, sekiz→in, dokuz→un, sıfır→ın; 10 on→un, 20 yirmi→nin …)
+            if (number >= 100 && number % 100 == 0) return "'ün";   // yüz
+            int digit = number % 10;
+            if (digit == 0)
+            {
+                return (number / 10 % 10) switch
+                {
+                    0 => "'ın",     // sıfır
+                    1 => "'un",     // on
+                    2 => "'nin",    // yirmi
+                    3 => "'un",     // otuz
+                    4 => "'ın",     // kırk
+                    5 => "'nin",    // elli
+                    6 => "'ın",     // altmış
+                    7 => "'in",     // yetmiş
+                    8 => "'in",     // seksen
+                    _ => "'ın",     // doksan
+                };
+            }
+            return digit switch
+            {
+                1 => "'in",
+                2 => "'nin",
+                3 => "'ün",
+                4 => "'ün",
+                5 => "'in",
+                6 => "'nın",
+                7 => "'nin",
+                8 => "'in",
+                _ => "'un",
+            };
+        }
+
         public static NetlistResult Build(
             IReadOnlyList<CircuitElement> elements,
             IReadOnlyList<Wire> wires,

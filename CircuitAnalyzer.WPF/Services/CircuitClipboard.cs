@@ -325,6 +325,17 @@ namespace CircuitAnalyzer.WPF.Services
                 }
             }
 
+            // Bağımlı kaynağın kontrol elemanı da aynı yapıştırmadaysa yeni kimliğe eşle;
+            // değilse (kopyalanmayan eleman) asıl elemanı göstermeye devam etsin.
+            foreach (var dep in restored.Elements.OfType<DependentSource>())
+            {
+                if (!string.IsNullOrEmpty(dep.ControlElementId) &&
+                    oldToNewId.TryGetValue(dep.ControlElementId, out string? remappedControl))
+                {
+                    dep.ControlElementId = remappedControl;
+                }
+            }
+
             foreach (var wire in restored.Wires)
             {
                 for (int i = 0; i < wire.Waypoints.Count; i++)
@@ -358,6 +369,7 @@ namespace CircuitAnalyzer.WPF.Services
         public static string GetPrefixForElement(CircuitElement element) => element switch
         {
             Resistor => "R",
+            DependentSource dep => dep.IdPrefix,
             Capacitor => "C",
             Inductor => "L",
             ImpedanceElement => "Z",

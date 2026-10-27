@@ -32,7 +32,8 @@ import networkx as nx
 import numpy as np
 
 from parser.netlist_parser import (
-    CURRENT_SOURCES, VOLTAGE_SOURCES, ElementType, ParsedCircuit, ParsedElement,
+    CURRENT_SOURCES, DEPENDENT_SOURCES, VOLTAGE_SOURCES, ElementType,
+    ParsedCircuit, ParsedElement,
 )
 from explainer.step_generator import _source_value
 
@@ -91,6 +92,13 @@ def analyze_meshes(
     """Çevre akımları analizini yapar. Uygulanamazsa ok=False ve sebep döner."""
     omega = None if is_dc or not frequency else 2 * math.pi * frequency
     result = MeshAnalysis(ok=False)
+
+    if any(e.element_type in DEPENDENT_SOURCES for e in parsed.elements):
+        # Çevre denklemleri bağımlı kaynak terimlerini henüz içermez; yanlış
+        # sonuç üretmek yerine uygulanamadığı söylenir
+        result.reason = ("Devrede bağımlı kaynak var; çevre akımları yöntemi bağımlı "
+                         "kaynakları henüz desteklemiyor.")
+        return result
 
     # ── 1. Graf kenarları ──
     edges: List[ParsedElement] = []

@@ -248,6 +248,7 @@ namespace CircuitAnalyzer.WPF
                     UpdateConnectedWires(el);
                 }
 
+                RefreshControlMarkers();
                 UpdateSelectionHighlight();
                 return;
             }

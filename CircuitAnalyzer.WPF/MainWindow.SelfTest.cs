@@ -32,7 +32,8 @@ namespace CircuitAnalyzer.WPF
                    args.Contains("--tour-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--junction-shot", StringComparer.OrdinalIgnoreCase) ||
                    args.Contains("--wire-select-shot", StringComparer.OrdinalIgnoreCase) ||
-                   args.Contains("--bend-shot", StringComparer.OrdinalIgnoreCase);
+                   args.Contains("--bend-shot", StringComparer.OrdinalIgnoreCase) ||
+                   args.Contains("--dependent-shot", StringComparer.OrdinalIgnoreCase);
         }
 
         internal static bool TryGetOnboardingShot(string[] args, out OnboardingShotOptions? options)
@@ -101,6 +102,16 @@ namespace CircuitAnalyzer.WPF
         {
             outputPng = null;
             int i = Array.FindIndex(args, a => string.Equals(a, "--bend-shot", StringComparison.OrdinalIgnoreCase));
+            if (i < 0 || i + 1 >= args.Length)
+                return false;
+            outputPng = Path.GetFullPath(args[i + 1]);
+            return true;
+        }
+
+        internal static bool TryGetDependentShot(string[] args, out string? outputPng)
+        {
+            outputPng = null;
+            int i = Array.FindIndex(args, a => string.Equals(a, "--dependent-shot", StringComparison.OrdinalIgnoreCase));
             if (i < 0 || i + 1 >= args.Length)
                 return false;
             outputPng = Path.GetFullPath(args[i + 1]);
@@ -599,6 +610,90 @@ namespace CircuitAnalyzer.WPF
             }
         }
 
+        /// <summary>
+        /// Dört bağımlı kaynağı (GKGK, GKAK, AKGK, AKAK) direnç dizisine bağlı çizer ve kontrol
+        /// işaretlerini gösterir. Çözücü gerekmez: çözme yapılmaz.
+        /// </summary>
+        internal static ExampleCircuit BuildDependentShotCircuit()
+        {
+            var c = new ExampleCircuit
+            {
+                Name = "Bağımlı Kaynaklar",
+                Description = "Dört bağımlı kaynak, soldaki direnç dizisinin gerilim ve akımlarıyla kontrol edilir.",
+                SuggestedAnalysisType = AnalysisTypes.Nodal,
+            };
+
+            // Kontrol edilen direnç dizisi: V1 – R1 – R3 üst hat, R2 ve R4 aşağı doğru
+            var v1 = c.Add(new VoltageSource { Value = 10 }, "V1", 60, 200, 90);
+            var r1 = c.Add(new Resistor { Value = 100 }, "R1", 120, 160);
+            var r2 = c.Add(new Resistor { Value = 200 }, "R2", 160, 200, 90);
+            var r3 = c.Add(new Resistor { Value = 300 }, "R3", 220, 160);
+            var r4 = c.Add(new Resistor { Value = 400 }, "R4", 260, 200, 90);
+            var gnd = c.Add(new GroundElement(), "GND1", 180, 300);
+
+            c.Connect(v1.Pins[0], r1.Pins[0]);
+            c.Connect(r2.Pins[0], r3.Pins[0]);
+            c.Connect(gnd.Pins[0], r2.Pins[1]);
+            c.Connect(v1.Pins[1], r2.Pins[1]);
+            c.Connect(r4.Pins[1], r2.Pins[1]);
+
+            // Bir bağımlı kaynak + yük direnci + toprak
+            // Yük (dikey) solda, bağımlı kaynak sağda: kaynağın + ucu yüke, − ucu toprağa bağlanır
+            void Branch(DependentSource dep, double x, double dy, string loadId, string gndId)
+            {
+                var load = c.Add(new Resistor { Value = 1000 }, loadId, x, 200 + dy, 90);
+                c.Add(dep, dep.Id, x + 100, 160 + dy);
+                var g = c.Add(new GroundElement(), gndId, x + 90, 300 + dy);
+                c.Connect(load.Pins[0], dep.Pins[0]);
+                c.Connect(g.Pins[0], dep.Pins[1]);
+                c.Connect(g.Pins[0], load.Pins[1]);
+            }
+
+            Branch(new DependentSource(DependentSourceKind.Vcvs) { Id = "E1", Gain = 3, ControlElementId = "R2" }, 440, 0, "R5", "GND2");
+            Branch(new DependentSource(DependentSourceKind.Vccs) { Id = "G1", Gain = 0.5, ControlElementId = "R4", ControlReversed = true }, 700, 0, "R6", "GND3");
+            Branch(new DependentSource(DependentSourceKind.Ccvs) { Id = "H1", Gain = 2, ControlElementId = "R3" }, 440, 240, "R7", "GND4");
+            Branch(new DependentSource(DependentSourceKind.Cccs) { Id = "F1", Gain = -1.5, ControlElementId = "R1", ControlReversed = true }, 700, 240, "R8", "GND5");
+            return c;
+        }
+
+        private async Task RunDependentShotAsync(string outputPng)
+        {
+            try
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                Left = -20000;
+                Top = 0;
+                ShowActivated = false;
+                Height = 1100;
+
+                Show();
+                await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                LoadExample(BuildDependentShotCircuit());
+
+                await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                UpdateLayout();
+
+                SaveScreenshot(outputPng);
+
+                // Ayrıntıyı okuyabilmek için devre alanının büyütülmüş görüntüsü (<ad>_canvas.png)
+                SetZoom(1.0);
+                UpdateLayout();
+                SaveCanvasScreenshot(
+                    Path.Combine(Path.GetDirectoryName(outputPng)!, Path.GetFileNameWithoutExtension(outputPng) + "_canvas.png"),
+                    new Rect(40, 100, 900, 460), 1.8);
+
+                File.WriteAllText(Path.ChangeExtension(outputPng, ".txt"),
+                    string.Join(Environment.NewLine, _elements.OfType<DependentSource>().Select(d => $"{d.Id}: {d.LabelText}")) +
+                    Environment.NewLine + NetlistBuilder.Build(_elements, _wires).Text);
+                Application.Current.Shutdown(0);
+            }
+            catch (Exception ex)
+            {
+                File.WriteAllText(Path.ChangeExtension(outputPng, ".txt"), $"HATA: {ex}");
+                Application.Current.Shutdown(1);
+            }
+        }
+
         private static void RenderPrintPreview(FlowDocument doc, string outputPath)
         {
             doc.PageWidth = 793.7;
@@ -680,6 +775,38 @@ namespace CircuitAnalyzer.WPF
             {
                 dc.DrawRectangle(window.Background, null, new Rect(0, 0, width, height));
                 dc.DrawRectangle(new VisualBrush(root), null, new Rect(0, 0, width, height));
+            }
+            bitmap.Render(visual);
+
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var stream = File.Create(path);
+            encoder.Save(stream);
+        }
+
+        /// <summary>Çizim alanının (tuval koordinatlarında) belirtilen dikdörtgenini scale kat büyütüp PNG'ye yazar.</summary>
+        private void SaveCanvasScreenshot(string path, Rect region, double scale)
+        {
+            int width = (int)Math.Ceiling(region.Width * scale);
+            int height = (int)Math.Ceiling(region.Height * scale);
+            var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                dc.DrawRectangle((Brush)FindResource("Brush.Canvas.Bg"), null, new Rect(0, 0, width, height));
+                dc.PushTransform(new ScaleTransform(scale, scale));
+                dc.DrawRectangle(new VisualBrush(CircuitCanvas)
+                {
+                    Stretch = Stretch.None,
+                    AlignmentX = AlignmentX.Left,
+                    AlignmentY = AlignmentY.Top,
+                    ViewboxUnits = BrushMappingMode.Absolute,
+                    Viewbox = region,
+                    ViewportUnits = BrushMappingMode.Absolute,
+                    Viewport = new Rect(0, 0, region.Width, region.Height),
+                }, null, new Rect(0, 0, region.Width, region.Height));
+                dc.Pop();
             }
             bitmap.Render(visual);
 

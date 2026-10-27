@@ -79,8 +79,8 @@ def test_all_schema_properties_have_descriptions(client):
 
 def test_analyze_request_body_examples_and_execution(client):
     """
-    POST /analyze isteği için 4 adlandırılmış OpenAPI örneğinin (dc_nodal, ac_phasor,
-    ac_thevenin, dc_norton) tanımlı olduğunu ve her birinin /analyze uç noktasına
+    POST /analyze isteği için 5 adlandırılmış OpenAPI örneğinin (dc_nodal, dc_dependent,
+    ac_phasor, ac_thevenin, dc_norton) tanımlı olduğunu ve her birinin /analyze uç noktasına
     gönderildiğinde 200 döndürerek başarıyla çözüldüğünü doğrular.
     """
     res = client.get("/openapi.json")
@@ -88,7 +88,7 @@ def test_analyze_request_body_examples_and_execution(client):
     request_body = openapi["paths"]["/analyze"]["post"]["requestBody"]
     examples = request_body["content"]["application/json"]["examples"]
 
-    expected_examples = {"dc_nodal", "ac_phasor", "ac_thevenin", "dc_norton"}
+    expected_examples = {"dc_nodal", "dc_dependent", "ac_phasor", "ac_thevenin", "dc_norton"}
     assert set(examples.keys()) == expected_examples
 
     for example_name, example_obj in examples.items():

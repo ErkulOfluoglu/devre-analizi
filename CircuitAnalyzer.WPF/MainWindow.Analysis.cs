@@ -63,9 +63,12 @@ namespace CircuitAnalyzer.WPF
             AnalysisPanel.LlmCancelPull = ct => _api != null ? _api.CancelModelPullAsync(ct) : Task.FromResult(false);
 
             RefreshCircuitInfo();
-            _backendStartTask = StartBackendAsync();
 
             var args = Environment.GetCommandLineArgs();
+            // --dependent-shot çözücüye ihtiyaç duymaz: arka ucu hiç başlatma
+            if (!TryGetDependentShot(args, out _))
+                _backendStartTask = StartBackendAsync();
+
             if (TryGetOnboardingShot(args, out var obs))
             {
                 _ = RunOnboardingShotAsync(obs!);
@@ -93,6 +96,10 @@ namespace CircuitAnalyzer.WPF
             else if (TryGetBendShot(args, out var bendPng))
             {
                 _ = RunBendShotAsync(bendPng!);
+            }
+            else if (TryGetDependentShot(args, out var dependentPng))
+            {
+                _ = RunDependentShotAsync(dependentPng!);
             }
             else if (SelfTestOptions.TryParse(args, out var selfTest))
             {
@@ -137,6 +144,7 @@ namespace CircuitAnalyzer.WPF
                 _hasResults = false;
             }
             RefreshCircuitInfo();
+            RefreshControlMarkers();
             UpdateEmptyCanvasHelper();
 
             if (!_isRestoringHistory)
@@ -174,6 +182,10 @@ namespace CircuitAnalyzer.WPF
 
         private async Task SolveAsync()
         {
+            // Bağımlı kaynağın kontrol elemanı eksikse arka uca hiç gitmeden kullanıcıyı uyar
+            if (!ValidateDependentSources())
+                return;
+
             if (_api == null)
             {
                 AnalysisPanel.ShowError("Çözücü hazır değil",
@@ -414,6 +426,14 @@ namespace CircuitAnalyzer.WPF
             _currentSourceCounter = _elements.OfType<CurrentSource>()
                 .Select(e => int.TryParse(e.Id[1..], out int n) ? n : 0)
                 .DefaultIfEmpty(0).Max();
+            foreach (DependentSourceKind kind in Enum.GetValues<DependentSourceKind>())
+            {
+                string prefix = DependentSource.PrefixOf(kind);
+                _dependentCounters[(int)kind] = _elements.OfType<DependentSource>()
+                    .Where(e => e.Kind == kind && e.Id.StartsWith(prefix, StringComparison.Ordinal))
+                    .Select(e => int.TryParse(e.Id[prefix.Length..], out int n) ? n : 0)
+                    .DefaultIfEmpty(0).Max();
+            }
             _groundCounter = Max("GND");
             _probeCounter = Math.Max(Max("VP"), Max("IP"));
             _junctionCounter = Max("J");

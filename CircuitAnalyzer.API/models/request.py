@@ -145,6 +145,30 @@ ANALYSIS_REQUEST_EXAMPLES = {
             "thevenin_terminals": None,
         },
     },
+    "dc_dependent": {
+        "summary": "DC Bağımlı Kaynak — Gerilim Kontrollü Gerilim Kaynağı (GKGK)",
+        "description": (
+            "E1 kaynağı R2 direncinin gerilimini 3 ile çarpıp 3 numaralı düğüme uygular: "
+            "E1 3 0 V(R2) 3. Akım kontrollü kaynaklar için H1/F1 n+ n- I(R2) k, gerilim "
+            "kontrollü akım kaynağı için G1 n+ n- V(R2) k yazılır. V(-R2) / I(-R2) "
+            "kontrol büyüklüğünün işaretini çevirir. Beklenen: V(2) = 6.667 V, V(3) = 20 V."
+        ),
+        "value": {
+            "netlist": (
+                "V1 1 0 DC 10\n"
+                "R1 1 2 2\n"
+                "R2 2 0 4\n"
+                "E1 3 0 V(R2) 3\n"
+                "R3 3 0 6\n"
+                "* GND1 — Referans toprak (Node 0)"
+            ),
+            "mode": "DC",
+            "frequency": None,
+            "target_probes": None,
+            "analysis_type": "NODAL",
+            "thevenin_terminals": None,
+        },
+    },
     "ac_phasor": {
         "summary": "AC Alçak Geçiren RC Filtre (50 Hz) — Fazör Analizi",
         "description": "50 Hz sinüzoidal kaynak altında RC devresinin fazör (frekans alanı) analizi.",

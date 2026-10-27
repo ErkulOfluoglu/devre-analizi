@@ -44,7 +44,7 @@ namespace CircuitAnalyzer.WPF.Services
 
         public sealed class ElementData
         {
-            /// <summary>"R", "C", "L", "Z", "V", "VAC", "I", "IAC", "GND", "PROBE", "J"</summary>
+            /// <summary>"R", "C", "L", "Z", "V", "VAC", "I", "IAC", "DEP", "GND", "PROBE", "J"</summary>
             [JsonPropertyName("type")] public string Type { get; set; } = "";
             [JsonPropertyName("id")] public string Id { get; set; } = "";
             [JsonPropertyName("x")] public double X { get; set; }
@@ -59,6 +59,12 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("im")] public double? Im { get; set; }
             [JsonPropertyName("probe_type")] public string? ProbeType { get; set; }
             [JsonPropertyName("target")] public string? Target { get; set; }
+
+            // ── Bağımlı kaynak ("DEP"): türü, kazancı, kontrol elemanı. Eski dosyalarda yoktur (varsayılanlar geçerli). ──
+            [JsonPropertyName("kind")] public string? Kind { get; set; }
+            [JsonPropertyName("gain")] public double? Gain { get; set; }
+            [JsonPropertyName("control")] public string? Control { get; set; }
+            [JsonPropertyName("control_reversed")] public bool? ControlReversed { get; set; }
         }
 
         public sealed class WireData
@@ -124,6 +130,11 @@ namespace CircuitAnalyzer.WPF.Services
             var d = new ElementData { Id = e.Id, X = e.Position.X, Y = e.Position.Y, Rotation = e.Rotation };
             switch (e)
             {
+                case DependentSource dep:
+                    d.Type = "DEP"; d.Kind = dep.Kind.ToString(); d.Gain = dep.Gain;
+                    d.Control = string.IsNullOrEmpty(dep.ControlElementId) ? null : dep.ControlElementId;
+                    d.ControlReversed = dep.ControlReversed;
+                    break;
                 case AcVoltageSource ac:
                     d.Type = "VAC"; d.Amplitude = ac.Amplitude; d.Frequency = ac.Frequency; d.Phase = ac.Phase;
                     d.InputMode = ac.InputMode.ToString();
@@ -247,6 +258,19 @@ namespace CircuitAnalyzer.WPF.Services
                 case "L": return new Inductor { Value = V(d.Value, "endüktans") };
                 case "V": return new VoltageSource { Value = V(d.Value, "gerilim") };
                 case "I": return new CurrentSource { Value = V(d.Value, "akım") };
+                case "DEP":
+                    {
+                        var kind = ParseEnum(d.Kind, DependentSourceKind.Vcvs);
+                        if (!Enum.IsDefined(kind))
+                            kind = DependentSourceKind.Vcvs;
+                        return new DependentSource(kind)
+                        {
+                            // Eksik kayıtta varsayılanlar: kazanç 1, kontrol seçilmemiş, yön düz
+                            Gain = d.Gain is { } g && double.IsFinite(g) ? g : 1,
+                            ControlElementId = d.Control ?? string.Empty,
+                            ControlReversed = d.ControlReversed ?? false,
+                        };
+                    }
                 case "GND": return new GroundElement();
                 case "J": return new JunctionElement();
                 case "VAC":

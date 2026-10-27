@@ -16,3 +16,6 @@ TestResults/
 
 # Kurulum paketi çıktıları (installer/build.ps1)
 /build/
+
+# graphify bilgi grafiği çıktıları (yerel analiz, GitHub'a gitmez)
+graphify-out/

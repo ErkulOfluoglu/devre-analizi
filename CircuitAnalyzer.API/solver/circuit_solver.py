@@ -37,7 +37,8 @@ from models.request import (
 )
 from parser.netlist_parser import (
     ParsedCircuit, ParsedElement, ParsedProbe,
-    ElementType, to_lcapy_netlist, ALL_SOURCES, CURRENT_SOURCES
+    ElementType, to_lcapy_netlist, lcapy_sense_map,
+    ALL_SOURCES, CURRENT_SOURCES, DEPENDENT_SOURCES, DEPENDENT_CURRENT_OUTPUT,
 )
 from explainer.step_generator import generate_solution_steps
 from explainer.topology import generate_topology_step
@@ -335,6 +336,27 @@ def _exprdict_first(expr_dict):
     return expr_dict
 
 
+def lcapy_element_current(
+    cct, elem: ParsedElement, sense: dict, is_dc: bool, frequency: float = None
+) -> Union[float, complex]:
+    """
+    Elemanın içinden n+ → n− akan akım (uygulamanın raporladığı işaret).
+
+    • Bağımsız akım kaynağı: lcapy'ye uçlar ters yazıldığı için (bkz.
+      to_lcapy_netlist) lcapy akımı kendi ilk→ikinci ucuna göre verir →
+      işaret çevrilir. Sonuç: kaynak içinden n+ → n− (= kaynak değeri).
+    • Akım çıkışlı bağımlı kaynak (G, F): lcapy bunun akımını vermez; elemanla
+      seri konan 0 V'luk gizli ölçüm kaynağının akımı alınır (zaten n+ → n−).
+    • Diğerleri: lcapy'nin eleman akımı.
+    """
+    if elem.element_type in DEPENDENT_CURRENT_OUTPUT:
+        return _extract_numeric(cct[sense[elem.id][0]].I, is_dc, frequency)
+    i_val = _extract_numeric(cct[elem.id].I, is_dc, frequency)
+    if elem.element_type in CURRENT_SOURCES:
+        i_val = -i_val
+    return i_val
+
+
 class InfiniteImpedanceError(ValueError):
     """Empedans sonsuz (açık devre) — ör: DC'de seri kapasitör."""
 
@@ -429,6 +451,12 @@ def solve_circuit(
     errors: List[str] = []
 
     # ── Ön kontroller ──
+    if parsed.errors:
+        # Ayrıştırıcının reddettiği satırlar (ör: bağımlı kaynağın kontrol
+        # elemanı yok) — eksik devreyi çözüp yanlış sonuç vermeyiz
+        errors.extend(f"⚠ {m}" for m in parsed.errors)
+        return results, steps, errors
+
     if not parsed.elements:
         errors.append("Devrede hiç eleman bulunamadı.")
         return results, steps, errors
@@ -476,13 +504,20 @@ def solve_circuit(
         from lcapy import Circuit
 
         lcapy_text = to_lcapy_netlist(parsed, frequency)
+        model_note = ""
+        if lcapy_sense_map(parsed):
+            model_note = (
+                "\nBağımlı kaynaklar için 0 V'luk iç ölçüm kaynakları (Vsense_…) ve "
+                "gizli düğümler (_s_…) eklendi; bunlar yalnızca çözücünün iç modelidir "
+                "ve sonuçlarda görünmez."
+            )
 
         steps.append(SolutionStep(
             step_number=2,
             title="Devre Modeli Oluşturma",
             description=(
                 "Netlist lcapy formatına dönüştürüldü ve "
-                "sembolik devre modeli oluşturuldu."
+                "sembolik devre modeli oluşturuldu." + model_note
             ),
             equations=lcapy_text.split("\n"),
             result_snapshot={"lcapy_netlist": lcapy_text}
@@ -607,7 +642,13 @@ def solve_circuit(
 
     # ── Adım 6.5: Çevre akımları (MESH yöntemi) ──
     mesh_analysis = None
-    if analysis_type == AnalysisType.MESH:
+    has_dependent = any(e.element_type in DEPENDENT_SOURCES for e in parsed.elements)
+    if analysis_type == AnalysisType.MESH and has_dependent:
+        # Çevre denklemleri bağımlı kaynakları henüz bilmez → atlanır; düğüm
+        # gerilimleri/akımlar yine lcapy'den doğru gelir
+        errors.append("ℹ Bu devrede bağımlı kaynak var; çevre akımları (mesh) çözümü bir "
+                      "sonraki sürümde eklenecek. Düğüm gerilimleri ve eleman akımları doğrudur.")
+    elif analysis_type == AnalysisType.MESH:
         try:
             mesh_analysis = analyze_meshes(
                 parsed, is_dc, frequency, getattr(parsed, "node_positions", None))
@@ -642,7 +683,10 @@ def solve_circuit(
                 )
                 for c in contributions
             ]
-            if len(contributions) < 2:
+            if not contributions and has_dependent:
+                errors.append("ℹ Devrede etkin bağımsız kaynak yok; bağımlı kaynaklar tek "
+                              "başına enerji sağlayamaz, bu yüzden tüm gerilim ve akımlar sıfırdır.")
+            elif len(contributions) < 2:
                 errors.append("ℹ Süperpozisyon için devrede en az iki bağımsız kaynak "
                               "olmalı; tek kaynakta sonuç tam çözümle aynıdır.")
         except Exception as e:
@@ -819,16 +863,11 @@ def _solve_element_currents(
     ★ AC modda omega = 2πf yerine koyması yapılır.
     """
     element_currents = {}
+    sense = lcapy_sense_map(parsed)
 
     for elem in parsed.elements:
         try:
-            i_expr = cct[elem.id].I
-            i_val = _extract_numeric(i_expr, is_dc, frequency)
-            if elem.element_type in CURRENT_SOURCES:
-                # lcapy'ye uçlar ters yazıldı (bkz. to_lcapy_netlist); lcapy
-                # akımı kendi ilk→ikinci ucuna göre verir → işaret çevrilir.
-                # Sonuç: kaynak içinden n+ → n− yönünde akım (= kaynak değeri).
-                i_val = -i_val
+            i_val = lcapy_element_current(cct, elem, sense, is_dc, frequency)
             if raw_out is not None:
                 raw_out[elem.id] = i_val
 
@@ -1207,7 +1246,9 @@ def _solve_norton(
 #  GÜÇ ANALİZİ (P, Q, S, cos φ)
 # ═══════════════════════════════════════════════════════
 
-_SOURCE_TYPES = ALL_SOURCES
+# Bağımlı kaynaklar da "kaynak" rolündedir: güç verebilir de alabilir de
+# (emilen güç P > 0 olabilir); Tellegen gereği toplam yine sıfırdır.
+_SOURCE_TYPES = ALL_SOURCES + DEPENDENT_SOURCES
 
 
 def _power_factor(p: float, q: float, s_mag: float, q_delivered: float):

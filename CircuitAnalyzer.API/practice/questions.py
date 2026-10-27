@@ -23,7 +23,7 @@ from models.request import AnalysisType, TheveninTerminals
 from models.response import (
     AnalysisResults, ComplexNumber, PracticeAlternative, PracticeQuestion,
 )
-from parser.netlist_parser import ElementType, ParsedCircuit
+from parser.netlist_parser import DEPENDENT_SOURCES, ElementType, ParsedCircuit
 
 _PASSIVE = (ElementType.RESISTOR, ElementType.CAPACITOR,
             ElementType.INDUCTOR, ElementType.IMPEDANCE)
@@ -62,6 +62,10 @@ def build_questions(
     nodes = {str(k): complex(v) for k, v in raw_nodes.items()}
     currents = {k: complex(v) for k, v in raw_currents.items()}
     if len(nodes) <= 1:
+        return []
+    if any(e.element_type in DEPENDENT_SOURCES for e in parsed.elements):
+        # Soru ipuçları (KCL/KVL/seri-paralel yönergeleri) bağımlı kaynakları
+        # bilmez → yanlış yönlendirmemek için bu devrelerde alıştırma sorusu üretilmez
         return []
 
     freq = None if is_dc else frequency

@@ -22,7 +22,8 @@ from llm.plaintext import to_plain_text
 from models.request import AnalysisType, TheveninTerminals
 from models.response import AnalysisResults, ExplanationSection, PracticeQuestion
 from parser.netlist_parser import (
-    CURRENT_SOURCES, VOLTAGE_SOURCES, ElementType, ParsedCircuit, ParsedElement,
+    CURRENT_SOURCES, DEPENDENT_CURRENT_OUTPUT, DEPENDENT_NAMES, DEPENDENT_SOURCES,
+    DEPENDENT_VOLTAGE_OUTPUT, VOLTAGE_SOURCES, ElementType, ParsedCircuit, ParsedElement,
 )
 
 MAX_HISTORY_TURNS = 6          # son 3 soru-cevap
@@ -85,6 +86,20 @@ def describe_element(e: ParsedElement) -> str:
         f_txt = f", f = {freq:g} Hz" if freq else ""
         return (f"{e.id}: AC akım kaynağı, genlik (tepe) {eng(amp, 'A')}, faz {p.get('phase', 0):g}°{f_txt}, "
                 f"akım kaynak içinde {_node(e.node_positive)} → {_node(e.node_negative)} yönünde")
+    if t in DEPENDENT_SOURCES:
+        # Ters kontrolde eksi yazılmaz; V_R2 / I_R2 ekrandaki işaretlere göre tanımlanır
+        ctrl = f"{p['control_kind']}_{p['control_id']}"
+        if p["control_sign"] < 0:
+            ctrl += (" (ölçüm yönü kontrol elemanının ters yönünde: + ucu onun n− ucu)"
+                     if p["control_kind"] == "V" else
+                     " (akım yönü kontrol elemanının ters yönünde)")
+        what = ("gerilim kaynağı, "
+                f"(+) ucu {_node(e.node_positive)}, (−) ucu {_node(e.node_negative)}"
+                if t in DEPENDENT_VOLTAGE_OUTPUT else
+                f"akım kaynağı, akım kaynak içinde {_node(e.node_positive)} → "
+                f"{_node(e.node_negative)} yönünde")
+        return (f"{e.id}: {DEPENDENT_NAMES[t].lower()} ({what}); {e.id} = {p['gain']:g}·{ctrl}, "
+                f"kontrol elemanı {p['control_id']}")
     return f"{e.id}: {between}"
 
 
@@ -153,7 +168,8 @@ def current_directions_text(parsed: ParsedCircuit, results: AnalysisResults, is_
             lines.append(f"- I_{e.id} = {polar(complex(v.real, v.imaginary), 'A')} "
                          f"(fazör, referans {p} → {n}).")
 
-        if e.element_type in VOLTAGE_SOURCES and e.id in powers:
+        if (e.element_type in VOLTAGE_SOURCES
+                or e.element_type in DEPENDENT_VOLTAGE_OUTPUT) and e.id in powers:
             ap = powers[e.id].active_power
             if ap < -1e-15:
                 sign_text = ("akımı eksi çıkar" if is_dc else
@@ -163,7 +179,7 @@ def current_directions_text(parsed: ParsedCircuit, results: AnalysisResults, is_
                              f"Referans yön (+) → (−) olduğu için {sign_text}.")
             elif ap > 1e-15:
                 lines.append(f"  {e.id} güç ALIYOR (P = {eng(ap, 'W')}): akım kaynağa (+) ucundan girer.")
-        elif e.element_type in CURRENT_SOURCES:
+        elif e.element_type in CURRENT_SOURCES or e.element_type in DEPENDENT_CURRENT_OUTPUT:
             lines.append(f"  {e.id} bir akım kaynağıdır: tanımı gereği akımı kaynak içinden {p} → {n} "
                          f"yönündedir, dış devreye {n} ucundan çıkar.")
     return "\n".join(lines)

@@ -13,6 +13,8 @@ devredeki kaynakların frekanslarını inceler ve:
     SINE(off amp FREQ ...) → kaynağın kendi frekansı
     AC_PHASOR(mag, phase)  → frekans taşımaz, global analiz frekansını kullanır
     DC                     → 0 Hz
+    E/G/H/F (bağımlı)      → kendi frekansı yoktur, yok sayılır (kazanç gerçek
+                             sabittir; DC ve AC modlarının ikisinde de geçerli)
 """
 
 from dataclasses import dataclass, field

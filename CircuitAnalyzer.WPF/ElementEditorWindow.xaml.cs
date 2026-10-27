@@ -40,11 +40,23 @@ namespace CircuitAnalyzer.WPF
         // ── Dinamik alan paneli (mod değiştiğinde yeniden oluşturulur) ──
         private StackPanel? _dynamicPanel = null;
 
-        public ElementEditorWindow(CircuitElement element)
+        // ── Bağımlı kaynak formu: kontrol listesi, işaret kutusu ve onaylanınca uygulanacak işlemler ──
+        private readonly IReadOnlyList<CircuitElement> _circuitElements;
+        private readonly List<Action> _commitActions = new();
+        private ComboBox? _controlCombo = null;
+        private CheckBox? _reversedCheck = null;
+        private readonly List<string> _controlIds = new();
+
+        /// <summary>
+        /// circuitElements: tuvaldaki tüm elemanlar. Bağımlı kaynağın "Kontrol eden eleman" listesi
+        /// bunlardan doldurulur (verilmezse liste boş kalır). Diğer eleman türleri bunu kullanmaz.
+        /// </summary>
+        public ElementEditorWindow(CircuitElement element, IEnumerable<CircuitElement>? circuitElements = null)
         {
             InitializeComponent();
             CircuitAnalyzer.WPF.Services.ThemeManager.ApplyTitleBar(this);
             _element = element;
+            _circuitElements = circuitElements?.ToList() ?? new List<CircuitElement>();
             BuildForm();
         }
 
@@ -68,6 +80,10 @@ namespace CircuitAnalyzer.WPF
 
                 case AcCurrentSource acCurrent:
                     BuildAcSourceForm(acCurrent);
+                    break;
+
+                case DependentSource dep:
+                    BuildDependentSourceForm(dep);
                     break;
 
                 case VoltageSource vs:
@@ -327,6 +343,109 @@ namespace CircuitAnalyzer.WPF
         }
 
         // ═══════════════════════════════════════════════════════
+        //  BAĞIMLI KAYNAK FORMU
+        // ═══════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Bağımlı kaynak formu: tür adı, kazanç (sıfırdan farklı herhangi bir gerçel sayı, birim ipucuyla),
+        /// "Kontrol eden eleman" listesi (kaynağın kendisi, GND, prob ve bağlantı noktaları hariç)
+        /// ve "Yönü ters çevir" kutusu.
+        /// </summary>
+        private void BuildDependentSourceForm(DependentSource dep)
+        {
+            Title = $"{dep.Id} — Bağımlı Kaynak Düzenle";
+
+            var kindText = new TextBlock
+            {
+                Text = dep.KindName,
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 4)
+            };
+            kindText.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+            PropertiesPanel.Children.Add(kindText);
+
+            AddField($"Kazanç ({dep.GainUnit})", dep.Gain, v => dep.Gain = v);
+
+            string output = dep.IsVoltageOutput ? "gerilimi" : "akımı";
+            string control = dep.IsVoltageControlled ? "gerilimi" : "akımı";
+            AddHintText($"Çıkış {output} = kazanç · kontrol eden elemanın {control}. " +
+                        "Kazanç sıfırdan farklı herhangi bir gerçel sayıdır (negatif olabilir; ondalık için nokta ya da virgül).");
+
+            // Kontrol eden eleman listesi
+            var lbl = new TextBlock
+            {
+                Text = "Kontrol eden eleman",
+                Style = (Style)FindResource("Text.Caption"),
+                Margin = new Thickness(0, 8, 0, 4)
+            };
+            _controlCombo = new ComboBox { Margin = new Thickness(0, 0, 0, 8) };
+
+            var choices = BuildControlChoices(dep, _circuitElements);
+            _controlIds.Clear();
+            _controlIds.AddRange(choices.Ids);
+            foreach (string label in choices.Labels)
+                _controlCombo.Items.Add(label);
+            _controlCombo.SelectedIndex = choices.SelectedIndex;
+
+            PropertiesPanel.Children.Add(lbl);
+            PropertiesPanel.Children.Add(_controlCombo);
+
+            _reversedCheck = new CheckBox
+            {
+                Content = "Yönü ters çevir",
+                IsChecked = dep.ControlReversed,
+                Margin = new Thickness(0, 0, 0, 4)
+            };
+            _reversedCheck.SetResourceReference(Control.ForegroundProperty, "Brush.Text.Primary");
+            PropertiesPanel.Children.Add(_reversedCheck);
+
+            AddHintText(dep.IsVoltageControlled
+                ? "Kontrol gerilimi, o elemanın 1. ucu (+) ile 2. ucu (−) arasındaki gerilimdir. Ters çevirirseniz işareti değişir."
+                : "Kontrol akımı, o elemanın içinden 1. uçtan 2. uca doğru akan akımdır. Ters çevirirseniz işareti değişir.");
+
+            _commitActions.Add(() =>
+            {
+                int index = _controlCombo.SelectedIndex;
+                dep.ControlElementId = index >= 0 && index < _controlIds.Count ? _controlIds[index] : string.Empty;
+                dep.ControlReversed = _reversedCheck.IsChecked == true;
+            });
+        }
+
+        /// <summary>
+        /// "Kontrol eden eleman" listesi: ilk satır "(seçilmedi)", sonra tuvaldeki diğer iki uçlu elemanların
+        /// kimlikleri (kaynağın kendisi, GND, prob ve bağlantı noktaları hariç). Kayıtlı kontrol elemanı
+        /// artık devrede yoksa "(devrede yok)" notuyla sona eklenir ki öğrenci fark etsin.
+        /// </summary>
+        internal static (List<string> Labels, List<string> Ids, int SelectedIndex) BuildControlChoices(
+            DependentSource dep, IEnumerable<CircuitElement> circuitElements)
+        {
+            var labels = new List<string> { "(seçilmedi)" };
+            var ids = new List<string> { string.Empty };
+
+            foreach (var candidate in circuitElements)
+            {
+                if (ReferenceEquals(candidate, dep) || !DependentSource.CanBeControl(candidate))
+                    continue;
+                if (string.IsNullOrEmpty(candidate.Id) || ids.Contains(candidate.Id))
+                    continue;
+                labels.Add(candidate.Id);
+                ids.Add(candidate.Id);
+            }
+
+            int selected = string.IsNullOrEmpty(dep.ControlElementId)
+                ? 0
+                : ids.FindIndex(id => string.Equals(id, dep.ControlElementId, StringComparison.OrdinalIgnoreCase));
+            if (selected < 0)
+            {
+                labels.Add($"{dep.ControlElementId} (devrede yok)");
+                ids.Add(dep.ControlElementId);
+                selected = ids.Count - 1;
+            }
+            return (labels, ids, selected);
+        }
+
+        // ═══════════════════════════════════════════════════════
         //  FORM BİLEŞENLERİ
         // ═══════════════════════════════════════════════════════
 
@@ -557,6 +676,8 @@ namespace CircuitAnalyzer.WPF
             for (int i = 0; i < _valueBoxes.Count; i++)
             {
                 string text = _valueBoxes[i].Text.Trim();
+                if (_element is DependentSource)
+                    text = text.Replace(',', '.'); // Türkçe ondalık virgülü de kabul et
 
                 if (!TryParseSpiceNumber(text, out double val))
                 {
@@ -583,6 +704,22 @@ namespace CircuitAnalyzer.WPF
                     {
                         MessageBox.Show(
                             "Akım değeri sıfır olamaz.",
+                            "Giriş Hatası",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+
+                        _valueBoxes[i].Focus();
+                        _valueBoxes[i].SelectAll();
+                        return;
+                    }
+                }
+                else if (_element is DependentSource)
+                {
+                    // Kazanç: negatif serbest, yalnızca sıfır yasak
+                    if (Math.Abs(val) < 1e-15)
+                    {
+                        MessageBox.Show(
+                            "Kazanç sıfır olamaz.",
                             "Giriş Hatası",
                             MessageBoxButton.OK,
                             MessageBoxImage.Warning);
@@ -671,6 +808,10 @@ namespace CircuitAnalyzer.WPF
             {
                 _stringSetter(_stringInputBox.Text.Trim());
             }
+
+            // ── 5. Bağımlı kaynağın liste/işaret kutusu ──
+            foreach (var commit in _commitActions)
+                commit();
 
             DialogResult = true;
             Close();
