@@ -23,7 +23,10 @@ from models.request import AnalysisType, TheveninTerminals
 from models.response import (
     AnalysisResults, ComplexNumber, PracticeAlternative, PracticeQuestion,
 )
-from parser.netlist_parser import DEPENDENT_SOURCES, ElementType, ParsedCircuit
+from parser.netlist_parser import (
+    CURRENT_SOURCES, DEPENDENT_CURRENT_CONTROLLED, DEPENDENT_SOURCES,
+    DEPENDENT_VOLTAGE_OUTPUT, ElementType, ParsedCircuit,
+)
 
 _PASSIVE = (ElementType.RESISTOR, ElementType.CAPACITOR,
             ElementType.INDUCTOR, ElementType.IMPEDANCE)
@@ -32,6 +35,45 @@ MAX_SUPERPOSITION_NODES = 3
 
 _ZERO_SOURCES = ("Diğer kaynakları sıfırlayın (gerilim kaynağı → kısa devre, "
                  "akım kaynağı → açık devre)")
+
+# Bağımlı kaynaklı devrede eşdeğer direnç: bağımlı kaynak sıfırlanmaz
+_DEP_RTH_HINT = ("Yalnızca bağımsız kaynakları sıfırlayın; bağımlı kaynak SIFIRLANMAZ (aktif kalır), "
+                 "bu yüzden seri/paralel indirgeme yetmez. Rth = Vth / In: terminalleri kısa devre "
+                 "edip In'i bulun. Bağımsız kaynak yoksa (Vth = In = 0) terminallere 1 V'luk bir "
+                 "test kaynağı bağlayıp Rth = 1 V / I_test hesaplayın.")
+_DEP_RTH_SIGN = ("İşaret ters olabilir: bağımlı kaynaklı (aktif) devrede eşdeğer direnç negatif "
+                 "çıkabilir. Rth = Vth / In oranını işaretleriyle hesaplayın.")
+
+
+def _dependent_hint(parsed: ParsedCircuit, is_dc: bool) -> str:
+    """
+    Bağımlı kaynaklı devrelerde ipuçlarına eklenen cümle: kontrol büyüklüğü düğüm
+    gerilimleriyle yazılır. Kontrol akımı düğüm gerilimleriyle yazılamıyorsa (bir
+    gerilim/bağımlı kaynağın ya da DC'de bobinin akımı) bunu da söyler.
+    """
+    deps = [e for e in parsed.elements if e.element_type in DEPENDENT_SOURCES]
+    if not deps:
+        return ""
+    text = (" Devrede bağımlı kaynak var: kontrol büyüklüğünü (V_X ya da I_X) önce düğüm "
+            "gerilimleriyle yazın; bağımlı akım kaynağı KCL'de kazanç · kontrol büyüklüğü "
+            "kadar bir akım terimi getirir.")
+    by_id = {e.id: e for e in parsed.elements}
+    for e in deps:
+        if e.element_type not in DEPENDENT_CURRENT_CONTROLLED:
+            continue
+        ctrl = by_id.get(e.params.get("control_id"))
+        if ctrl is None:
+            continue
+        no_node_form = (ctrl.element_type in DEPENDENT_SOURCES
+                        or (ctrl.element_type not in CURRENT_SOURCES
+                            and ctrl.element_type not in _PASSIVE)
+                        or (is_dc and ctrl.element_type == ElementType.INDUCTOR))
+        if no_node_form:
+            return text + (" Kontrol akımı bir gerilim kaynağından (ya da DC'de bobinden) "
+                           "geçiyorsa bu akım düğüm gerilimleriyle yazılamaz; kaynağa bağlı "
+                           "diğer elemanların akımlarından KCL ile bulun ya da çevre akımları "
+                           "yöntemini kullanın.")
+    return text
 
 
 def _node_key(n: str):
@@ -63,10 +105,13 @@ def build_questions(
     currents = {k: complex(v) for k, v in raw_currents.items()}
     if len(nodes) <= 1:
         return []
-    if any(e.element_type in DEPENDENT_SOURCES for e in parsed.elements):
-        # Soru ipuçları (KCL/KVL/seri-paralel yönergeleri) bağımlı kaynakları
-        # bilmez → yanlış yönlendirmemek için bu devrelerde alıştırma sorusu üretilmez
-        return []
+    has_dep = any(e.element_type in DEPENDENT_SOURCES for e in parsed.elements)
+    dep_hint = _dependent_hint(parsed, is_dc)
+    dep_volt_nodes = {}      # düğüm → o düğüme bağlı bağımlı gerilim kaynakları (E, H)
+    for e in parsed.elements:
+        if e.element_type in DEPENDENT_VOLTAGE_OUTPUT:
+            for n in (e.node_positive, e.node_negative):
+                dep_volt_nodes.setdefault(n, []).append(e.id)
 
     freq = None if is_dc else frequency
     v_scale = max((abs(v) for v in nodes.values()), default=1.0) or 1.0
@@ -86,12 +131,22 @@ def build_questions(
         )
 
     # ── Ortak soru üreticileri ──
+    def node_hint(n: str) -> str:
+        if n in dep_volt_nodes:
+            ids = ", ".join(dep_volt_nodes[n])
+            return (f"{_node_name(n)}, bağımlı gerilim kaynağının ({ids}) ucunda: kaynağın akımı "
+                    "bilinmediği için bu düğümde KCL yerine kaynağın kısıtını yazın "
+                    "(V₊ − V₋ = kazanç · kontrol büyüklüğü); iki ucu da bilinmeyen düğümse "
+                    "iki düğümü süperdüğüm olarak ele alın." + dep_hint)
+        return (f"{_node_name(n)} için KCL yazın: düğümden çıkan akımların toplamı sıfırdır "
+                "(her kol için (V_düğüm − V_komşu)/Z). Bilinen düğüm gerilimlerini yerine koyun."
+                + dep_hint)
+
     def node_questions(group: str) -> List[PracticeQuestion]:
         return [q(
             f"V{n}", node_v(n), f"{_node_name(n)} gerilimi (GND'ye göre)", "V", group,
             nodes[n], v_scale,
-            hint=(f"{_node_name(n)} için KCL yazın: düğümden çıkan akımların toplamı sıfırdır "
-                  "(her kol için (V_düğüm − V_komşu)/Z). Bilinen düğüm gerilimlerini yerine koyun."),
+            hint=node_hint(n),
             sign_hint=("İşaret ters. Düğüm gerilimi GND'ye göre ölçülür; "
                        f"{node_v(n)} = V({n}) − V(GND)."),
         ) for n in unknown_nodes]
@@ -110,7 +165,7 @@ def build_questions(
                 f"{e.id} elemanından {_node_name(p)} → {_node_name(n)} yönünde geçen akım",
                 "A", group, currents[e.id], i_scale,
                 hint=(f"Ohm yasası: I_{e.id} = (V({p}) − V({n})) / {z_word}_{e.id}. "
-                      "Önce elemanın iki ucundaki düğüm gerilimlerini bulun."),
+                      "Önce elemanın iki ucundaki düğüm gerilimlerini bulun." + dep_hint),
                 sign_hint=(f"İşaret ters: akım {_node_name(p)} → {_node_name(n)} yönünde pozitif "
                            "alınıyor; siz ters yönü hesaplamış olabilirsiniz."),
             ))
@@ -145,7 +200,7 @@ def build_questions(
     questions: List[PracticeQuestion] = []
 
     if analysis_type == AnalysisType.SUPERPOSITION and contributions:
-        return _superposition_questions(q, contributions, unknown_nodes, v_scale)
+        return _superposition_questions(q, contributions, unknown_nodes, v_scale, has_dep)
 
     if analysis_type == AnalysisType.THEVENIN and results.thevenin is not None and terminals:
         a, b = terminals.node_positive, terminals.node_negative
@@ -157,16 +212,17 @@ def build_questions(
             "VTH", "Vth", f"{_node_name(a)} ile {_node_name(b)} arasındaki Thevenin gerilimi",
             "V", "main", vth, max(abs(vth), v_scale),
             hint=(f"Terminaller açık devreyken {_node_name(a)} ile {_node_name(b)} arasındaki "
-                  f"gerilimi bulun: Vth = V({a}) − V({b})."),
+                  f"gerilimi bulun: Vth = V({a}) − V({b})." + dep_hint),
             sign_hint=f"İşaret ters: Vth = V({a}) − V({b}); + terminal {_node_name(a)}.",
         ))
         questions.append(q(
             sym_r.upper(), sym_r, f"Terminallerden bakıldığında eşdeğer "
                                   f"{'direnç' if is_dc else 'empedans'}",
             "Ω", "main", zth, max(abs(zth), 1.0),
-            hint=(f"{_ZERO_SOURCES.replace('Diğer k', 'Tüm bağımsız k')} ve terminallerden bakarak "
+            hint=(_DEP_RTH_HINT if has_dep else
+                  f"{_ZERO_SOURCES.replace('Diğer k', 'Tüm bağımsız k')} ve terminallerden bakarak "
                   "seri/paralel indirgemeyle eşdeğeri bulun."),
-            sign_hint="Pasif devrenin eşdeğer direnci negatif olamaz.",
+            sign_hint=_DEP_RTH_SIGN if has_dep else "Pasif devrenin eşdeğer direnci negatif olamaz.",
         ))
         if zth.real > 1e-12:
             if is_dc:
@@ -196,7 +252,9 @@ def build_questions(
                         "kısa devreden geçen akım (Norton akımı)",
             "A", "main", i_n, max(abs(i_n), i_scale),
             hint=("Terminalleri bir telle kısa devre edip telden geçen akımı bulun "
-                  "(ya da önce Vth ve Rth'yi bulup In = Vth / Rth)."),
+                  + ("(bağımlı kaynak devrede aktif kalır; In'i Vth / Rth'den türetmek "
+                     "döngüsel olur)." if has_dep else
+                     "(ya da önce Vth ve Rth'yi bulup In = Vth / Rth).") + dep_hint),
             sign_hint=(f"İşaret ters: In, kısa devre telinde {_node_name(a)} → {_node_name(b)} "
                        "yönünde pozitif alınır (In = Vth / Rth, Vth = V(+) − V(−))."),
         ))
@@ -206,9 +264,10 @@ def build_questions(
             questions.append(q(
                 sym_r.upper(), sym_r, f"Norton {'direnci' if is_dc else 'empedansı'}",
                 "Ω", "main", zn, max(abs(zn), 1.0),
-                hint=(f"{_ZERO_SOURCES.replace('Diğer k', 'Tüm bağımsız k')} ve terminallerden "
+                hint=(_DEP_RTH_HINT + " (Rn = Rth)" if has_dep else
+                      f"{_ZERO_SOURCES.replace('Diğer k', 'Tüm bağımsız k')} ve terminallerden "
                       "bakarak eşdeğeri bulun (Rn = Rth)."),
-                sign_hint="Pasif devrenin eşdeğer direnci negatif olamaz.",
+                sign_hint=_DEP_RTH_SIGN if has_dep else "Pasif devrenin eşdeğer direnci negatif olamaz.",
             ))
         return questions
 
@@ -232,7 +291,10 @@ def build_questions(
                 mesh_analysis.mesh_currents[k - 1], i_scale,
                 hint=(f"Çevre {k} için KVL yazın: çevre boyunca gerilimlerin toplamı sıfırdır. "
                       "Ortak kollarda iki çevre akımının farkı akar; akım kaynaklı kollarda "
-                      "çevre akımı kaynaktan bilinir."),
+                      "çevre akımı kaynaktan bilinir."
+                      + (" Bağımlı kaynağın kontrol büyüklüğünü (V_X ya da I_X) çevre akımlarıyla "
+                         "yazın; bağımlı kaynak KVL'de kazanç · kontrol büyüklüğü kadar bir "
+                         "gerilim terimi getirir." if has_dep else "")),
                 sign_hint=f"İşaret ters: {mesh_symbol(k)} akımı {way} pozitif alınıyor.",
             ))
         questions += current_questions("extra")
@@ -250,7 +312,8 @@ def build_questions(
     return questions
 
 
-def _superposition_questions(q, contributions, unknown_nodes, v_scale) -> List[PracticeQuestion]:
+def _superposition_questions(q, contributions, unknown_nodes, v_scale,
+                             has_dep: bool = False) -> List[PracticeQuestion]:
     ok = [(k, c) for k, c in enumerate(contributions, 1) if not c.error]
     if not ok:
         return []
@@ -275,7 +338,9 @@ def _superposition_questions(q, contributions, unknown_nodes, v_scale) -> List[P
                 f"Yalnız {src} aktifken {_node_name(n)} gerilimi{domain}", "V", "main",
                 contrib, v_scale,
                 hint=(f"{_ZERO_SOURCES}, yalnız {src} kalsın; bu devrede {_node_name(n)} "
-                      "gerilimini bulun."),
+                      "gerilimini bulun."
+                      + (" Bağımlı kaynaklar sıfırlanmaz: her adımda aktif kalır, kontrol "
+                         "büyüklükleri o alt devrede yeniden hesaplanır." if has_dep else "")),
                 sign_hint=(f"İşaret ters. Kaynağın ({src}) kutuplarını ve {node_v(n)} "
                            "geriliminin GND'ye göre ölçüldüğünü kontrol edin."),
                 alternatives=alts, is_ac=not c.is_dc,

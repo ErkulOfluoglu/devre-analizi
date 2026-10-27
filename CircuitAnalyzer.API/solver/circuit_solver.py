@@ -19,6 +19,7 @@ lcapy kütüphanesini kullanarak devreyi sembolik olarak çözer.
        Thevenin eşdeğeri iki düğüm (port) arasında hesaplanır.
 """
 
+import copy
 import math
 import cmath
 import traceback
@@ -39,10 +40,11 @@ from parser.netlist_parser import (
     ParsedCircuit, ParsedElement, ParsedProbe,
     ElementType, to_lcapy_netlist, lcapy_sense_map,
     ALL_SOURCES, CURRENT_SOURCES, DEPENDENT_SOURCES, DEPENDENT_CURRENT_OUTPUT,
+    VOLTAGE_SOURCES,
 )
 from explainer.step_generator import generate_solution_steps
 from explainer.topology import generate_topology_step
-from explainer.narrative import build_explanation
+from explainer.narrative import PortExtras, build_explanation, port_is_dead
 from solver.frequency_check import check_source_frequencies
 from solver.mesh import analyze_meshes
 from solver.superposition import solve_contributions
@@ -651,12 +653,7 @@ def solve_circuit(
     # ── Adım 6.5: Çevre akımları (MESH yöntemi) ──
     mesh_analysis = None
     has_dependent = any(e.element_type in DEPENDENT_SOURCES for e in parsed.elements)
-    if analysis_type == AnalysisType.MESH and has_dependent:
-        # Çevre denklemleri bağımlı kaynakları henüz bilmez → atlanır; düğüm
-        # gerilimleri/akımlar yine lcapy'den doğru gelir
-        errors.append("ℹ Bu devrede bağımlı kaynak var; çevre akımları (mesh) çözümü bir "
-                      "sonraki sürümde eklenecek. Düğüm gerilimleri ve eleman akımları doğrudur.")
-    elif analysis_type == AnalysisType.MESH:
+    if analysis_type == AnalysisType.MESH:
         try:
             mesh_analysis = analyze_meshes(
                 parsed, is_dc, frequency, getattr(parsed, "node_positions", None))
@@ -700,11 +697,23 @@ def solve_circuit(
         except Exception as e:
             errors.append(f"ℹ Süperpozisyon analizi yapılamadı: {str(e)}")
 
+    # ── Adım 6.7: Bağımlı kaynaklı Thevenin/Norton için ek sayılar ──
+    port_extras = None
+    if (has_dependent and thevenin_terminals is not None
+            and analysis_type in (AnalysisType.THEVENIN, AnalysisType.NORTON)
+            and (results.thevenin is not None or results.norton is not None)):
+        try:
+            port_extras = _solve_port_extras(
+                parsed, thevenin_terminals, is_dc, frequency, raw_nodes, raw_currents)
+        except Exception as e:
+            errors.append(f"ℹ Kısa devre/test kaynağı hesabı yapılamadı: {str(e)}")
+
     # ── Adım 7: Öğrenci için Türkçe anlatım (kalıp tabanlı) ──
     try:
         results.explanation = build_explanation(
             parsed, is_dc, frequency, analysis_type, thevenin_terminals,
             raw_nodes, raw_currents, results, mesh_analysis, contributions,
+            port_extras,
         )
     except Exception as e:
         errors.append(f"ℹ Anlatım oluşturulamadı: {str(e)}")
@@ -1290,6 +1299,80 @@ def _solve_norton(
                 f"Detay: {traceback.format_exc()}"
             )
         return None
+
+
+# ═══════════════════════════════════════════════════════
+#  BAĞIMLI KAYNAKLI DEVREDE PORT: KISA DEVRE VE TEST KAYNAĞI
+# ═══════════════════════════════════════════════════════
+
+def _fresh_id(parsed: ParsedCircuit, base: str) -> str:
+    used = {e.id.upper() for e in parsed.elements}
+    name = base
+    while name.upper() in used:
+        name += "_"
+    return name
+
+
+def _solve_port_extras(
+    parsed: ParsedCircuit, terminals: TheveninTerminals, is_dc: bool,
+    frequency: Optional[float], raw_nodes: dict, raw_currents: dict,
+) -> PortExtras:
+    """
+    Anlatımın ders kitabı yöntemi için gerçek sayılar (bağımlı kaynaklar SIFIRLANMAZ):
+
+      • isc: terminaller 0 V'luk bir kaynakla (tel) kısa devre edilip devre yeniden
+        çözülür; telden + → − akan akım (n+ → n− eleman akımı kuralı).
+      • i_test: açık devre gerilimi ve kısa devre akımı 0 ise (bağımsız kaynak yok ya da
+        terminallere hiçbir şey vermiyor) bağımsız kaynaklar sıfırlanır, terminallere
+        1 V'luk test kaynağı (+ ucu node_positive) bağlanır; kaynağın devreye + ucundan
+        verdiği akım (= −eleman akımı) bulunur. Rth = 1 V / I_test.
+
+    Her ikisi de lcapy ile gerçekten çözülür; Rth'den türetilmez.
+    """
+    from lcapy import Circuit
+
+    a, b = terminals.node_positive, terminals.node_negative
+    extras = PortExtras()
+
+    def solve_with(base: ParsedCircuit, src: ParsedElement) -> complex:
+        sub = copy.deepcopy(base)
+        sub.probes = []
+        sub.elements.append(src)
+        cct = Circuit(to_lcapy_netlist(sub, frequency))
+        return complex(lcapy_element_current(
+            cct, src, lcapy_sense_map(sub), is_dc, frequency))
+
+    short = ParsedElement(id=_fresh_id(parsed, "Vsc_port"), element_type=ElementType.DC_SOURCE,
+                          node_positive=a, node_negative=b, value=0.0)
+    try:
+        extras.isc = solve_with(parsed, short)
+    except Exception:
+        extras.isc = None
+
+    vth = complex(raw_nodes.get(a, 0)) - complex(raw_nodes.get(b, 0))
+    if not port_is_dead(vth, extras.isc, raw_nodes, raw_currents):
+        return extras
+
+    zeroed = copy.deepcopy(parsed)
+    for e in zeroed.elements:
+        if e.element_type in VOLTAGE_SOURCES:
+            e.element_type, e.value, e.params = ElementType.DC_SOURCE, 0.0, {}
+        elif e.element_type in CURRENT_SOURCES:
+            e.element_type, e.value, e.params = ElementType.CURRENT_DC, 0.0, {}
+    if is_dc:
+        test = ParsedElement(id=_fresh_id(parsed, "Vtest_port"),
+                             element_type=ElementType.DC_SOURCE,
+                             node_positive=a, node_negative=b, value=1.0)
+    else:
+        test = ParsedElement(id=_fresh_id(parsed, "Vtest_port"),
+                             element_type=ElementType.AC_SOURCE_PHASOR,
+                             node_positive=a, node_negative=b, value=1.0,
+                             params={"amplitude": 1.0, "phase": 0.0})
+    try:
+        extras.i_test = -solve_with(zeroed, test)
+    except Exception:
+        extras.i_test = None
+    return extras
 
 
 # ═══════════════════════════════════════════════════════

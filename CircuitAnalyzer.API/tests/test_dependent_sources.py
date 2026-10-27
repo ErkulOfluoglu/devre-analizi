@@ -430,7 +430,7 @@ def test_hidden_sense_elements_absent_from_every_result(solve, analysis_type):
     _assert_no_hidden(res)
     assert set(res.element_currents) == {
         "V1", "I1", "R1", "R2", "E1", "R3", "G1", "R4", "H1", "R5", "F1", "R6"}
-    assert res.practice == []
+    # Alıştırma soruları artık üretilir (gizli ölçüm adları yine hiçbir yerde yok)
     for c in res.superposition:
         assert not [k for k in list(c.node_voltages) + list(c.element_currents)
                     if any(m in k for m in HIDDEN_MARKERS)]
@@ -539,24 +539,25 @@ def test_frequency_check_ignores_dependent_sources():
 # ═══════════════════════════════════════════════════════
 
 @pytest.mark.parametrize("analysis_type", ["NODAL", "MESH"])
-def test_explanation_has_single_note_and_no_equations(solve, analysis_type):
+def test_explanation_shows_equations_instead_of_the_old_note(solve, analysis_type):
+    """
+    Bağımlı kaynaklı devrenin anlatımı artık adım adım denklem içerir; eski
+    "bir sonraki sürümde eklenecek" notu hiçbir yerde yoktur (ayrıntılı kontrol:
+    tests/test_dependent_narrative.py, tests/test_dependent_mesh.py).
+    """
     res, steps, errors = solve(BASE + "E1 3 0 V(R2) 3\nR3 3 0 6" + GND,
                                analysis_type=analysis_type)
     titles = [s.title for s in res.explanation]
     assert "Devreyi Tanıyalım" in titles
-    assert "Düğüm Denklemleri (KCL)" not in titles and "Denklemlerin Çözümü" not in titles
     blocks = [b for s in res.explanation for b in s.blocks]
-    notes = [b.text for b in blocks if "bağımlı kaynak var" in b.text]
-    assert len(notes) == 1 and "bir sonraki sürümde eklenecek" in notes[0]
-    assert "Sonuçlar doğrudur" in notes[0]
     text = "\n".join(b.text for b in blocks)
+    assert "bir sonraki sürümde" not in text
     assert "E1: Gerilim kontrollü gerilim kaynağı, E1 = 3·V_R2" in text
-    assert res.practice == []
-    assert res.meshes == []
+    if analysis_type == "NODAL":
+        assert "Düğüm Denklemleri (KCL)" in titles and "Denklemlerin Çözümü" in titles
+    assert res.practice                      # alıştırma soruları üretilir
     kcl_steps = [s for s in steps if s.title.startswith("KCL")]
-    assert all(s.equations == [] for s in kcl_steps)          # sahte KCL denklemi yok
-    if analysis_type == "MESH":
-        assert any("çevre akımları" in e for e in errors)
+    assert all(s.equations == [] for s in kcl_steps)          # teknik listede sahte denklem yok
 
 
 @pytest.mark.parametrize("dep, name", [
@@ -635,7 +636,7 @@ def test_api_contract_example(client):
     assert nv["3"]["value"] == pytest.approx(20.0, rel=1e-6)
     assert data["results"]["element_currents"]["E1"]["value"] == pytest.approx(-10 / 3, rel=1e-6)
     assert data["results"]["element_currents"]["E1"]["direction"] == "3→0"
-    assert data["results"]["practice"] == []
+    assert data["results"]["practice"]
     assert not any(m in json.dumps(data["results"]) for m in HIDDEN_MARKERS)
 
 

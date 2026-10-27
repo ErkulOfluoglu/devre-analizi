@@ -97,13 +97,6 @@ DEPENDENT_NAMES = {
     ElementType.CCCS: "Akım kontrollü akım kaynağı",
 }
 
-# Bağımlı kaynaklı devrelerde düğüm/çevre denklemlerinin adım adım gösterimi
-# henüz yoktur; anlatım bunun yerine bu tek notu verir (sonuçlar çözücüden gelir).
-DEPENDENT_STEPS_NOTE = (
-    "Bu devrede bağımlı kaynak var; düğüm/çevre denklemlerinin adım adım "
-    "gösterimi bir sonraki sürümde eklenecek. Sonuçlar doğrudur."
-)
-
 
 @dataclass
 class ParsedElement:

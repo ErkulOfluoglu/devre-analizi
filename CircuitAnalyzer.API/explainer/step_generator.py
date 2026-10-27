@@ -28,7 +28,7 @@ from models.response import SolutionStep
 from parser.netlist_parser import (
     ParsedCircuit, ParsedElement, ElementType,
     VOLTAGE_SOURCES, CURRENT_SOURCES, DC_SOURCES,
-    DEPENDENT_SOURCES, DEPENDENT_STEPS_NOTE,
+    DEPENDENT_SOURCES,
 )
 
 
@@ -197,6 +197,14 @@ def generate_impedance_steps(
 # Gerilim kısıtı oluşturan kaynaklar (akım kaynakları KCL'de terim olur)
 _SOURCE_TYPES = VOLTAGE_SOURCES
 
+# Bağımlı kaynaklı devrelerde bu teknik adım denklem içermez; tek açıklama verir
+DEPENDENT_KCL_NOTE = (
+    "Bu devrede bağımlı kaynak var. Bağımlı kaynağın çıkışı bir kontrol büyüklüğüne "
+    "(başka bir elemanın gerilimi ya da akımı) bağlı olduğundan düğüm denklemleri önce "
+    "bu büyüklüğü bilinmeyen düğüm gerilimleriyle yazarak kurulur; bu adım adım "
+    "denklemler Türkçe anlatımda gösterilir. Çözücünün sonuçları doğrudur."
+)
+
 
 def _format_complex_text(z) -> str:
     """
@@ -337,12 +345,14 @@ def generate_kcl_steps(
         • AC modda paydada empedans: Z_C = 1/(jωC), Z_L = jωL.
     """
     if any(e.element_type in DEPENDENT_SOURCES for e in parsed.elements):
-        # KCL terimleri bağımlı kaynakları henüz bilmez (yanlış denklem yazmamak
-        # için üretilmez); sonuçlar lcapy'den gelir ve doğrudur.
+        # Bu teknik liste bağımlı kaynak terimi (kazanç · kontrol büyüklüğü) içermez;
+        # yanlış/eksik denklem yazmamak için burada denklem üretilmez. Kontrol
+        # büyüklüğünün düğüm gerilimleriyle yazıldığı, doğrulanmış adım adım
+        # denklemler Türkçe anlatımdadır (explainer.dependent_nodal).
         return [SolutionStep(
             step_number=0,
             title="KCL — Düğüm Denklemleri",
-            description=DEPENDENT_STEPS_NOTE,
+            description=DEPENDENT_KCL_NOTE,
             equations=[],
         )]
 

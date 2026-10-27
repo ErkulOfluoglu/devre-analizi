@@ -15,6 +15,10 @@ anlattığı sırayla Türkçe bir anlatıma dönüştürür.
     Devreyi Tanıyalım → (AC) Empedanslar → Bilinen Düğümler →
     Düğüm Denklemleri (KCL) → Denklemlerin Çözümü → Eleman Akımları →
     (Thevenin/Norton) → Güç → Kontrol → (AC) Zaman Domeni → Sonuç
+
+★ Bağımlı kaynaklı devrelerde "Düğüm Denklemleri" öncesine "Kontrol Büyüklüğünü
+  Bilinmeyenlerle Yazalım" eklenir ve KCL/çözüm bölümlerini explainer.dependent_nodal
+  kurar (kısıt denklemi, süperdüğüm, A·x = b); doğrulanamazsa dürüst yedek anlatım verilir.
 """
 
 import cmath
@@ -27,6 +31,7 @@ import numpy as np
 from explainer.formatting import (
     MINUS, eng, node_v, num, paren, polar, rect,
 )
+from explainer.cramer import cramer3
 from explainer.step_generator import _node_groups, _source_value
 from explainer.topology import reduce_port_impedance
 from models.request import AnalysisType, TheveninTerminals
@@ -36,7 +41,7 @@ from models.response import (
 from parser.netlist_parser import (
     ALL_SOURCES, CURRENT_SOURCES, DC_SOURCES, SINE_SOURCES,
     DEPENDENT_CURRENT_CONTROLLED, DEPENDENT_CURRENT_OUTPUT, DEPENDENT_NAMES,
-    DEPENDENT_SOURCES, DEPENDENT_STEPS_NOTE,
+    DEPENDENT_SOURCES,
     ElementType, ParsedCircuit, ParsedElement,
 )
 
@@ -49,6 +54,32 @@ _UNITS = {
 
 # Türetme ile çözücü sonucu arasında izin verilen bağıl fark
 _REL_TOL = 1e-6
+
+
+@dataclass
+class PortExtras:
+    """
+    Bağımlı kaynaklı devrede Thevenin/Norton için çözücünün ek sayıları
+    (circuit_solver._solve_port_extras): bağımlı kaynak SIFIRLANMAZ.
+
+    isc:    terminaller kısa devre edilince (+ → −) telden geçen akım
+    i_test: bağımsız kaynaklar sıfırlanıp terminallere v_test = 1 (V) test kaynağı
+            bağlanınca kaynağın devreye (+ uçtan) verdiği akım
+    """
+    isc: Optional[complex] = None
+    i_test: Optional[complex] = None
+    v_test: complex = 1 + 0j
+
+
+def port_is_dead(vth: complex, isc: Optional[complex], nodes, currents) -> bool:
+    """
+    Açık devre gerilimi ve kısa devre akımı (bağıl olarak) sıfır mı? Öyleyse
+    Rth = Vth/In = 0/0 belirsizdir ve test kaynağı yöntemi gerekir.
+    """
+    v_scale = max((abs(complex(v)) for v in nodes.values()), default=0.0)
+    i_scale = max((abs(complex(i)) for i in currents.values()), default=0.0)
+    return (abs(vth) <= 1e-9 * v_scale + 1e-12
+            and (isc is None or abs(isc) <= 1e-9 * i_scale + 1e-15))
 
 
 # ═══════════════════════════════════════════════════════
@@ -98,6 +129,11 @@ class _Ctx:
     known: Dict[str, complex] = field(default_factory=dict)
     groups: List[List[str]] = field(default_factory=list)
     constraints: list = field(default_factory=list)
+    # Bağımlı kaynaklı devrede düğüm denklem sistemi (explainer.dependent_nodal) ya da
+    # kurulamadıysa sebebi; Thevenin/Norton için kısa devre/test kaynağı sayıları
+    dep_system: Optional[object] = None
+    dep_reason: str = ""
+    port: Optional["PortExtras"] = None
 
     # ── Eleman bilgileri ──
 
@@ -191,6 +227,7 @@ def build_explanation(
     results: AnalysisResults,
     mesh_analysis=None,
     superposition=None,
+    port_extras: Optional[PortExtras] = None,
 ) -> List[ExplanationSection]:
     """
     Çözümün Türkçe anlatımını üretir. Çözüm başarısızsa boş liste döner.
@@ -198,6 +235,11 @@ def build_explanation(
     analysis_type == MESH ise düğüm denklemleri yerine çevre akımları
     anlatılır (mesh_analysis: solver.mesh.MeshAnalysis). Çevre türetmesi
     çözücüyle doğrulanamazsa sebebi söylenip düğüm yöntemine dönülür.
+
+    Bağımlı kaynaklı devrelerde düğüm denklemleri kontrol büyüklüğü düğüm
+    gerilimleriyle yazılarak kurulur (explainer.dependent_nodal); kurulamayan ya da
+    çözücüyle doğrulanamayan durumda dürüst yedek anlatım (çözücü sonuçları + sebep)
+    verilir. port_extras: Thevenin/Norton'da kısa devre akımı ve test kaynağı sayıları.
     """
     nodes = {str(k): complex(v) for k, v in raw_nodes.items()}
     if len(nodes) <= 1:
@@ -208,15 +250,27 @@ def build_explanation(
         parsed=parsed, is_dc=is_dc, frequency=frequency, omega=omega,
         analysis_type=analysis_type, terminals=terminals,
         v=nodes, i={k: complex(v) for k, v in raw_currents.items()},
-        results=results,
+        results=results, port=port_extras,
     )
-    if ctx.has_dependent:
-        # Düğüm/çevre denklemleri bağımlı kaynakları henüz bilmez → o bölümler
-        # atlanır, tek not verilir; sonuçlar çözücüden (lcapy) gelir.
+    if ctx.has_dependent and analysis_type == AnalysisType.SUPERPOSITION:
+        # Toplam sonuçlar süperpozisyon bölümündedir; bağımlı kaynaklar her adımda aktif
         return _build_dependent_explanation(ctx, superposition)
     ctx.known, ctx.groups, ctx.constraints = _node_groups(parsed, is_dc)
 
-    method_builders = (_known_nodes, _kcl, _solve, _currents)
+    if ctx.has_dependent:
+        # Kontrol büyüklüğü düğüm gerilimleriyle yazılıp A·x = b kurulur ve çözücüyle
+        # doğrulanır; olmazsa sebebiyle birlikte yedek anlatım
+        from explainer import dependent_nodal as dn
+        built = dn.build_system(ctx)
+        if isinstance(built, str):
+            ctx.dep_reason = built
+            method_builders = (_dependent_solution, _currents)
+        else:
+            ctx.dep_system = built
+            method_builders = (_known_nodes, dn.control_section, dn.kcl_section,
+                               dn.solve_section, _dependent_check, _currents)
+    else:
+        method_builders = (_known_nodes, _kcl, _solve, _currents)
     if analysis_type == AnalysisType.MESH:
         # Döngüsel içe aktarmayı önlemek için yerel import
         from explainer.mesh_narrative import build_mesh_sections, verify
@@ -257,40 +311,20 @@ def build_explanation(
 
 def _build_dependent_explanation(ctx: _Ctx, superposition) -> List[ExplanationSection]:
     """
-    Bağımlı kaynaklı devrenin anlatımı: tanıtım + çözücü sonuçları + güç/Thevenin/
-    Norton/KCL kontrolü (bunlar yalnızca çözülmüş değerlere dayanır, bağımlı
-    kaynaktan etkilenmez). Düğüm/çevre denklemleri ve Ohm yasası türetmeleri
-    kurulmaz; bunun yerine DEPENDENT_STEPS_NOTE tek kez verilir.
+    Bağımlı kaynaklı devrenin SÜPERPOZİSYON anlatımı: tanıtım + her bağımsız kaynağın
+    katkısı (bağımlı kaynaklar sıfırlanmaz, her alt devrede aktif kalır).
     """
-    if ctx.analysis_type == AnalysisType.SUPERPOSITION:
-        # Toplam sonuçlar süperpozisyon bölümündedir (bkz. build_explanation)
-        from explainer.superposition_narrative import build_superposition_sections
-        if superposition:
-            tail = build_superposition_sections(ctx, superposition)
-        else:
-            s = _Section("Süperpozisyon")
-            s.text("Süperpozisyonda yalnızca BAĞIMSIZ kaynaklar tek tek devre dışı bırakılır; "
-                   "bağımlı kaynaklar her adımda aktif kalır.")
-            s.note("Bu devrede etkin (sıfırdan farklı) bağımsız kaynak yok. Bağımlı kaynaklar "
-                   "tek başına enerji sağlayamaz: tüm gerilim ve akımlar sıfırdır.")
-            tail = [s]
-        return [s.build() for s in _intro(ctx) + tail if s.blocks]
-
-    sections: List[_Section] = []
-    for builder in (
-        _intro,
-        _impedances,
-        _dependent_solution,
-        _currents,
-        _thevenin,
-        _norton,
-        _power,
-        _kcl_check,
-        _time_domain,
-        _summary,
-    ):
-        sections.extend(builder(ctx))
-    return [s.build() for s in sections if s.blocks]
+    from explainer.superposition_narrative import build_superposition_sections
+    if superposition:
+        tail = build_superposition_sections(ctx, superposition)
+    else:
+        s = _Section("Süperpozisyon")
+        s.text("Süperpozisyonda yalnızca BAĞIMSIZ kaynaklar tek tek devre dışı bırakılır; "
+               "bağımlı kaynaklar her adımda aktif kalır.")
+        s.note("Bu devrede etkin (sıfırdan farklı) bağımsız kaynak yok. Bağımlı kaynaklar "
+               "tek başına enerji sağlayamaz: tüm gerilim ve akımlar sıfırdır.")
+        tail = [s]
+    return [s.build() for s in _intro(ctx) + tail if s.blocks]
 
 
 def _control_text(ctx: _Ctx, e: ParsedElement) -> str:
@@ -372,7 +406,6 @@ def _intro(ctx: _Ctx) -> List[_Section]:
                "akımıyla orantılıdır (çıkış = kazanç · kontrol büyüklüğü).")
         for line in _dependent_lines(ctx):
             s.math(f"• {line}")
-        s.note(DEPENDENT_STEPS_NOTE)
 
     nodes = sorted(ctx.v, key=lambda n: (len(n), n))
     s.text(
@@ -407,11 +440,20 @@ def _intro(ctx: _Ctx) -> List[_Section]:
             "Süperpozisyon yöntemiyle çözeceğiz: her kaynağın etkisini, diğer "
             "kaynaklar sıfırlanmışken ayrı ayrı bulup sonuçları toplayacağız."
         )
-    elif ctx.has_dependent:
-        s.text(
-            "Düğüm gerilimleri ve eleman akımları çözücü tarafından bulundu; aşağıda "
-            "sonuçları Ohm yasası ve KCL ile birlikte inceleyeceğiz."
-        )
+    elif ctx.has_dependent and not (ctx.analysis_type == AnalysisType.MESH
+                                    and ctx.mesh is not None):
+        if ctx.dep_system is not None:
+            s.text(
+                "Düğüm gerilimi yöntemiyle çözeceğiz: önce bağımlı kaynağın kontrol büyüklüğünü "
+                "bilinmeyen düğüm gerilimleriyle yazacağız, sonra KCL denklemlerini kurup "
+                "bilinmeyen düğüm gerilimlerini bulacağız (bağımlı kaynak denkleme bilinmeyen "
+                "bir terim getirir) ve Ohm yasasıyla her elemanın akımını hesaplayacağız."
+            )
+        else:
+            s.text(
+                "Düğüm gerilimleri ve eleman akımları çözücü tarafından bulundu; aşağıda "
+                "sonuçları Ohm yasası ve KCL ile birlikte inceleyeceğiz."
+            )
     elif ctx.analysis_type == AnalysisType.MESH:
         s.text(
             "Çevre akımları yöntemiyle çözeceğiz: her bağımsız çevreye (göze) bir "
@@ -717,6 +759,82 @@ def _linear_term(a: complex, var: str, first: bool) -> str:
     return f"{_cnum(a)}·{var}" if first else f"+ {_cnum(a)}·{var}"
 
 
+def _system_blocks(ctx: _Ctx, s: _Section, unknown: List[str], A, b, x,
+                   kcl_mask: Optional[List[bool]] = None) -> None:
+    """
+    A·x = b sistemini düzenlenmiş denklemler olarak yazar ve çözer:
+    1 bilinmeyen → bölme, 2 → Cramer, 3 → Cramer (Sarrus), >3 → Gauss.
+
+    kcl_mask[r] = r. denklem KCL mi (katsayılar S, sağ taraf A cinsinden; mS/mA ölçeği
+    yalnız bunlara uygulanır) yoksa gerilim kısıtı mı (volt cinsinden, ölçeksiz).
+    """
+    size = len(unknown)
+    mask = kcl_mask if kcl_mask is not None else [True] * size
+    all_kcl = all(mask)
+    kcl_rows = [r for r in range(size) if mask[r]]
+    scale, prefix = _scale_for([A[r, j] for r in kcl_rows for j in range(size)]
+                               + [b[r] for r in kcl_rows])
+    As, bs = A.copy(), b.copy()
+    for r in kcl_rows:
+        As[r, :] = A[r, :] * scale
+        bs[r] = b[r] * scale
+    Vs = [node_v(n) for n in unknown]
+    if all_kcl:
+        s.text(
+            "Denklemleri düzenleyip bilinmeyenlerin katsayılarını toplayalım "
+            f"(katsayılar {prefix}S, sağ taraf {prefix}A cinsinden):")
+    else:
+        s.text(
+            "Denklemleri düzenleyip bilinmeyenleri sol tarafta, bilinen sayıları sağ tarafta "
+            f"toplayalım (KCL denklemlerinde katsayılar {prefix}S, sağ taraf {prefix}A "
+            "cinsindendir; kısıt denklemleri volt cinsindendir):")
+    for k in range(size):
+        terms_txt = []
+        for j in range(size):
+            a = As[k, j]
+            if abs(a) < 1e-15:
+                continue
+            terms_txt.append(_linear_term(a, Vs[j], first=not terms_txt))
+        s.math(f"{' '.join(terms_txt)} = {_cnum(bs[k])}")
+
+    if size == 1:
+        s.result(f"{Vs[0]} = {_cnum(bs[0])} / {_pnum(As[0, 0])} = {ctx.val(x[0], 'V')}")
+    elif size == 2:
+        a11, a12, a21, a22 = As[0, 0], As[0, 1], As[1, 0], As[1, 1]
+        b1, b2 = bs
+        det = a11 * a22 - a12 * a21
+        d1 = b1 * a22 - a12 * b2
+        d2 = a11 * b2 - b1 * a21
+        s.text("İki bilinmeyenli sistemi Cramer kuralıyla çözelim:")
+        P = _pnum
+        s.math(f"Δ = a₁₁·a₂₂ {MINUS} a₁₂·a₂₁ = {P(a11)}·{P(a22)} {MINUS} "
+               f"{P(a12)}·{P(a21)} = {_cnum(det)}")
+        s.math(f"Δ₁ = b₁·a₂₂ {MINUS} a₁₂·b₂ = {P(b1)}·{P(a22)} {MINUS} "
+               f"{P(a12)}·{P(b2)} = {_cnum(d1)}")
+        s.math(f"Δ₂ = a₁₁·b₂ {MINUS} b₁·a₂₁ = {P(a11)}·{P(b2)} {MINUS} "
+               f"{P(b1)}·{P(a21)} = {_cnum(d2)}")
+        s.result(f"{Vs[0]} = Δ₁/Δ = {_cnum(d1)} / {_cnum(det)} = {ctx.val(x[0], 'V')}")
+        s.result(f"{Vs[1]} = Δ₂/Δ = {_cnum(d2)} / {_cnum(det)} = {ctx.val(x[1], 'V')}")
+    elif size == 3:
+        s.text("Üç bilinmeyenli sistemi Cramer kuralıyla çözelim. Determinantları Sarrus "
+               "yöntemiyle hesaplayalım: ilk iki sütun sağa tekrar yazılır, soldan sağa inen "
+               "köşegenlerin çarpımları toplanır, sağdan sola inenlerinkiler çıkarılır. "
+               "Δₖ için k. sütunun yerine sağ taraf yazılır.")
+        dets = cramer3(As, bs, _cnum)
+        for _, text, _ in dets:
+            s.math(text)
+        det = dets[0][2]
+        for k in range(3):
+            symbol, _, dk = dets[k + 1]
+            s.result(f"{Vs[k]} = {symbol}/Δ = {_cnum(dk)} / {_cnum(det)} = {ctx.val(x[k], 'V')}")
+    else:
+        s.text(
+            f"{size} bilinmeyenli bu sistem Gauss eliminasyonu (veya "
+            "matris tersi) ile çözülünce:")
+        for k, n in enumerate(unknown):
+            s.result(f"{node_v(n)} = {ctx.val(x[k], 'V')}")
+
+
 def _solve(ctx: _Ctx) -> List[_Section]:
     if not ctx.groups:
         return []
@@ -749,43 +867,8 @@ def _solve(ctx: _Ctx) -> List[_Section]:
             s.result(f"{V} = ({rect(i_, 'A')}) / ({rect(y, 'S')}) = {polar(x[0], 'V')}  (= {rect(x[0], 'V')})")
 
     elif solved_ok and len(unknown) >= 2:
-        scale, prefix = _scale_for(list(A.flatten()) + list(b))
-        As, bs = A * scale, b * scale
-        Vs = [node_v(n) for n in unknown]
-        s.text(
-            "Denklemleri düzenleyip bilinmeyenlerin katsayılarını toplayalım "
-            f"(katsayılar {prefix}S, sağ taraf {prefix}A cinsinden):")
-        for k in range(len(unknown)):
-            terms_txt = []
-            for j in range(len(unknown)):
-                a = As[k, j]
-                if abs(a) < 1e-15:
-                    continue
-                terms_txt.append(_linear_term(a, Vs[j], first=not terms_txt))
-            s.math(f"{' '.join(terms_txt)} = {_cnum(bs[k])}")
+        _system_blocks(ctx, s, unknown, A, b, x)
 
-        if len(unknown) == 2:
-            a11, a12, a21, a22 = As[0, 0], As[0, 1], As[1, 0], As[1, 1]
-            b1, b2 = bs
-            det = a11 * a22 - a12 * a21
-            d1 = b1 * a22 - a12 * b2
-            d2 = a11 * b2 - b1 * a21
-            s.text("İki bilinmeyenli sistemi Cramer kuralıyla çözelim:")
-            P = _pnum
-            s.math(f"Δ = a₁₁·a₂₂ {MINUS} a₁₂·a₂₁ = {P(a11)}·{P(a22)} {MINUS} "
-                   f"{P(a12)}·{P(a21)} = {_cnum(det)}")
-            s.math(f"Δ₁ = b₁·a₂₂ {MINUS} a₁₂·b₂ = {P(b1)}·{P(a22)} {MINUS} "
-                   f"{P(a12)}·{P(b2)} = {_cnum(d1)}")
-            s.math(f"Δ₂ = a₁₁·b₂ {MINUS} b₁·a₂₁ = {P(a11)}·{P(b2)} {MINUS} "
-                   f"{P(b1)}·{P(a21)} = {_cnum(d2)}")
-            s.result(f"{Vs[0]} = Δ₁/Δ = {_cnum(d1)} / {_cnum(det)} = {ctx.val(x[0], 'V')}")
-            s.result(f"{Vs[1]} = Δ₂/Δ = {_cnum(d2)} / {_cnum(det)} = {ctx.val(x[1], 'V')}")
-        else:
-            s.text(
-                f"{len(unknown)} bilinmeyenli bu sistem Gauss eliminasyonu (veya "
-                "matris tersi) ile çözülünce:")
-            for k, n in enumerate(unknown):
-                s.result(f"{node_v(n)} = {ctx.val(x[k], 'V')}")
     else:
         s.text("Denklemler (ve varsa kaynak kısıtları) birlikte çözülünce:")
         for n in unknown_all:
@@ -906,13 +989,23 @@ def _currents(ctx: _Ctx) -> List[_Section]:
 # ═══════════════════════════════════════════════════════
 
 def _dependent_solution(ctx: _Ctx) -> List[_Section]:
-    """Düğüm gerilimleri (çözücü sonucu) ve bağımlı kaynakların kontrolü."""
+    """
+    YEDEK anlatım: düğüm denklemleri adım adım kurulamadığında (ya da çözücüyle
+    doğrulanamadığında) çözücünün düğüm gerilimleri + sebep notu + kontrol.
+    """
     s = _Section("Düğüm Gerilimleri (Çözücü Sonucu)")
+    if ctx.dep_reason:
+        s.note(f"Bu devrede düğüm denklemleri adım adım gösterilemiyor: {ctx.dep_reason} "
+               "Aşağıdaki sonuçlar çözücüden alınmıştır ve doğrudur.")
     s.text("Bağımlı kaynağın çıkışı devredeki bir gerilime/akıma bağlı olduğundan denklemler "
            "birlikte çözülür; çözücünün bulduğu düğüm gerilimleri:")
     for n in sorted((n for n in ctx.v if n != "0"), key=lambda n: (len(n), n)):
         s.result(f"{node_v(n)} = {ctx.val(ctx.node_value(n), 'V')}")
+    return [s] + _dependent_check(ctx)
 
+
+def _dependent_check(ctx: _Ctx) -> List[_Section]:
+    """Bulunan değerlerle her bağımlı kaynağın çıkışını kontrol büyüklüğünden yeniden hesaplar."""
     by_id = {e.id: e for e in ctx.elements}
     chk = _Section("Bağımlı Kaynakların Kontrolü")
     chk.text("Bulunan değerlerle her bağımlı kaynağın çıkışı, kontrol büyüklüğünden yeniden hesaplanır:")
@@ -939,8 +1032,8 @@ def _dependent_solution(ctx: _Ctx) -> List[_Section]:
                  f"{paren(ctx.val(cv, cu))} = {ctx.val(out, ou)}")
     if len(chk.blocks) > 1:
         chk.check("Bağımlı kaynak çıkışları, kontrol büyüklükleriyle tutarlı ✓")
-        return [s, chk]
-    return [s]
+        return [chk]
+    return []
 
 
 # ═══════════════════════════════════════════════════════
@@ -951,6 +1044,62 @@ def _port(ctx: _Ctx):
     if not ctx.terminals:
         return None
     return ctx.terminals.node_positive, ctx.terminals.node_negative
+
+
+def _imp_text(ctx: _Ctx, z: complex) -> str:
+    return eng(z.real, 'Ω') if ctx.is_dc else rect(z, 'Ω')
+
+
+def _dependent_rth(ctx: _Ctx, s: _Section, symbol: str, expected: complex) -> bool:
+    """
+    Bağımlı kaynaklı devrede eşdeğer direnç (ders kitabı yöntemi): bağımlı kaynak
+    SIFIRLANMAZ; Rth = Vth / In (In gerçekten kısa devre edilerek bulunmuş), bağımsız
+    kaynak yoksa (Vth = In = 0) 1 V'luk test kaynağıyla Rth = V_test / I_test.
+    Sayılar çözücünün Rth'siyle karşılaşmadan yazılmaz; uyuşmazsa False döner.
+    """
+    ex = ctx.port
+    if ex is None:
+        return False
+    a, b = _port(ctx)
+    vth = ctx.node_value(a) - ctx.node_value(b)
+    dead = port_is_dead(vth, ex.isc, ctx.v, ctx.i)
+
+    if not dead:
+        if ex.isc is None or abs(ex.isc) <= 1e-15:
+            return False
+        if not _close(vth / ex.isc, expected, 1e-4):
+            return False
+        s.text(
+            "Devrede bağımlı kaynak var. Bağımlı kaynak SIFIRLANMAZ: kontrol büyüklüğüne bağlı "
+            "olarak devrede aktif kalır ve çıkışı terminallerden uygulanan kaynağa tepki verir; "
+            "bu yüzden eşdeğer direnç seri/paralel indirgemeyle bulunamaz (yalnızca bağımsız "
+            "kaynaklar sıfırlanır). Bunun yerine Rth = Vth / In kullanılır: Vth açık devre "
+            "gerilimi, In terminaller kısa devre edildiğinde telden geçen akımdır.")
+        s.text(f"Terminaller (Düğüm {a} ve Düğüm {b}) bir tel ile kısa devre edilip devre bağımlı "
+               f"kaynak aktifken yeniden çözüldüğünde telden {_flow_text(a, b)} yönünde geçen akım:")
+        s.math(f"In = Isc = {ctx.val(ex.isc, 'A')}")
+        s.math(f"{symbol} = Vth / In = {ctx.val(vth, 'V')} / {paren(ctx.val(ex.isc, 'A'))}")
+        s.result(f"{symbol} = {_imp_text(ctx, expected)}")
+        return True
+
+    if ex.i_test is None or abs(ex.i_test) <= 1e-15:
+        return False
+    if not _close(ex.v_test / ex.i_test, expected, 1e-4):
+        return False
+    s.text(
+        "Devrede bağımlı kaynak var ve bağımsız kaynak sıfırlandığında (ya da hiç yokken) "
+        "Vth = 0 ve In = 0 olur; Rth = Vth / In = 0/0 belirsizdir. Bu durumda test kaynağı "
+        "yöntemi kullanılır: bağımlı kaynak SIFIRLANMAZ (aktif kalır), bağımsız kaynaklar "
+        "sıfırlanır ve terminallere 1 V'luk bir test kaynağı bağlanır. Kaynağın devreye "
+        "verdiği akım I_test bulunur ve Rth = V_test / I_test olur.")
+    s.math(f"V_test = {ctx.val(ex.v_test, 'V')}  (Düğüm {a} (+), Düğüm {b} (−))")
+    s.text("Devre bu test kaynağıyla (bağımlı kaynak aktifken) çözüldüğünde test kaynağının + "
+           f"ucundan (Düğüm {a}) devreye verdiği akım:")
+    s.math(f"I_test = {ctx.val(ex.i_test, 'A')}")
+    s.math(f"{symbol} = V_test / I_test = {ctx.val(ex.v_test, 'V')} / "
+           f"{paren(ctx.val(ex.i_test, 'A'))}")
+    s.result(f"{symbol} = {_imp_text(ctx, expected)}")
+    return True
 
 
 def _port_reduction_section(ctx: _Ctx, title: str, symbol: str,
@@ -979,13 +1128,14 @@ def _port_reduction_section(ctx: _Ctx, title: str, symbol: str,
                 s.math(f"• {step.formula}")
         s.result(f"{symbol} = {rect(expected, 'Ω') if not ctx.is_dc else eng(expected.real, 'Ω')}")
     elif expected is not None and ctx.has_dependent:
-        s.text(
-            "Devrede bağımlı kaynak var. Bağımlı kaynak sıfırlanmaz (devrede aktif kalır) ve "
-            "çıkışı terminallerden uygulanan kaynağa tepki verir; bu yüzden eşdeğer "
-            "direnç seri/paralel indirgemeyle bulunamaz. Bağımsız kaynaklar sıfırlanıp "
-            "terminallere bir test kaynağı bağlanır ve Z = V_test / I_test hesaplanır "
-            "(ya da Z = Voc / Isc). Çözücünün bu yöntemle bulduğu sonuç:")
-        s.result(f"{symbol} = {rect(expected, 'Ω') if not ctx.is_dc else eng(expected.real, 'Ω')}")
+        if not _dependent_rth(ctx, s, symbol, expected):
+            s.text(
+                "Devrede bağımlı kaynak var. Bağımlı kaynak sıfırlanmaz (devrede aktif kalır) ve "
+                "çıkışı terminallerden uygulanan kaynağa tepki verir; bu yüzden eşdeğer "
+                "direnç seri/paralel indirgemeyle bulunamaz. Bağımsız kaynaklar sıfırlanıp "
+                "terminallere bir test kaynağı bağlanır ve Z = V_test / I_test hesaplanır "
+                "(ya da Z = Voc / Isc). Çözücünün bu yöntemle bulduğu sonuç:")
+            s.result(f"{symbol} = {rect(expected, 'Ω') if not ctx.is_dc else eng(expected.real, 'Ω')}")
         if expected.real < -1e-12:
             s.note("Eşdeğer direnç negatif çıktı: bağımlı kaynak terminallere enerji verir; "
                    "pasif bir devrede bu olmaz, aktif (bağımlı kaynaklı) devrede olabilir.")
@@ -1057,7 +1207,14 @@ def _norton(ctx: _Ctx) -> List[_Section]:
     s1 = _Section("1. Adım — In (Kısa Devre Akımı)")
     s1.text(f"Terminaller (Düğüm {a} ve Düğüm {b}) bir tel ile kısa devre edildiğinde "
             "telden akan akım In'dir.")
-    if zn is not None and abs(zn) > 1e-15 and _close(vth / zn, i_n, 1e-4):
+    if ctx.has_dependent:
+        # Bağımlı kaynak aktif kalır; In = Vth/Rn dönüşümü burada döngüsel olurdu
+        # (Rn de In'den bulunur). Kısa devre akımı gerçekten kısa devre edilerek bulundu.
+        if ctx.port is not None and ctx.port.isc is not None and _close(ctx.port.isc, i_n, 1e-4):
+            s1.text("Devrede bağımlı kaynak var; bağımlı kaynak aktif kalır. Terminaller "
+                    "kısa devre edilip devre bu hâliyle yeniden çözüldüğünde telden "
+                    f"{_flow_text(a, b)} yönünde geçen akım In'dir.")
+    elif zn is not None and abs(zn) > 1e-15 and _close(vth / zn, i_n, 1e-4):
         s1.text("Thevenin–Norton dönüşümüyle kolayca bulunur: önce açık devre gerilimi "
                 f"Vth = {node_v(a)} {MINUS} {node_v(b)} = {ctx.val(vth, 'V')}, sonra:")
         if ctx.is_dc:
