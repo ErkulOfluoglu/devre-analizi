@@ -67,8 +67,24 @@ public class ExampleCircuitsTests : IClassFixture<BackendFixture>
         }
 
         // Suggested analysis type is one of AnalysisTypes constants
-        var validAnalysisTypes = new[] { AnalysisTypes.Nodal, AnalysisTypes.Thevenin, AnalysisTypes.Norton, AnalysisTypes.Mesh, AnalysisTypes.Superposition };
+        var validAnalysisTypes = new[]
+        {
+            AnalysisTypes.Nodal,
+            AnalysisTypes.Thevenin,
+            AnalysisTypes.Norton,
+            AnalysisTypes.Mesh,
+            AnalysisTypes.Superposition,
+            AnalysisTypes.Millman,
+            AnalysisTypes.SourceTransform,
+        };
         Assert.Contains(c1.SuggestedAnalysisType, validAnalysisTypes);
+
+        // Suggested terminal exists if specified
+        if (c1.SuggestedTerminal != null)
+        {
+            Assert.True(int.TryParse(c1.SuggestedTerminal, out int termNode) && netlist.NodePins.ContainsKey(termNode),
+                $"{c1.Name}: SuggestedTerminal {c1.SuggestedTerminal} devrede geçerli bir düğüm olmalı.");
+        }
     }
 
     private static AnalysisRequestDto BuildSolverRequest(ExampleCircuit c, NetlistResult netlist) =>
@@ -170,5 +186,74 @@ public class ExampleCircuitsTests : IClassFixture<BackendFixture>
         int l1TopNode = netlist.NodeMap[l1.Pins[0]];
         var vL1 = resp.Results.NodeVoltages[l1TopNode.ToString()].Value;
         Assert.Equal(12.04, vL1.Magnitude, 2);
+    }
+
+    [Fact]
+    public void WheatstoneBridge_NetlistHasSixResistors_AndR5ConnectsTwoDifferentNonGroundNodes()
+    {
+        var c = ExampleCircuits.DcWheatstoneBridgeThevenin();
+        var netlist = NetlistBuilder.Build(c.Elements, c.Wires);
+
+        // Devrede tam olarak 6 direnç bulunmalı (Rs, R1, R2, R3, R4, R5)
+        var resistors = c.Elements.OfType<Resistor>().ToList();
+        Assert.Equal(6, resistors.Count);
+
+        var netlistResistorLines = netlist.Text
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => line.StartsWith("R", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.Equal(6, netlistResistorLines.Count);
+
+        // R5 iki farklı toprak-olmayan (non-ground) düğümü bağlamalı
+        var r5 = resistors.FirstOrDefault(r => r.Id == "R5");
+        Assert.NotNull(r5);
+
+        int nodeA = netlist.NodeMap[r5.Pins[0]];
+        int nodeB = netlist.NodeMap[r5.Pins[1]];
+
+        Assert.NotEqual(0, nodeA);
+        Assert.NotEqual(0, nodeB);
+        Assert.NotEqual(nodeA, nodeB);
+
+        // Va düğümü SuggestedTerminal ile eşleşmeli
+        Assert.Equal(nodeA.ToString(), c.SuggestedTerminal);
+        Assert.Equal(AnalysisTypes.Thevenin, c.SuggestedAnalysisType);
+    }
+
+    [Fact]
+    public async Task Solve_DcWheatstoneBridgeThevenin_MatchesExpectedResults()
+    {
+        var c = ExampleCircuits.DcWheatstoneBridgeThevenin();
+        var netlist = NetlistBuilder.Build(c.Elements, c.Wires);
+        var resp = await _fx.Client.AnalyzeAsync(BuildSolverRequest(c, netlist));
+
+        Assert.Equal("success", resp.Status);
+        Assert.NotNull(resp.Results.Thevenin);
+        Assert.Equal(9.0647, resp.Results.Thevenin!.Vth.Real, 3);
+        Assert.Equal(131.6547, resp.Results.Thevenin.Zth.Real, 3);
+    }
+
+    [Fact]
+    public async Task Solve_DcMillmanThreeSources_MatchesExpectedResults()
+    {
+        var c = ExampleCircuits.DcMillmanThreeSources();
+        var netlist = NetlistBuilder.Build(c.Elements, c.Wires);
+        var resp = await _fx.Client.AnalyzeAsync(BuildSolverRequest(c, netlist));
+
+        Assert.Equal("success", resp.Status);
+        Assert.Equal(10.0909, resp.Results.NodeVoltages["1"].Value.Real, 3);
+    }
+
+    [Fact]
+    public async Task Solve_DcLadderSourceTransform_MatchesExpectedResults()
+    {
+        var c = ExampleCircuits.DcLadderSourceTransform();
+        var netlist = NetlistBuilder.Build(c.Elements, c.Wires);
+        var resp = await _fx.Client.AnalyzeAsync(BuildSolverRequest(c, netlist));
+
+        Assert.Equal("success", resp.Status);
+        Assert.NotNull(resp.Results.Thevenin);
+        Assert.Equal(8.7273, resp.Results.Thevenin!.Vth.Real, 3);
+        Assert.Equal(1818.1818, resp.Results.Thevenin.Zth.Real, 3);
     }
 }

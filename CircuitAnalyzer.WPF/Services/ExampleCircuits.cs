@@ -60,6 +60,9 @@ namespace CircuitAnalyzer.WPF.Services
             AcRlSeries,
             DcMeshWithCurrentSource,
             DcSuperpositionTwoSources,
+            DcWheatstoneBridgeThevenin,
+            DcMillmanThreeSources,
+            DcLadderSourceTransform,
         };
 
         // ═══════════════════════════════════════════════════════
@@ -141,6 +144,74 @@ namespace CircuitAnalyzer.WPF.Services
             c.Connect(l.Pins[1], gnd.Pins[0]);
             c.Connect(m.Pins[1], gnd.Pins[0]);
             c.Connect(rightBottom, gnd.Pins[0]);
+            return c;
+        }
+
+        /// <summary>
+        /// Dikdörtgen Wheatstone köprüsü: kaynak + seri direnç solda,
+        /// iki dikey kolda dörder direnç, ortada yatay köprü direnci (Düğüm 3 = Va, Düğüm 4 = Vb).
+        /// </summary>
+        internal static ExampleCircuit LayoutWheatstoneBridge(
+            ExampleCircuit c, CircuitElement source, string sourceId,
+            CircuitElement series, string seriesId,
+            CircuitElement r1, string r1Id, CircuitElement r2, string r2Id,
+            CircuitElement r3, string r3Id, CircuitElement r4, string r4Id,
+            CircuitElement r5, string r5Id)
+        {
+            var src = c.Add(source, sourceId, 100, 240, 90);
+            var rs = c.Add(series, seriesId, 200, 100);
+            var topL = c.Add(r1, r1Id, 300, 140, 90);
+            var botL = c.Add(r2, r2Id, 300, 240, 90);
+            var topR = c.Add(r3, r3Id, 500, 140, 90);
+            var botR = c.Add(r4, r4Id, 500, 240, 90);
+            var mid = c.Add(r5, r5Id, 400, 180);
+            var gnd = c.Add(new GroundElement(), "GND1", 220, 340);
+
+            // Üst hat
+            c.Connect(rs.Pins[0], src.Pins[0]);
+            c.Connect(rs.Pins[1], topL.Pins[0]);
+            c.Connect(topL.Pins[0], topR.Pins[0]);
+
+            // Sol kol ve orta köprü (Düğüm Va)
+            c.Connect(topL.Pins[1], botL.Pins[0]);
+            c.Connect(topL.Pins[1], mid.Pins[0]);
+
+            // Sağ kol ve orta köprü (Düğüm Vb)
+            c.Connect(topR.Pins[1], botR.Pins[0]);
+            c.Connect(mid.Pins[1], topR.Pins[1]);
+
+            // Alt hat (GND)
+            c.Connect(src.Pins[1], gnd.Pins[0]);
+            c.Connect(botL.Pins[1], gnd.Pins[0]);
+            c.Connect(botR.Pins[1], gnd.Pins[0]);
+            return c;
+        }
+
+        /// <summary>
+        /// Üç paralel kol: her kolda üstte direnç, altta gerilim kaynağı ((+) üstte).
+        /// </summary>
+        internal static ExampleCircuit LayoutParallelBranches(
+            ExampleCircuit c,
+            CircuitElement r1, string r1Id, CircuitElement v1, string v1Id,
+            CircuitElement r2, string r2Id, CircuitElement v2, string v2Id,
+            CircuitElement r3, string r3Id, CircuitElement v3, string v3Id)
+        {
+            var res1 = c.Add(r1, r1Id, 100, 80, 90);
+            var src1 = c.Add(v1, v1Id, 100, 200, 90);
+            var res2 = c.Add(r2, r2Id, 300, 80, 90);
+            var src2 = c.Add(v2, v2Id, 300, 200, 90);
+            var res3 = c.Add(r3, r3Id, 500, 80, 90);
+            var src3 = c.Add(v3, v3Id, 500, 200, 90);
+            var gnd = c.Add(new GroundElement(), "GND1", 320, 300);
+
+            c.Connect(res1.Pins[0], res2.Pins[0]);
+            c.Connect(res2.Pins[0], res3.Pins[0]);
+            c.Connect(res1.Pins[1], src1.Pins[0]);
+            c.Connect(res2.Pins[1], src2.Pins[0]);
+            c.Connect(res3.Pins[1], src3.Pins[0]);
+            c.Connect(src1.Pins[1], gnd.Pins[0]);
+            c.Connect(src2.Pins[1], gnd.Pins[0]);
+            c.Connect(src3.Pins[1], gnd.Pins[0]);
             return c;
         }
 
@@ -240,5 +311,60 @@ namespace CircuitAnalyzer.WPF.Services
             new AcVoltageSource { Amplitude = 20, Frequency = 60, Phase = 45 }, "VAC1",
             new Resistor { Value = 50 }, "R1",
             new Inductor { Value = 0.1 }, "L1");
+
+        /// <summary>
+        /// Wheatstone köprüsü: V1 = 20 V, Rs = 100 Ω, R1 = 200 Ω, R2 = 300 Ω,
+        /// R3 = 400 Ω, R4 = 500 Ω, R5 = 600 Ω. Uçlardan görünen direnç için Δ→Y dönüşümü.
+        /// </summary>
+        public static ExampleCircuit DcWheatstoneBridgeThevenin() => LayoutWheatstoneBridge(
+            new ExampleCircuit
+            {
+                Name = "Wheatstone Köprüsü (Thevenin, Δ-Y)",
+                Description = "Uçlardan görünen direnç yalnızca seri/paralel ile bulunamaz; program üçgen–yıldız (Δ–Y) dönüşümü kullanır.",
+                SuggestedAnalysisType = AnalysisTypes.Thevenin,
+                SuggestedTerminal = "3",
+            },
+            new VoltageSource { Value = 20 }, "V1",
+            new Resistor { Value = 100 }, "Rs",
+            new Resistor { Value = 200 }, "R1",
+            new Resistor { Value = 300 }, "R2",
+            new Resistor { Value = 400 }, "R3",
+            new Resistor { Value = 500 }, "R4",
+            new Resistor { Value = 600 }, "R5");
+
+        /// <summary>
+        /// Millman: Üç paralel kaynak kolu (12 V / 1 kΩ, 6 V / 3 kΩ, 9 V / 2 kΩ).
+        /// </summary>
+        public static ExampleCircuit DcMillmanThreeSources() => LayoutParallelBranches(
+            new ExampleCircuit
+            {
+                Name = "Millman: Üç Paralel Kaynak",
+                Description = "Tüm kollar aynı iki düğüm arasında olduğundan Millman formülü gerilimi doğrudan verir.",
+                SuggestedAnalysisType = AnalysisTypes.Millman,
+            },
+            new Resistor { Value = 1000 }, "R1",
+            new VoltageSource { Value = 12 }, "V1",
+            new Resistor { Value = 3000 }, "R2",
+            new VoltageSource { Value = 6 }, "V2",
+            new Resistor { Value = 2000 }, "R3",
+            new VoltageSource { Value = 9 }, "V3");
+
+        /// <summary>
+        /// Merdiven devre: V1 = 24 V, R1 = 2 kΩ, R2 = 4 kΩ, R3 = 2 kΩ, R4 = 4 kΩ.
+        /// Kaynak dönüşümleri ile Thevenin eşdeğeri bulunur.
+        /// </summary>
+        public static ExampleCircuit DcLadderSourceTransform() => LayoutLadder(
+            new ExampleCircuit
+            {
+                Name = "Merdiven Devre (Kaynak Dönüşümü)",
+                Description = "Devre, kaynak dönüşümleriyle adım adım Thevenin eşdeğerine indirgenir.",
+                SuggestedAnalysisType = AnalysisTypes.SourceTransform,
+                SuggestedTerminal = "3",
+            },
+            new VoltageSource { Value = 24 }, "V1",
+            new Resistor { Value = 2000 }, "R1",
+            new Resistor { Value = 4000 }, "R2",
+            new Resistor { Value = 2000 }, "R3",
+            new Resistor { Value = 4000 }, "R4");
     }
 }
