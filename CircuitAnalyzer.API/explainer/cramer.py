@@ -14,7 +14,11 @@ inen üç köşegenin çarpımları çıkarılır.
 Anlatım bu satırları "math" bloğunda gösterir (eş aralıklı yazı tipi, hizalı sütunlar).
 """
 
-from typing import Callable, List, Sequence, Tuple
+from fractions import Fraction
+from math import lcm
+from typing import Callable, List, Optional, Sequence, Tuple
+
+import numpy as np
 
 from explainer.formatting import MINUS
 
@@ -73,3 +77,85 @@ def cramer3(A, b, fmt: Callable[[complex], str]) -> List[Tuple[str, str, complex
         text, dk = sarrus(symbol, Mk, fmt)
         out.append((symbol, text, dk))
     return out
+
+
+# ═══════════════════════════════════════════════════════
+#  Kesirlerden kurtulma: her denklemi tam sayı yapan çarpan
+# ═══════════════════════════════════════════════════════
+
+_MAX_DENOMINATOR = 1000     # bir sayıyı kesir sayabilmek için en büyük payda
+_MAX_MULTIPLIER = 1000      # denklemi çarpabileceğimiz en büyük sayı
+_MAX_INTEGER = 100000       # çarpımdan sonra katsayıların en büyük mutlak değeri
+_FRACTION_TOL = 1e-9        # |x − kesir| ≤ tol·max(1, |x|)
+
+
+def _row_fractions(values) -> Optional[List[Fraction]]:
+    """Satırdaki her sayıyı güvenilir bir kesre çevirir; gerçek olmayan/çirkin sayı varsa None."""
+    out: List[Fraction] = []
+    for v in values:
+        z = complex(v)
+        if abs(z.imag) > 1e-12 * max(abs(z), 1e-15):
+            return None                      # karmaşık: dokunma
+        x = z.real
+        f = Fraction(x).limit_denominator(_MAX_DENOMINATOR)
+        if abs(x - float(f)) > _FRACTION_TOL * max(1.0, abs(x)):
+            return None                      # 1/2.7 gibi çirkin değer: ondalık kalsın
+        out.append(f)
+    return out
+
+
+def is_integral_row(A_row, b_r) -> bool:
+    """Satırın tüm sayıları (katsayılar ve sağ taraf) zaten tam sayı mı?"""
+    fr = _row_fractions(list(A_row) + [b_r])
+    return fr is not None and all(f.denominator == 1 for f in fr)
+
+
+def integer_rows(A, b) -> Tuple[np.ndarray, np.ndarray, List[int]]:
+    """
+    Her denklemi (katsayılar VE sağ taraf) kesirlerden kurtaracak en küçük pozitif
+    tam sayıyla çarpar: 5/12 türü satırlar ×12. (A2, b2, çarpanlar) döner;
+    çarpan 1 → satır değişmedi.
+
+    Bir satır yalnızca şu koşullarla çarpılır (çözüm değişmez, yalnız görünüm):
+      - tüm sayıları gerçek ve kesir olarak güvenilir (payda ≤ 1000, hata ≤ 1e-9);
+      - paydaların EKOK'u (çarpan) 1 < m ≤ 1000;
+      - çarpılmış tam sayıların hepsi |n| ≤ 100000.
+    Karmaşık satırlar, zaten tam sayı olan satırlar ve çirkin (ör. 1/2.7) satırlar
+    olduğu gibi kalır. Çarpılan satırlar tam sayı değerlidir (yuvarlanmış).
+    """
+    A2 = np.array(A)
+    b2 = np.array(b)
+    if A2.dtype.kind not in "fc":
+        A2 = A2.astype(float)
+    if b2.dtype.kind not in "fc":
+        b2 = b2.astype(float)
+    n = len(b2)
+    mult = [1] * n
+    for r in range(n):
+        fr = _row_fractions(list(A2[r]) + [b2[r]])
+        if fr is None:
+            continue
+        m = lcm(*(f.denominator for f in fr))
+        if m <= 1 or m > _MAX_MULTIPLIER:
+            continue
+        ints = [int(f * m) for f in fr]
+        if any(abs(v) > _MAX_INTEGER for v in ints):
+            continue
+        A2[r, :] = ints[:-1]
+        b2[r] = ints[-1]
+        mult[r] = m
+    return A2, b2, mult
+
+
+def exact_fmt(fmt: Callable[[complex], str]) -> Callable[[complex], str]:
+    """
+    Tam sayı değerli gerçek sayıları 4 anlamlı basamağa yuvarlamadan yazar
+    (12345 → '12345', −196 → '−196'); diğer sayılar için fmt kullanılır.
+    """
+    def f(z) -> str:
+        z = complex(z)
+        r = round(z.real)
+        if abs(z.imag) <= 1e-12 * max(abs(z), 1e-15) and abs(z.real - r) <= 1e-9 and abs(r) < 10 ** 15:
+            return f"{MINUS}{-r}" if r < 0 else str(int(r))
+        return fmt(z)
+    return f

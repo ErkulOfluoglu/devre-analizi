@@ -1,7 +1,8 @@
 ﻿# ════════════════════════════════════════════════════════════════
 #  Devre Analizi — kurulum paketini baştan üretir.
 #
-#    powershell -ExecutionPolicy Bypass -File installer\build.ps1 [-Version 1.0.0]
+#    powershell -ExecutionPolicy Bypass -File installer\build.ps1 [-Version 1.3.0]
+#  -Version verilmezse sürüm CircuitAnalyzer.WPF.csproj içindeki <Version> değerinden okunur.
 #
 #  Gerekenler (yalnızca paketi HAZIRLAYAN bilgisayarda; kullanıcıda değil):
 #    .NET 8 SDK, Python 3.10 + requirements.txt + pyinstaller, Inno Setup 6
@@ -10,8 +11,15 @@
 # ════════════════════════════════════════════════════════════════
 
 param(
-    [string]$Version = "1.0.0"
+    [string]$Version = ""
 )
+
+# Sürüm verilmediyse csproj'daki <Version> kullanılır (Hakkında penceresiyle aynı numara).
+if (-not $Version) {
+    $csproj = Join-Path (Split-Path -Parent $PSScriptRoot) "CircuitAnalyzer.WPF\CircuitAnalyzer.WPF.csproj"
+    $Version = ([xml](Get-Content $csproj -Raw -Encoding UTF8)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+    if (-not $Version) { throw "CircuitAnalyzer.WPF.csproj içinde <Version> bulunamadı." }
+}
 
 # "Continue": PyInstaller bilgi mesajlarını stderr'e yazar; Windows PowerShell 5.1
 # bunları hata sayıp betiği durdurmasın. Her adımın sonucu $LASTEXITCODE ile

@@ -80,6 +80,8 @@ namespace CircuitAnalyzer.WPF
             Closed += (_, _) => ThemeManager.ThemeChanged -= onThemeChanged;
             _undoHistory.Changed += (_, _) => Dispatcher.Invoke(UpdateUndoRedoButtons);
             _selection.Changed += (_, _) => UpdateSelectionHighlight();
+            InitializeAnalysisPanelLayout();
+            InitializePlacementInput(); // bağlam menüsünden önce: yerleştirirken sağ tık menü açmak yerine vazgeçer
             InitializeCanvasContextMenu();
             _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
             Loaded += MainWindow_Loaded;
@@ -266,6 +268,17 @@ namespace CircuitAnalyzer.WPF
                 return;
 
             var mods = Keyboard.Modifiers;
+
+            // ── Yerleştirme modu: Esc vazgeç, R önizlemeyi döndür ──
+            if (IsPlacing && mods == ModifierKeys.None && (e.Key == Key.Escape || e.Key == Key.R))
+            {
+                if (e.Key == Key.Escape)
+                    CancelPlacement(announce: true);
+                else
+                    RotatePlacement();
+                e.Handled = true;
+                return;
+            }
 
             // ── Ctrl+O: Aç ──
             if (e.Key == Key.O && mods == ModifierKeys.Control)

@@ -111,6 +111,8 @@ namespace CircuitAnalyzer.WPF
 
         private void InsertPastedItems(PasteResult pasted)
         {
+            // Yapıştırılan Id'ler bekleyen yerleştirmenin Id'siyle çakışabilir
+            CancelPlacement();
             foreach (var element in pasted.Elements)
             {
                 AddElementToCanvasCore(element);

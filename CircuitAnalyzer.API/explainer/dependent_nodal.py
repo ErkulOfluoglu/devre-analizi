@@ -450,7 +450,8 @@ def solve_section(ctx: _Ctx) -> List[_Section]:
     s = _Section("Denklemlerin Çözümü")
     s.text("Bağımlı kaynağın kontrol büyüklüğü artık düğüm gerilimleriyle yazıldığı için denklemler "
            "bilinmeyen terimleri sol, bilinen sayıları sağ tarafta toplanarak A·x = b biçimine gelir.")
-    _system_blocks(ctx, s, sysm.unknown, sysm.A, sysm.b, sysm.x, sysm.kcl_mask)
+    _system_blocks(ctx, s, sysm.unknown, sysm.A, sysm.b, sysm.x, sysm.kcl_mask,
+                   row_labels=[r.title for r in sysm.rows])
     if not ctx.is_dc:
         for n in sysm.unknown:
             z = ctx.node_value(n)

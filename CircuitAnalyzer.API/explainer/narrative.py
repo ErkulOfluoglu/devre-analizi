@@ -31,7 +31,7 @@ import numpy as np
 from explainer.formatting import (
     MINUS, eng, node_v, num, paren, polar, rect,
 )
-from explainer.cramer import cramer3
+from explainer.cramer import cramer3, exact_fmt, integer_rows, is_integral_row
 from explainer.step_generator import _node_groups, _source_value
 from explainer.topology import reduce_port_impedance
 from models.request import AnalysisType, TheveninTerminals
@@ -759,8 +759,40 @@ def _linear_term(a: complex, var: str, first: bool) -> str:
     return f"{_cnum(a)}·{var}" if first else f"+ {_cnum(a)}·{var}"
 
 
+def _equation_text(coeffs, rhs, names: List[str], fmt) -> str:
+    """'−3·V₂ + 5·V₃ = 0': katsayılar fmt ile (tam sayılar yuvarlanmadan) yazılır."""
+    parts: List[str] = []
+    for a, var in zip(coeffs, names):
+        a = complex(a)
+        if abs(a) < 1e-15:
+            continue
+        mag = fmt(abs(a.real))
+        coef = "" if mag == "1" else f"{mag}·"
+        if a.real < 0:
+            parts.append(f"{MINUS}{coef}{var}" if not parts else f"{MINUS} {coef}{var}")
+        else:
+            parts.append(f"{coef}{var}" if not parts else f"+ {coef}{var}")
+    return f"{' '.join(parts) or '0'} = {fmt(rhs)}"
+
+
+def _integer_step(s: _Section, labels: List[str], names: List[str], A2, b2, mult) -> None:
+    """
+    'Kesirlerden Kurtulalım' adımı: yalnızca çarpılan satırlar, ders kitabı biçiminde
+    ('Düğüm 3 denklemini 12 ile çarpalım:  −3·V₂ + 5·V₃ − 2·V₄ = 0').
+    """
+    fmt = exact_fmt(_cnum)
+    s.text("Kesirlerden Kurtulalım: katsayıları tam sayı yapmak için aşağıdaki denklemleri "
+           "uygun bir sayıyla çarpalım (iki taraf birden çarpıldığı için çözüm değişmez); "
+           "böylece Δ değerlerini tam sayılarla hesaplayabiliriz:")
+    for r, m in enumerate(mult):
+        if m > 1:
+            s.math(f"{labels[r]} denklemini {m} ile çarpalım:  "
+                   f"{_equation_text(A2[r], b2[r], names, fmt)}")
+
+
 def _system_blocks(ctx: _Ctx, s: _Section, unknown: List[str], A, b, x,
-                   kcl_mask: Optional[List[bool]] = None) -> None:
+                   kcl_mask: Optional[List[bool]] = None,
+                   row_labels: Optional[List[str]] = None) -> None:
     """
     A·x = b sistemini düzenlenmiş denklemler olarak yazar ve çözer:
     1 bilinmeyen → bölme, 2 → Cramer, 3 → Cramer (Sarrus), >3 → Gauss.
@@ -772,12 +804,28 @@ def _system_blocks(ctx: _Ctx, s: _Section, unknown: List[str], A, b, x,
     mask = kcl_mask if kcl_mask is not None else [True] * size
     all_kcl = all(mask)
     kcl_rows = [r for r in range(size) if mask[r]]
-    scale, prefix = _scale_for([A[r, j] for r in kcl_rows for j in range(size)]
-                               + [b[r] for r in kcl_rows])
+    labels = row_labels or [f"{r + 1}. denklem" for r in range(size)]
+    int_plan = None     # (A2, b2, çarpanlar): kesirlerden kurtulmuş sistem
+    if ctx.is_dc and size in (2, 3):
+        # Önce ham birimlerde (S, A) dene: 5/12 S → ×12 ders kitabındaki gibi olur.
+        # Her KCL satırı çarpılabiliyor (veya zaten tam sayı) ise mS/mA ölçeği gereksizdir.
+        A2, b2, mult = integer_rows(A, b)
+        if (any(mult[r] > 1 for r in kcl_rows)
+                and all(mult[r] > 1 or is_integral_row(A[r], b[r]) for r in kcl_rows)):
+            int_plan = (A2, b2, mult)
+            scale, prefix = 1.0, ""
+    if int_plan is None:
+        scale, prefix = _scale_for([A[r, j] for r in kcl_rows for j in range(size)]
+                                   + [b[r] for r in kcl_rows])
     As, bs = A.copy(), b.copy()
     for r in kcl_rows:
         As[r, :] = A[r, :] * scale
         bs[r] = b[r] * scale
+    if int_plan is None and ctx.is_dc and size in (2, 3):
+        # Görünen (ölçeklenmiş) sayılarla dene: ör. 2.5 mS · V₂ gibi satırlar
+        A2, b2, mult = integer_rows(As, bs)
+        if any(m > 1 for m in mult):
+            int_plan = (A2, b2, mult)
     Vs = [node_v(n) for n in unknown]
     if all_kcl:
         s.text(
@@ -797,6 +845,16 @@ def _system_blocks(ctx: _Ctx, s: _Section, unknown: List[str], A, b, x,
             terms_txt.append(_linear_term(a, Vs[j], first=not terms_txt))
         s.math(f"{' '.join(terms_txt)} = {_cnum(bs[k])}")
 
+    if int_plan is not None:
+        A2, b2, mult = int_plan
+        _integer_step(s, labels, Vs, A2, b2, mult)
+        As, bs = A2, b2
+    cn = exact_fmt(_cnum)
+
+    def P(z) -> str:
+        t = cn(z)
+        return f"({t})" if t.startswith(MINUS) else t
+
     if size == 1:
         s.result(f"{Vs[0]} = {_cnum(bs[0])} / {_pnum(As[0, 0])} = {ctx.val(x[0], 'V')}")
     elif size == 2:
@@ -806,27 +864,26 @@ def _system_blocks(ctx: _Ctx, s: _Section, unknown: List[str], A, b, x,
         d1 = b1 * a22 - a12 * b2
         d2 = a11 * b2 - b1 * a21
         s.text("İki bilinmeyenli sistemi Cramer kuralıyla çözelim:")
-        P = _pnum
         s.math(f"Δ = a₁₁·a₂₂ {MINUS} a₁₂·a₂₁ = {P(a11)}·{P(a22)} {MINUS} "
-               f"{P(a12)}·{P(a21)} = {_cnum(det)}")
+               f"{P(a12)}·{P(a21)} = {cn(det)}")
         s.math(f"Δ₁ = b₁·a₂₂ {MINUS} a₁₂·b₂ = {P(b1)}·{P(a22)} {MINUS} "
-               f"{P(a12)}·{P(b2)} = {_cnum(d1)}")
+               f"{P(a12)}·{P(b2)} = {cn(d1)}")
         s.math(f"Δ₂ = a₁₁·b₂ {MINUS} b₁·a₂₁ = {P(a11)}·{P(b2)} {MINUS} "
-               f"{P(b1)}·{P(a21)} = {_cnum(d2)}")
-        s.result(f"{Vs[0]} = Δ₁/Δ = {_cnum(d1)} / {_cnum(det)} = {ctx.val(x[0], 'V')}")
-        s.result(f"{Vs[1]} = Δ₂/Δ = {_cnum(d2)} / {_cnum(det)} = {ctx.val(x[1], 'V')}")
+               f"{P(b1)}·{P(a21)} = {cn(d2)}")
+        s.result(f"{Vs[0]} = Δ₁/Δ = {cn(d1)} / {cn(det)} = {ctx.val(x[0], 'V')}")
+        s.result(f"{Vs[1]} = Δ₂/Δ = {cn(d2)} / {cn(det)} = {ctx.val(x[1], 'V')}")
     elif size == 3:
         s.text("Üç bilinmeyenli sistemi Cramer kuralıyla çözelim. Determinantları Sarrus "
                "yöntemiyle hesaplayalım: ilk iki sütun sağa tekrar yazılır, soldan sağa inen "
                "köşegenlerin çarpımları toplanır, sağdan sola inenlerinkiler çıkarılır. "
                "Δₖ için k. sütunun yerine sağ taraf yazılır.")
-        dets = cramer3(As, bs, _cnum)
+        dets = cramer3(As, bs, cn)
         for _, text, _ in dets:
             s.math(text)
         det = dets[0][2]
         for k in range(3):
             symbol, _, dk = dets[k + 1]
-            s.result(f"{Vs[k]} = {symbol}/Δ = {_cnum(dk)} / {_cnum(det)} = {ctx.val(x[k], 'V')}")
+            s.result(f"{Vs[k]} = {symbol}/Δ = {cn(dk)} / {cn(det)} = {ctx.val(x[k], 'V')}")
     else:
         s.text(
             f"{size} bilinmeyenli bu sistem Gauss eliminasyonu (veya "
@@ -867,7 +924,8 @@ def _solve(ctx: _Ctx) -> List[_Section]:
             s.result(f"{V} = ({rect(i_, 'A')}) / ({rect(y, 'S')}) = {polar(x[0], 'V')}  (= {rect(x[0], 'V')})")
 
     elif solved_ok and len(unknown) >= 2:
-        _system_blocks(ctx, s, unknown, A, b, x)
+        _system_blocks(ctx, s, unknown, A, b, x,
+                       row_labels=[f"Düğüm {n}" for n in unknown])
 
     else:
         s.text("Denklemler (ve varsa kaynak kısıtları) birlikte çözülünce:")

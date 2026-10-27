@@ -39,6 +39,16 @@ namespace CircuitAnalyzer.WPF.Services
             set => Set("OnboardingCompleted", value);
         }
 
+        /// <summary>
+        /// Sağ "Analiz" panelinin kullanıcıca ayarlanan genişliği (piksel); hiç ayarlanmadıysa null.
+        /// Sınırlara çekmek okuyanın işidir (MainWindow.ClampAnalysisPanelWidth).
+        /// </summary>
+        public static double? AnalysisPanelWidth
+        {
+            get => GetDouble("AnalysisPanelWidth");
+            set => Set("AnalysisPanelWidth", value.HasValue && double.IsFinite(value.Value) ? JsonValue.Create(value.Value) : null);
+        }
+
         /// <summary>Son açılan dosyaların mutlak yolları (en fazla 8, en son açılan başta).</summary>
         public static IReadOnlyList<string> RecentFiles
         {
@@ -162,6 +172,22 @@ namespace CircuitAnalyzer.WPF.Services
                 try
                 {
                     return Load()[key]?.GetValue<string>();
+                }
+                catch (Exception)
+                {
+                    return null;
+                }
+            }
+        }
+
+        private static double? GetDouble(string key)
+        {
+            lock (Gate)
+            {
+                try
+                {
+                    double? v = Load()[key]?.GetValue<double>();
+                    return v.HasValue && double.IsFinite(v.Value) ? v : null;
                 }
                 catch (Exception)
                 {

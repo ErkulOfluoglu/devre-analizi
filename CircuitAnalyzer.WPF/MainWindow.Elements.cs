@@ -53,92 +53,52 @@ namespace CircuitAnalyzer.WPF
             return new Point(cx, cy);
         }
 
+        // Toolbox düğmeleri elemanı hemen eklemez: yerleştirme moduna girer (bkz. MainWindow.Placement.cs).
+        // Id sayaç+1 olarak verilir ama sayaç artırılmaz; sayaç, eleman tuvale eklenince
+        // AddElementToCanvas içinde tuvaldeki Id'lerden yeniden hesaplanır. Vazgeçilirse Id tüketilmez.
+
         private void BtnAddResistor_Click(object sender, RoutedEventArgs e)
         {
-            ExitWireMode();
-            _resistorCounter++;
-
             var resistor = new Resistor
             {
-                Id = $"R{_resistorCounter}",
+                Id = $"R{_resistorCounter + 1}",
                 Value = 1000
             };
 
-            var center = GetViewportCenterInCanvas();
-            double centerX = GridHelper.Snap(center.X - 40);
-            double centerY = GridHelper.Snap(center.Y - 20);
-            centerY += (_resistorCounter - 1) * GridHelper.GridSize * 3;
-
-            resistor.Position = new Point(centerX, centerY);
-            AddElementToCanvas(resistor);
-
-            TxtStatus.Text = $"{resistor.Id} eklendi — Sürükle/Sağ-tık/Çift-tık";
+            BeginPlacement(resistor, $"{resistor.Id} eklendi — Sürükle/Sağ-tık/Çift-tık");
         }
 
         private void BtnAddCapacitor_Click(object sender, RoutedEventArgs e)
         {
-            ExitWireMode();
-            _capacitorCounter++;
-
             var cap = new Capacitor
             {
-                Id = $"C{_capacitorCounter}",
+                Id = $"C{_capacitorCounter + 1}",
                 Value = 10e-6
             };
 
-            var center = GetViewportCenterInCanvas();
-            double centerX = GridHelper.Snap(center.X + 80);
-            double centerY = GridHelper.Snap(center.Y - 20);
-            centerY += (_capacitorCounter - 1) * GridHelper.GridSize * 3;
-
-            cap.Position = new Point(centerX, centerY);
-            AddElementToCanvas(cap);
-
-            TxtStatus.Text = $"{cap.Id} (10µF) eklendi — Sürükle/Sağ-tık/Çift-tık";
+            BeginPlacement(cap, $"{cap.Id} (10µF) eklendi — Sürükle/Sağ-tık/Çift-tık");
         }
 
         private void BtnAddInductor_Click(object sender, RoutedEventArgs e)
         {
-            ExitWireMode();
-            _inductorCounter++;
-
             var ind = new Inductor
             {
-                Id = $"L{_inductorCounter}",
+                Id = $"L{_inductorCounter + 1}",
                 Value = 100e-3
             };
 
-            var center = GetViewportCenterInCanvas();
-            double centerX = GridHelper.Snap(center.X + 200);
-            double centerY = GridHelper.Snap(center.Y - 20);
-            centerY += (_inductorCounter - 1) * GridHelper.GridSize * 3;
-
-            ind.Position = new Point(centerX, centerY);
-            AddElementToCanvas(ind);
-
-            TxtStatus.Text = $"{ind.Id} (100mH) eklendi — Sürükle/Sağ-tık/Çift-tık";
+            BeginPlacement(ind, $"{ind.Id} (100mH) eklendi — Sürükle/Sağ-tık/Çift-tık");
         }
 
         private void BtnAddImpedance_Click(object sender, RoutedEventArgs e)
         {
-            ExitWireMode();
-            _impedanceCounter++;
-
             var z = new ImpedanceElement
             {
-                Id = $"Z{_impedanceCounter}",
+                Id = $"Z{_impedanceCounter + 1}",
                 Impedance = ComplexValue.FromRectangular(50, 30)
             };
 
-            var center = GetViewportCenterInCanvas();
-            double centerX = GridHelper.Snap(center.X - 60);
-            double centerY = GridHelper.Snap(center.Y + 60);
-            centerY += (_impedanceCounter - 1) * GridHelper.GridSize * 3;
-
-            z.Position = new Point(centerX, centerY);
-            AddElementToCanvas(z);
-
-            TxtStatus.Text = $"{z.Id} ({z.Impedance.ToRectangularString()}Ω) eklendi — Sürükle/Sağ-tık/Çift-tık";
+            BeginPlacement(z, $"{z.Id} ({z.Impedance.ToRectangularString()}Ω) eklendi — Sürükle/Sağ-tık/Çift-tık");
         }
 
         /// <summary>
@@ -148,23 +108,12 @@ namespace CircuitAnalyzer.WPF
         /// </summary>
         private void BtnAddGround_Click(object sender, RoutedEventArgs e)
         {
-            ExitWireMode();
-            _groundCounter++;
-
             var gnd = new GroundElement
             {
-                Id = $"GND{_groundCounter}"
+                Id = $"GND{_groundCounter + 1}"
             };
 
-            var center = GetViewportCenterInCanvas();
-            double centerX = GridHelper.Snap(center.X - 20);
-            double centerY = GridHelper.Snap(center.Y + 40);
-            centerY += (_groundCounter - 1) * GridHelper.GridSize * 3;
-
-            gnd.Position = new Point(centerX, centerY);
-            AddElementToCanvas(gnd);
-
-            TxtStatus.Text = $"{gnd.Id} eklendi — Bağlı ağ otomatik Node 0 olur";
+            BeginPlacement(gnd, $"{gnd.Id} eklendi — Bağlı ağ otomatik Node 0 olur");
         }
 
         /// <summary>
@@ -174,150 +123,98 @@ namespace CircuitAnalyzer.WPF
         /// </summary>
         private void BtnAddProbe_Click(object sender, RoutedEventArgs e)
         {
-            ExitWireMode();
-            _probeCounter++;
-
             var probe = new TestProbe
             {
-                Id = $"VP{_probeCounter}",
+                Id = $"VP{_probeCounter + 1}",
                 Type = ProbeType.Voltage
             };
 
-            var center = GetViewportCenterInCanvas();
-            double centerX = GridHelper.Snap(center.X + 120);
-            double centerY = GridHelper.Snap(center.Y - 40);
-            centerY += (_probeCounter - 1) * GridHelper.GridSize * 3;
-
-            probe.Position = new Point(centerX, centerY);
-            AddElementToCanvas(probe);
-
-            TxtStatus.Text = $"{probe.Id} (Gerilim probu) eklendi — Çift-tıkla V/I değiştir";
+            BeginPlacement(probe, $"{probe.Id} (Gerilim probu) eklendi — Çift-tıkla V/I değiştir");
         }
 
         private void BtnAddVoltageSource_Click(object sender, RoutedEventArgs e)
         {
-            ExitWireMode();
-            _voltageSourceCounter++;
-
             var source = new VoltageSource
             {
-                Id = $"V{_voltageSourceCounter}",
+                Id = $"V{_voltageSourceCounter + 1}",
                 Value = 12
             };
 
-            var center = GetViewportCenterInCanvas();
-            double centerX = GridHelper.Snap(center.X - 160);
-            double centerY = GridHelper.Snap(center.Y - 20);
-            centerY += (_voltageSourceCounter - 1) * GridHelper.GridSize * 3;
-
-            source.Position = new Point(centerX, centerY);
-            AddElementToCanvas(source);
-
-            TxtStatus.Text = $"{source.Id} ({source.Value}V DC) eklendi — Sürükle/Sağ-tık/Çift-tık";
+            BeginPlacement(source, $"{source.Id} ({source.Value}V DC) eklendi — Sürükle/Sağ-tık/Çift-tık");
         }
 
         private void BtnAddAcSource_Click(object sender, RoutedEventArgs e)
         {
-            ExitWireMode();
-            _acSourceCounter++;
-
             var acSource = new AcVoltageSource
             {
-                Id = $"VAC{_acSourceCounter}",
+                Id = $"VAC{_acSourceCounter + 1}",
                 Amplitude = 10,
                 Frequency = 50,
                 Phase = 0
             };
 
-            var center = GetViewportCenterInCanvas();
-            double centerX = GridHelper.Snap(center.X - 280);
-            double centerY = GridHelper.Snap(center.Y - 20);
-            centerY += (_acSourceCounter - 1) * GridHelper.GridSize * 3;
-
-            acSource.Position = new Point(centerX, centerY);
-            AddElementToCanvas(acSource);
-
-            TxtStatus.Text = $"{acSource.Id} eklendi — {acSource.Amplitude}V, " +
-                $"{acSource.Frequency}Hz, ∠{acSource.Phase}° — Sürükle/Sağ-tık/Çift-tık";
+            BeginPlacement(acSource, $"{acSource.Id} eklendi — {acSource.Amplitude}V, " +
+                $"{acSource.Frequency}Hz, ∠{acSource.Phase}° — Sürükle/Sağ-tık/Çift-tık");
         }
 
         private void BtnAddCurrentSource_Click(object sender, RoutedEventArgs e)
         {
-            ExitWireMode();
-            _currentSourceCounter++;
-
             var source = new CurrentSource
             {
-                Id = $"I{_currentSourceCounter}",
+                Id = $"I{_currentSourceCounter + 1}",
                 Value = 0.001
             };
 
-            var center = GetViewportCenterInCanvas();
-            double centerX = GridHelper.Snap(center.X - 160);
-            double centerY = GridHelper.Snap(center.Y - 20);
-            centerY += (_currentSourceCounter - 1) * GridHelper.GridSize * 3;
-
-            source.Position = new Point(centerX, centerY);
-            AddElementToCanvas(source);
-
-            TxtStatus.Text = $"{source.Id} ({source.Value}A DC) eklendi — Sürükle/Sağ-tık/Çift-tık";
+            BeginPlacement(source, $"{source.Id} ({source.Value}A DC) eklendi — Sürükle/Sağ-tık/Çift-tık");
         }
 
         private void BtnAddAcCurrentSource_Click(object sender, RoutedEventArgs e)
         {
-            ExitWireMode();
-            _acCurrentSourceCounter++;
-
             var acSource = new AcCurrentSource
             {
-                Id = $"IAC{_acCurrentSourceCounter}",
+                Id = $"IAC{_acCurrentSourceCounter + 1}",
                 Amplitude = 0.01,
                 Frequency = 50,
                 Phase = 0
             };
 
-            var center = GetViewportCenterInCanvas();
-            double centerX = GridHelper.Snap(center.X - 280);
-            double centerY = GridHelper.Snap(center.Y - 20);
-            centerY += (_acCurrentSourceCounter - 1) * GridHelper.GridSize * 3;
-
-            acSource.Position = new Point(centerX, centerY);
-            AddElementToCanvas(acSource);
-
-            TxtStatus.Text = $"{acSource.Id} eklendi — {acSource.Amplitude}A, " +
-                $"{acSource.Frequency}Hz, ∠{acSource.Phase}° — Sürükle/Sağ-tık/Çift-tık";
+            BeginPlacement(acSource, $"{acSource.Id} eklendi — {acSource.Amplitude}A, " +
+                $"{acSource.Frequency}Hz, ∠{acSource.Phase}° — Sürükle/Sağ-tık/Çift-tık");
         }
 
-        private void BtnAddVcvs_Click(object sender, RoutedEventArgs e) => AddDependentSource(DependentSourceKind.Vcvs);
-        private void BtnAddVccs_Click(object sender, RoutedEventArgs e) => AddDependentSource(DependentSourceKind.Vccs);
-        private void BtnAddCcvs_Click(object sender, RoutedEventArgs e) => AddDependentSource(DependentSourceKind.Ccvs);
-        private void BtnAddCccs_Click(object sender, RoutedEventArgs e) => AddDependentSource(DependentSourceKind.Cccs);
+        private void BtnAddVcvs_Click(object sender, RoutedEventArgs e) => BeginDependentSourcePlacement(DependentSourceKind.Vcvs);
+        private void BtnAddVccs_Click(object sender, RoutedEventArgs e) => BeginDependentSourcePlacement(DependentSourceKind.Vccs);
+        private void BtnAddCcvs_Click(object sender, RoutedEventArgs e) => BeginDependentSourcePlacement(DependentSourceKind.Ccvs);
+        private void BtnAddCccs_Click(object sender, RoutedEventArgs e) => BeginDependentSourcePlacement(DependentSourceKind.Cccs);
+
+        /// <summary>Bağımlı kaynak oluşturur (E1, G1, H1, F1…); tuvale eklemez, sayaç artırmaz.</summary>
+        private DependentSource NewDependentSource(DependentSourceKind kind) =>
+            new(kind)
+            {
+                Id = $"{DependentSource.PrefixOf(kind)}{_dependentCounters[(int)kind] + 1}",
+                Gain = 2
+            };
+
+        private static string DependentSourceDoneStatus(DependentSource source) =>
+            $"{source.Id} ({source.KindName}) eklendi — Çift-tıkla kontrol elemanını ve kazancı seç";
+
+        /// <summary>Bağımlı kaynak için yerleştirme moduna girer (araç kutusu düğmeleri).</summary>
+        private void BeginDependentSourcePlacement(DependentSourceKind kind)
+        {
+            var source = NewDependentSource(kind);
+            BeginPlacement(source, DependentSourceDoneStatus(source));
+        }
 
         /// <summary>
-        /// Bağımlı kaynak ekler (E1, G1, H1, F1…). Kontrol elemanı çift tıklayınca açılan
-        /// düzenleyiciden seçilir; seçilene kadar çözülemez.
+        /// Bağımlı kaynağı yerleştirme moduna girmeden hemen ekler (E1, G1, H1, F1…): görünür alanın
+        /// ortasına en yakın boş yere konur. Kontrol elemanı çift tıklayınca açılan düzenleyiciden
+        /// seçilir; seçilene kadar çözülemez.
         /// </summary>
         internal DependentSource AddDependentSource(DependentSourceKind kind)
         {
             ExitWireMode();
-            int index = (int)kind;
-            _dependentCounters[index]++;
-
-            var source = new DependentSource(kind)
-            {
-                Id = $"{DependentSource.PrefixOf(kind)}{_dependentCounters[index]}",
-                Gain = 2
-            };
-
-            var center = GetViewportCenterInCanvas();
-            double centerX = GridHelper.Snap(center.X - 40 + index * 40);
-            double centerY = GridHelper.Snap(center.Y + 100);
-            centerY += (_dependentCounters[index] - 1) * GridHelper.GridSize * 3;
-
-            source.Position = new Point(centerX, centerY);
-            AddElementToCanvas(source);
-
-            TxtStatus.Text = $"{source.Id} ({source.KindName}) eklendi — Çift-tıkla kontrol elemanını ve kazancı seç";
+            var source = NewDependentSource(kind);
+            AddElementImmediately(source, DependentSourceDoneStatus(source));
             return source;
         }
 
@@ -825,6 +722,7 @@ namespace CircuitAnalyzer.WPF
         /// <summary>Tüm elemanları, telleri ve sayaçları sıfırlar.</summary>
         private void ClearCircuit()
         {
+            CancelPlacement();
             ExitWireMode();
             CancelPinWire();
             _isWirePressPending = false;

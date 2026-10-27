@@ -50,7 +50,9 @@ namespace CircuitAnalyzer.WPF
                 ("Boş alanda sürükle", "Toplu seçim"),
                 ("Çift tık", "Değeri düzenle"),
                 ("Sağ tık", "Döndür / düzenle / sil"),
-                ("Esc", "Tel çizmeyi bırak"),
+                ("Araç kutusu", "Eleman seç, tuvalde tıkla: bırak (sağ tık: vazgeç)"),
+                ("R (yerleştirirken)", "Elemanı döndür"),
+                ("Esc", "Yerleştirmeyi / tel çizmeyi bırak"),
             }),
             ("Görünüm", new[]
             {
@@ -146,6 +148,13 @@ namespace CircuitAnalyzer.WPF
             _lastMouseCanvasPos = mousePos;
             Point snappedPos = GridHelper.Snap(mousePos);
             TxtCoords.Text = $"X: {snappedPos.X:F0}  Y: {snappedPos.Y:F0}";
+
+            // Yerleştirme modu: önizleme fareyi izler, başka bir tuval etkileşimi yok
+            if (_placement != null)
+            {
+                UpdatePlacementPreview(mousePos);
+                return;
+            }
 
             if (_isWirePressPending && _pressedWire != null)
             {
@@ -413,6 +422,13 @@ namespace CircuitAnalyzer.WPF
             if (_isPanning || Keyboard.IsKeyDown(Key.Space))
                 return;
 
+            // Yerleştirme modu: tıklama elemanı bırakır (tuval Preview olayı da buraya yönlendirir)
+            if (_placement != null)
+            {
+                CommitPlacement(pos);
+                return;
+            }
+
             ModifierKeys mods = modifiers ?? Keyboard.Modifiers;
 
             if (_isWireMode)
@@ -473,6 +489,8 @@ namespace CircuitAnalyzer.WPF
 
             if (key == Key.Escape)
             {
+                if (CancelPlacement(announce: true))
+                    return true;
                 if (_isWirePressPending)
                 {
                     _isWirePressPending = false;
@@ -521,6 +539,8 @@ namespace CircuitAnalyzer.WPF
 
             if (key == Key.R && mods == ModifierKeys.None)
             {
+                if (RotatePlacement())
+                    return true;
                 if (IsDrawingWire)
                 {
                     FlipLiveWireLegOrientation();

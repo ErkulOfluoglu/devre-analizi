@@ -101,6 +101,7 @@ namespace CircuitAnalyzer.WPF
 
         private void EnterWireMode()
         {
+            CancelPlacement();
             CancelPinWire();
             DeselectElement();
             ResetCurrentWireState();

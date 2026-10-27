@@ -11,10 +11,10 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from explainer.cramer import cramer3
+from explainer.cramer import cramer3, exact_fmt, integer_rows
 from explainer.formatting import MINUS, eng, node_v, num, paren, polar, rect, sub
 from explainer.narrative import (
-    _Ctx, _Section, _close, _cnum, _flow_text, _join_terms, _linear_term,
+    _Ctx, _Section, _close, _cnum, _flow_text, _integer_step, _join_terms, _linear_term,
     _pnum, _scale_for,
 )
 from parser.netlist_parser import (
@@ -224,8 +224,24 @@ def _dep_term(ctx: _Ctx, d: MeshDependent, net_gain: float, numeric: bool) -> st
     return f"{MINUS}{body}" if net_gain < 0 else body
 
 
-def _solve_square(s: _Section, ctx: _Ctx, M: int, Zs, V, I, Is, unit_i: str) -> None:
-    """M ≥ 2 bilinmeyenli Zs·I = V sistemi: 2×2 Cramer, 3×3 Sarrus, daha büyük → Gauss."""
+def _solve_square(s: _Section, ctx: _Ctx, M: int, Zs, V, I, Is, unit_i: str,
+                  labels: Optional[List[str]] = None) -> None:
+    """
+    M ≥ 2 bilinmeyenli Zs·I = V sistemi: 2×2 Cramer, 3×3 Sarrus, daha büyük → Gauss.
+    DC'de 2-3 bilinmeyende kesirli (görünen) satırlar önce tam sayıya çarpılır.
+    """
+    labels = labels or [f"Çevre {k + 1}" for k in range(M)]
+    if ctx.is_dc and M in (2, 3):
+        Z2, V2, mult = integer_rows(Zs, V)
+        if any(m > 1 for m in mult):
+            _integer_step(s, labels, [mesh_symbol(c + 1) for c in range(M)], Z2, V2, mult)
+            Zs, V = Z2, V2
+    cn = exact_fmt(_cnum)
+
+    def P(z) -> str:
+        t = cn(z)
+        return f"({t})" if t.startswith(MINUS) else t
+
     if M == 2:
         a11, a12, a21, a22 = Zs[0, 0], Zs[0, 1], Zs[1, 0], Zs[1, 1]
         b1, b2 = V
@@ -233,14 +249,14 @@ def _solve_square(s: _Section, ctx: _Ctx, M: int, Zs, V, I, Is, unit_i: str) -> 
         d1 = b1 * a22 - a12 * b2
         d2 = a11 * b2 - b1 * a21
         s.text("İki bilinmeyenli sistemi Cramer kuralıyla çözelim:")
-        s.math(f"Δ = {_pnum(a11)}·{_pnum(a22)} {MINUS} {_pnum(a12)}·{_pnum(a21)} = {_cnum(det)}")
-        s.math(f"Δ₁ = {_pnum(b1)}·{_pnum(a22)} {MINUS} {_pnum(a12)}·{_pnum(b2)} = {_cnum(d1)}")
-        s.math(f"Δ₂ = {_pnum(a11)}·{_pnum(b2)} {MINUS} {_pnum(b1)}·{_pnum(a21)} = {_cnum(d2)}")
+        s.math(f"Δ = {P(a11)}·{P(a22)} {MINUS} {P(a12)}·{P(a21)} = {cn(det)}")
+        s.math(f"Δ₁ = {P(b1)}·{P(a22)} {MINUS} {P(a12)}·{P(b2)} = {cn(d1)}")
+        s.math(f"Δ₂ = {P(a11)}·{P(b2)} {MINUS} {P(b1)}·{P(a21)} = {cn(d2)}")
         for k, d in ((0, d1), (1, d2)):
             if ctx.is_dc:
                 scaled = f"{num(Is[k].real)} {unit_i}"
                 final = eng(I[k].real, "A")
-                s.result(f"{mesh_symbol(k + 1)} = Δ{sub(str(k + 1))}/Δ = {_cnum(d)} / {_cnum(det)} "
+                s.result(f"{mesh_symbol(k + 1)} = Δ{sub(str(k + 1))}/Δ = {cn(d)} / {cn(det)} "
                          f"= {scaled}" + ("" if scaled == final else f" = {final}"))
             else:
                 s.result(f"{mesh_symbol(k + 1)} = Δ{sub(str(k + 1))}/Δ = {polar(I[k], 'A')}")
@@ -249,7 +265,7 @@ def _solve_square(s: _Section, ctx: _Ctx, M: int, Zs, V, I, Is, unit_i: str) -> 
                "yöntemiyle hesaplayalım: ilk iki sütun sağa tekrar yazılır, soldan sağa inen "
                "köşegenlerin çarpımları toplanır, sağdan sola inenlerinkiler çıkarılır. "
                "Δₖ için k. sütunun yerine sağ taraf yazılır.")
-        dets = cramer3(Zs, V, _cnum)
+        dets = cramer3(Zs, V, cn)
         for _, text, _ in dets:
             s.math(text)
         det = dets[0][2]
@@ -258,7 +274,7 @@ def _solve_square(s: _Section, ctx: _Ctx, M: int, Zs, V, I, Is, unit_i: str) -> 
             if ctx.is_dc:
                 scaled = f"{num(Is[k].real)} {unit_i}"
                 final = eng(I[k].real, "A")
-                s.result(f"{mesh_symbol(k + 1)} = {symbol}/Δ = {_cnum(d)} / {_cnum(det)} "
+                s.result(f"{mesh_symbol(k + 1)} = {symbol}/Δ = {cn(d)} / {cn(det)} "
                          f"= {scaled}" + ("" if scaled == final else f" = {final}"))
             else:
                 s.result(f"{mesh_symbol(k + 1)} = {symbol}/Δ = {polar(I[k], 'A')}")
@@ -520,7 +536,10 @@ def _dependent_sections(ctx: _Ctx, ma: MeshAnalysis, signs, elements, groups,
         s.text("Tek bilinmeyenli denklemden çevre akımı:")
         s.result(f"{mesh_symbol(1)} = {_cnum(V[0])} / {_pnum(A[0, 0])} = {ctx.val(I[0], 'A')}")
     else:
-        _solve_square(s, ctx, M, As, V, I, Is, unit_i)
+        labels = [f"Çevre {r.members[0]}" if r.kind == "kvl" and len(r.members) == 1
+                  else "Süperçevre {" + ", ".join(str(k) for k in r.members) + "}"
+                  if r.kind == "kvl" else f"Kısıt ({r.cid})" for r in rows]
+        _solve_square(s, ctx, M, As, V, I, Is, unit_i, labels)
     out.append(s)
 
     # ── (d, e) Eleman akımları ve bağımlı kaynak kontrolü ──

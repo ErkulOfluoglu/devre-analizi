@@ -12,16 +12,17 @@
         PreviewKeyDown="Window_PreviewKeyDown">
 
     <Grid>
-        <Grid Margin="16">
+        <Grid x:Name="LayoutRoot" Margin="16">
             <Grid.ColumnDefinitions>
                 <!-- Sol panel: Araç kutusu -->
                 <ColumnDefinition Width="248"/>
                 <ColumnDefinition Width="16"/>
                 <!-- Orta alan: Devre çizim Canvas'ı -->
                 <ColumnDefinition Width="*"/>
+                <!-- Ayırıcı sütunu: GridSplitter ile sağ panelin genişliği ayarlanır -->
                 <ColumnDefinition Width="16"/>
-                <!-- Sağ panel: Analiz ayarları + sonuçlar -->
-                <ColumnDefinition Width="400"/>
+                <!-- Sağ panel: Analiz ayarları + sonuçlar (genişlik kullanıcıca ayarlanır, MainWindow.Layout.cs) -->
+                <ColumnDefinition x:Name="AnalysisColumn" Width="460" MinWidth="360" MaxWidth="900"/>
             </Grid.ColumnDefinitions>
 
             <!-- ═══════════════════════════════════════════ -->
@@ -506,6 +507,20 @@
         <!-- SAĞ PANEL: ANALİZ (ayarlar + sonuçlar)     -->
         <!-- ═══════════════════════════════════════════ -->
         <views:AnalysisPanel x:Name="AnalysisPanel" Grid.Column="4"/>
+
+        <!-- Canvas ile Analiz paneli arasındaki ayırıcı: sürükleyerek paneli genişlet/daralt -->
+        <GridSplitter x:Name="AnalysisSplitter"
+                      Grid.Column="3"
+                      Width="16"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Stretch"
+                      ResizeDirection="Columns"
+                      ResizeBehavior="PreviousAndNext"
+                      ShowsPreview="False"
+                      Style="{DynamicResource Splitter.Vertical}"
+                      ToolTip="Sürükleyerek Analiz panelinin genişliğini ayarlayın"
+                      AutomationProperties.Name="Analiz paneli genişliği"
+                      DragCompleted="AnalysisSplitter_DragCompleted"/>
     </Grid>
 
     <!-- Tanıtım Turu Katmanı (Tüm pencerenin üzerinde) -->

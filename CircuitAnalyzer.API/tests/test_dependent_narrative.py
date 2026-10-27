@@ -255,6 +255,7 @@ def test_three_unknowns_use_sarrus(solve):
     E1 3 0 V(R2) 3, R3 3 4 6, R4 4 0 12:
       V₂ = 6.667, V₃ = 20, Düğüm 4: (V₄−20)/6 + V₄/12 = 0 → 3·V₄ = 40 → V₄ = 13.33
       A = [[0.75,0,0],[−3,1,0],[0,−1/6,1/4]], Δ = 0.75·1·0.25 = 0.1875
+      Kesirlerden kurtulma: Düğüm 2 ×4 (3·V₂ = 20), Düğüm 4 ×12 (−2·V₃ + 3·V₄ = 0) → Δ = 3·1·3 = 9
     """
     res, _, _ = solve(BASE + "E1 3 0 V(R2) 3\nR3 3 4 6\nR4 4 0 12" + GND)
     text = full_text(res)
@@ -263,7 +264,10 @@ def test_three_unknowns_use_sarrus(solve):
                      if b.kind == "math" and "Δ" in b.text and "|" in b.text]
     assert len(sarrus_blocks) == 4
     assert all(t.count("|") == 6 and f") {MINUS} (" in t for t in sarrus_blocks)
-    assert "= 0.1875" in sarrus_blocks[0]
+    solution = chr(10).join(b.text for b in blocks_of(res, "Denklemlerin Çözümü"))
+    assert "Düğüm 2 denklemini 4 ile çarpalım" in solution
+    assert "Düğüm 4 denklemini 12 ile çarpalım" in solution
+    assert sarrus_blocks[0].rstrip().endswith("= 9")
     assert final_voltages(res) == pytest.approx({"2": 20 / 3, "3": 20.0, "4": 40 / 3}, rel=2e-3)
     assert_text_matches_solver(res)
 

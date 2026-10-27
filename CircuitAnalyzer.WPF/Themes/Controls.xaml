@@ -651,4 +651,36 @@
         </Setter>
     </Style>
 
+    <!-- Dikey ayırıcı (GridSplitter): şeffaf geniş tutma alanı, ortada ince tutamaç; üstüne gelince/sürüklerken vurgulanır -->
+    <Style x:Key="Splitter.Vertical" TargetType="GridSplitter">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Cursor" Value="SizeWE"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="GridSplitter">
+                    <Border Background="{TemplateBinding Background}">
+                        <Border x:Name="Grip"
+                                Width="4" Height="48"
+                                CornerRadius="2"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource Brush.Border.Strong}"
+                                Opacity="0.6"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Brush.Accent}"/>
+                            <Setter TargetName="Grip" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Brush.Accent}"/>
+                            <Setter TargetName="Grip" Property="Opacity" Value="1"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

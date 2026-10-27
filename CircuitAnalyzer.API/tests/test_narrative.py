@@ -139,9 +139,11 @@ def test_ladder_nodal_cramer_narrative(solve):
     assert any("2.5·V₂ − V₃ = 12" in t for t in texts)
 
     # Cramer kuralı adımları
-    assert any("Δ = a₁₁·a₂₂ − a₁₂·a₂₁ = 2.5·2 − (−1)·(−1) = 4" in t for t in texts)
-    assert any("V₂ = Δ₁/Δ = 24 / 4 = 6 V" in t for t in texts)
-    assert any("V₃ = Δ₂/Δ = 12 / 4 = 3 V" in t for t in texts)
+    # Kesirlerden kurtulma: Düğüm 2 satırı ×2 → 5·V₂ − 2·V₃ = 24
+    assert any("Düğüm 2 denklemini 2 ile çarpalım" in t for t in texts)
+    assert any("Δ = a₁₁·a₂₂ − a₁₂·a₂₁ = 5·2 − (−2)·(−1) = 8" in t for t in texts)
+    assert any("V₂ = Δ₁/Δ = 48 / 8 = 6 V" in t for t in texts)
+    assert any("V₃ = Δ₂/Δ = 24 / 8 = 3 V" in t for t in texts)
 
 
 # ═══════════════════════════════════════════════════════

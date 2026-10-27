@@ -323,6 +323,7 @@ namespace CircuitAnalyzer.WPF
 
         public void PrintOrExportPdf(bool isSelfTest = false)
         {
+            CancelPlacement(); // önizleme baskıya girmesin
             if (_lastResponse == null || _lastSolveVersion != _circuitVersion)
             {
                 MessageBox.Show(this, "Önce devreyi çözün.", "Yazdır / PDF", MessageBoxButton.OK, MessageBoxImage.Information);
