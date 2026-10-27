@@ -10,6 +10,9 @@ ders kitabındaki dönüşümlerle adım adım ulaşılır:
     (d) seri dirençler toplanır; seri gerilim kaynakları toplanır (kutuplara dikkat)
     (e) akım kaynağına seri bağlı eleman akımı değiştirmez → çıkarılır
         (boşta kalan ya da iki ucu aynı düğümde olan eleman da akım taşımaz)
+    (f) hiçbir adım kalmadıysa: kaynak içermeyen (yalnızca dirençli) üçgen → yıldız (Δ→Y);
+        gerekirse kaynaksız dirençli yıldız → üçgen (Y→Δ). Formüller ve anlatım
+        explainer/topology.py'deki Δ–Y adımıyla aynı dilde yazılır.
 
 Terminaller arasında "tek gerilim kaynağı + seri direnç" (ya da "akım kaynağı + paralel
 direnç") kalınca durulur. Bulunan Vth/Rth çözücünün Thevenin sonucuyla karşılaştırılır;
@@ -18,6 +21,7 @@ build_source_transform → (None, sebep) döner ve narrative.py Thevenin anlatı
 """
 
 from dataclasses import dataclass
+from itertools import combinations
 from typing import Dict, List, Optional, Tuple
 
 from explainer.formatting import MINUS, eng, node_v, num
@@ -26,9 +30,9 @@ from parser.netlist_parser import ElementType
 _ALLOWED = (ElementType.RESISTOR, ElementType.DC_SOURCE, ElementType.CURRENT_DC)
 _MAX_ITER = 80
 _LETTERS = "abcdefghijklmnopqrstuvwxyz"
-_STUCK = ("Bu devre, seri/paralel birleştirme ve kaynak dönüşümleriyle terminallere kadar "
-          "sadeleştirilemiyor (örneğin köprü yapısı ya da gerilim kaynağının doğrudan paralel "
-          "bağlandığı bir düğüm var).")
+_STUCK = ("Bu devre, seri/paralel birleştirme, Δ–Y dönüşümü ve kaynak dönüşümleriyle terminallere "
+          "kadar sadeleştirilemiyor (örneğin kaynağı üçgenin içinde kalan köprü yapısı ya da gerilim "
+          "kaynağının doğrudan paralel bağlandığı bir düğüm var).")
 
 
 class _Fail(Exception):
@@ -82,7 +86,8 @@ class _Net:
     def __init__(self, els: List[_El], a: str, b: str):
         self.els = els
         self.a, self.b = a, b
-        self.count = {"R": 0, "V": 0, "I": 0, "node": 0}
+        self.count = {"R": 0, "V": 0, "I": 0, "node": 0, "Ry": 0, "Rd": 0, "Y": 0}
+        self.used_dy = False
         self.steps: List[List[Tuple[str, str]]] = []   # her adım: [(tür, metin), …]
         self.cur: List[Tuple[str, str]] = []
         self.used_new_node = False
@@ -97,6 +102,10 @@ class _Net:
         self.count["node"] += 1
         self.used_new_node = True
         return f"x{self.count['node']}"
+
+    def new_star_name(self, kind: str) -> str:
+        self.count[kind] += 1
+        return f"{kind}{self.count[kind]}"
 
     def incidence(self) -> Dict[str, List[_El]]:
         inc: Dict[str, List[_El]] = {}
@@ -387,6 +396,76 @@ def _step_ir(net: _Net) -> bool:
     return False
 
 
+def _step_delta_y(net: _Net) -> bool:
+    """(f) Kaynaksız dirençli üçgen (Δ) → yıldız (Y). topology.py'deki formülle aynı."""
+    pairs: Dict[frozenset, List[_El]] = {}
+    for e in net.els:
+        pairs.setdefault(frozenset((e.p, e.n)), []).append(e)
+    nodes = sorted({x for e in net.els for x in (e.p, e.n)}, key=_key)
+    for n1, n2, n3 in combinations(nodes, 3):
+        grp = [pairs.get(frozenset(pr)) for pr in ((n1, n2), (n1, n3), (n2, n3))]
+        if not all(g and len(g) == 1 and g[0].kind == "R" for g in grp):
+            continue
+        b12, b13, b23 = (g[0] for g in grp)
+        y = f"Y{net.count['Y'] + 1}"
+        net.count["Y"] += 1
+        denom = b12.val + b13.val + b23.val
+        sym_d = f"{b12.name}+{b13.name}+{b23.name}"
+        num_d = f"{num(b12.val)}+{num(b13.val)}+{num(b23.val)}"
+        net.remove(b12, b13, b23)
+        lines = []
+        for node, a1, a2 in ((n1, b12, b13), (n2, b12, b23), (n3, b13, b23)):
+            name = net.new_star_name("Ry")
+            v = a1.val * a2.val / denom
+            net.els.append(_El("R", name, node, y, v))
+            lines.append(f"{name} = {a1.name}·{a2.name}/({sym_d}) = "
+                         f"{num(a1.val)}·{num(a2.val)}/({num_d}) = {num(v)} Ω (Düğüm {node}–{y})")
+        net.used_dy = True
+        net.text(f"Seri/paralel birleştirme ve kaynak dönüşümü kalmadı; {b12.name}, {b13.name}, "
+                 f"{b23.name} üçgen (Δ) bağlı (Düğüm {n1}, {n2}, {n3} arası) → yıldıza (Y) "
+                 "dönüştürelim:")
+        for ln in lines:
+            net.math(ln)
+        net.recap()
+        return True
+    return False
+
+
+def _step_y_delta(net: _Net) -> bool:
+    """(f) Kaynaksız dirençli yıldız (Y) → üçgen (Δ): Ruv = (Ra·Rb + Rb·Rc + Rc·Ra) / Rw."""
+    inc = net.incidence()
+    for m in sorted(inc, key=_key):
+        if m in (net.a, net.b) or len(inc[m]) != 3 or any(e.kind != "R" for e in inc[m]):
+            continue
+        legs = [(e, e.n if e.p == m else e.p) for e in inc[m]]
+        ends = [nd for _, nd in legs]
+        if len(set(ends)) != 3 or m in ends:
+            continue
+        legs.sort(key=lambda t: _key(t[1]))
+        (ra, n1), (rb, n2), (rc, n3) = legs
+        a, b, c = ra.val, rb.val, rc.val
+        s_sum = a * b + b * c + c * a
+        sym = f"({ra.name}·{rb.name}+{rb.name}·{rc.name}+{rc.name}·{ra.name})"
+        numr = f"({num(a)}·{num(b)}+{num(b)}·{num(c)}+{num(c)}·{num(a)})"
+        net.remove(ra, rb, rc)
+        lines = []
+        for u, v, opp in ((n1, n2, rc), (n1, n3, rb), (n2, n3, ra)):
+            name = net.new_star_name("Rd")
+            val = s_sum / opp.val
+            net.els.append(_El("R", name, u, v, val))
+            lines.append(f"{name} = {sym}/{opp.name} = {numr}/{num(opp.val)} = {num(val)} Ω "
+                         f"(Düğüm {u}–{v})")
+        net.used_dy = True
+        net.text(f"Seri/paralel birleştirme ve kaynak dönüşümü kalmadı; {ra.name}, {rb.name}, "
+                 f"{rc.name} yıldız (Y) bağlı (ortak Düğüm {m}) → üçgene (Δ, Düğüm {n1}, {n2}, {n3} "
+                 "arası) dönüştürelim:")
+        for ln in lines:
+            net.math(ln)
+        net.recap()
+        return True
+    return False
+
+
 # ═══════════════════════════════════════════════════════
 #  SON DURUM
 # ═══════════════════════════════════════════════════════
@@ -439,7 +518,8 @@ def _reduce(net: _Net) -> _Final:
             raise _Fail(_STUCK)
         seen.add(sig)
         if (_step_cleanup(net) or _step_chain(net) or _step_parallel(net)
-                or _step_vr(net) or _step_ir(net)):
+                or _step_vr(net) or _step_ir(net)
+                or _step_delta_y(net) or _step_y_delta(net)):
             continue
         raise _Fail(_STUCK)
     raise _Fail(_STUCK)
@@ -493,7 +573,10 @@ def build_source_transform(ctx) -> Tuple[Optional[list], str]:
             "(zıt yönlü olan çıkarılır)")
     s1.math("• Seri dirençler toplanır; seri gerilim kaynakları toplanır (kutupları zıt olan çıkarılır)")
     s1.math("• Akım kaynağına seri bağlı eleman, kolun akımını değiştirmez")
-    s1.note("Yeni elemanlara Ra, Ia, Ea gibi adlar, dönüşümle oluşan ara düğümlere x1, x2, … adı verilir. "
+    if net.used_dy:
+        s1.math("• Başka adım kalmazsa, kaynak içermeyen üçgen (Δ) bağlı dirençler yıldıza (Y) çevrilir: "
+                "Ry = Ra·Rb / (Ra + Rb + Rc)")
+    s1.note("Yeni elemanlara Ra, Ia, Ea (Δ–Y'de Ry, Rd) gibi adlar, dönüşümle oluşan ara düğümlere x1, x2, … (Y düğümleri Y1, Y2, …) adı verilir. "
             "Terminaller (Düğüm " + a + " ve Düğüm " + b + ") hiçbir adımda ortadan kaldırılmaz.")
 
     # ── Bölüm 2: adımlar ──

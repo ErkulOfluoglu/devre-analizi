@@ -73,9 +73,46 @@ def test_opposing_series_voltage_sources_subtract(solve):
     assert any("Vth = V_AB = V₃ " + MINUS + " V₀ = 4 V" in x for x in t)
 
 
-def test_fallback_bridge_with_source(solve):
-    # Köprü: seri/paralel/kaynak dönüşümüyle terminallere indirgenemez → Thevenin anlatımına dönülür
+def test_unbalanced_bridge_uses_delta_wye(solve):
+    # V1 = 20 V + Rs = 100 Ω besler; köprü: R1 = 200 (2–3), R2 = 300 (2–4), R3 = 400 (3–4), R5 = 500 (4–0).
+    # Terminaller 3–0 (yük yeri). Ia = 20/100 = 200 mA (GND → 2).
+    # R1, R2, R3 kaynaksız üçgen → Y:  Ry1 = 200·300/900 = 66.67,  Ry2 = 200·400/900 = 88.89,
+    #   Ry3 = 300·400/900 = 133.3 Ω.  R5 + Ry3 = 633.3 Ω;  Rs + Ry1 = 166.7 Ω → Ib = 20/166.7 = 120 mA
+    #   Rc = 633.3 ∥ 166.7 = 131.9 Ω;  Eb = 120 mA · 131.9 = 15.83 V;  Rth = 88.89 + 131.9 = 220.8 Ω
+    net = (f"V1 1 0 DC 20\nRs 1 2 100\nR1 2 3 200\nR2 2 4 300\nR3 3 4 400\nR5 4 0 500\n{GND}")
+    results, _, errors = solve(net, "DC", analysis_type="SOURCE_TRANSFORM", terminals=("3", "0"))
+    assert not errors
+    th = results.thevenin
+    assert_close(as_complex(th.vth).real, 15.8333)
+    assert_close(as_complex(th.zth).real, 220.8333)
+    t = texts(results)
+    assert any("üçgen (Δ) bağlı (Düğüm 2, 3, 4 arası) → yıldıza (Y) dönüştürelim" in x for x in t)
+    assert any("Ry1 = R1·R2/(R1+R2+R3) = 200·300/(200+300+400) = 66.67 Ω (Düğüm 2–Y1)" in x for x in t)
+    assert any("Vth = V_AB = V₃ " + MINUS + " V₀ = 15.83 V" in x for x in t)
+    assert any(x.startswith("Rth = 220.8 Ω") for x in t)
+    assert any("Çözücünün Thevenin sonucuyla aynı" in x for x in t)
+    assert not any("uygulanamadı" in x for x in t)
+
+
+def test_bridge_with_ideal_source_node_outside_triangle(solve):
+    # Eski köprü örneği: V1 doğrudan Düğüm 1'de; üçgenler kaynaksız dirençli → Δ→Y ile çözülür.
+    # Vth = 8.757 V, Rth = 567.6 Ω (çözücüyle aynı)
     net = f"V1 1 0 DC 12\nR1 1 2 1k\nR2 1 3 2k\nR3 2 3 1k\nR4 2 0 3k\nR5 3 0 4k\n{GND}"
+    results, _, errors = solve(net, "DC", analysis_type="SOURCE_TRANSFORM", terminals=("2", "0"))
+    assert not errors
+    th = results.thevenin
+    assert_close(as_complex(th.vth).real, 8.756757)
+    assert_close(as_complex(th.zth).real, 567.5676)
+    t = texts(results)
+    assert any("yıldıza (Y) dönüştürelim" in x for x in t)
+    assert not any("uygulanamadı" in x for x in t)
+
+
+def test_fallback_bridge_with_source_inside_triangle(solve):
+    # Köprünün orta kolunda V2 (+ R3) var: kaynaksız (yalnızca dirençli) üçgen yok,
+    # seri/paralel ve kaynak dönüşümleri de tıkanıyor → Thevenin anlatımına dönülür
+    net = ("V1 1 0 DC 20\nRs 1 2 100\nR1 2 3 200\nR2 2 4 300\nV2 3 5 DC 5\nR3 5 4 400\n"
+           f"R4 3 0 600\nR5 4 0 500\n{GND}")
     results, _, errors = solve(net, "DC", analysis_type="SOURCE_TRANSFORM", terminals=("2", "0"))
     assert not errors
     assert results.thevenin is not None
