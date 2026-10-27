@@ -40,6 +40,16 @@ namespace CircuitAnalyzer.WPF.Services
         }
 
         /// <summary>
+        /// Ekranı ekran kartı yerine işlemciyle çiz (bazı ekran kartı sürücüleri WPF çiziminde
+        /// bilgisayarı kilitleyebiliyor). Yalnızca bu programı etkiler.
+        /// </summary>
+        public static bool SoftwareRendering
+        {
+            get => GetBool("SoftwareRendering");
+            set => Set("SoftwareRendering", value);
+        }
+
+        /// <summary>
         /// Sağ "Analiz" panelinin kullanıcıca ayarlanan genişliği (piksel); hiç ayarlanmadıysa null.
         /// Sınırlara çekmek okuyanın işidir (MainWindow.ClampAnalysisPanelWidth).
         /// </summary>
