@@ -5,10 +5,10 @@ Ders kitabındaki (Yağımlı-Akar) gösterim: ilk iki sütun sağa tekrar yazı
 sol üstten sağ alta inen üç köşegenin çarpımları toplanır, sağ üstten sol alta
 inen üç köşegenin çarpımları çıkarılır.
 
-           |  5   2   0 |  5   2
-      Δ =  |  2   8  −2 |  2   8
-           |  0  −2   6 |  0  −2
-         = (240 + 0 + 0) − (0 + 20 + 24) = 196
+           |  4  −1   0 |  4  −1
+      Δ =  | −1   6  −2 | −1   6
+           |  0  −2   5 |  0  −2
+         = (120 + 0 + 0) − (0 + 16 + 5) = 99
 
 Δₖ, k. sütunun yerine sağ taraf (b) yazılarak aynı yolla bulunur; xₖ = Δₖ / Δ.
 Anlatım bu satırları "math" bloğunda gösterir (eş aralıklı yazı tipi, hizalı sütunlar).

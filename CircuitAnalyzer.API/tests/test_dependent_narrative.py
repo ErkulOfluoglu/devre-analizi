@@ -72,57 +72,57 @@ def assert_text_matches_solver(res):
 
 
 # ═══════════════════════════════════════════════════════
-#  cramer.py — ders kitabı sayıları
+#  cramer.py — elle hesaplanmış 3×3 örnek
 # ═══════════════════════════════════════════════════════
 
 def fmt(z):
     return num(complex(z).real)
 
 
-def test_cramer3_textbook_example():
+def test_cramer3_hand_checked_example():
     """
-    A = [[5,2,0],[2,8,−2],[0,−2,6]], b = [40,40,−30]
-      Δ  = 5(48−4) − 2(12−0) + 0 = 220 − 24 = 196
-      Δ₁ = 40(48−4) − 2(240−60) = 1760 − 360 = 1400   → x₁ = 1400/196 = 7.143
+    A = [[4,−1,0],[−1,6,−2],[0,−2,5]], b = [12,0,10]
+      Δ  = (120 + 0 + 0) − (0 + 16 + 5) = 99
+      Δ₁ = 12(30−4) + 1(0+20) + 0 = 312 + 20 = 332   → x₁ = 332/99 = 3.354
     """
-    A = [[5, 2, 0], [2, 8, -2], [0, -2, 6]]
-    b = [40, 40, -30]
+    A = [[4, -1, 0], [-1, 6, -2], [0, -2, 5]]
+    b = [12, 0, 10]
     dets = cramer3(A, b, fmt)
     assert [d[0] for d in dets] == ["Δ", "Δ₁", "Δ₂", "Δ₃"]
-    assert dets[0][2] == pytest.approx(196)
-    assert dets[1][2] == pytest.approx(1400)
-    assert dets[1][2] / dets[0][2] == pytest.approx(7.142857, rel=1e-6)
+    assert dets[0][2] == pytest.approx(99)
+    assert dets[1][2] == pytest.approx(332)
+    assert dets[1][2] / dets[0][2] == pytest.approx(3.353535, rel=1e-6)
 
     text = dets[0][1]
     lines = text.splitlines()
-    # ilk iki sütun sağa tekrar yazılmış: | 5 2 0 | 5 2   (Δ = etiketi ortadaki satırda)
-    assert re.sub(r"\s+", " ", lines[0]).strip() == "| 5 2 0 | 5 2"
-    assert re.sub(r"\s+", " ", lines[1]).strip() == "Δ = | 2 8 −2 | 2 8"
-    assert re.sub(r"\s+", " ", lines[2]).strip() == "| 0 −2 6 | 0 −2"
+    # ilk iki sütun sağa tekrar yazılmış: | 4 −1 0 | 4 −1   (Δ = etiketi ortadaki satırda)
+    assert re.sub(r"\s+", " ", lines[0]).strip() == "| 4 −1 0 | 4 −1"
+    assert re.sub(r"\s+", " ", lines[1]).strip() == "Δ = | −1 6 −2 | −1 6"
+    assert re.sub(r"\s+", " ", lines[2]).strip() == "| 0 −2 5 | 0 −2"
     assert " = (" in text.splitlines()[-1] and f") {MINUS} (" in text.splitlines()[-1]
-    assert text.splitlines()[-1].rstrip().endswith("= 196")
-    # Δ = (240 + 0 + 0) − (0 + 20 + 24)  (Sarrus: 5·8·6, 2·(−2)·0, 0·2·(−2) | 0·8·0, 5·(−2)·(−2), 2·2·6)
-    assert "(240 + 0 + 0)" in text and "(0 + 20 + 24)" in text
+    assert text.splitlines()[-1].rstrip().endswith("= 99")
+    # Δ = (120 + 0 + 0) − (0 + 16 + 5)  (Sarrus: 4·6·5, (−1)·(−2)·0, 0·(−1)·(−2) | 0·6·0, 4·(−2)·(−2), (−1)·(−1)·5)
+    assert "(120 + 0 + 0)" in text and "(0 + 16 + 5)" in text
 
     # Δ₁: ilk sütun yerine b
-    assert re.sub(r"\s+", " ", dets[1][1].splitlines()[0]).strip() == "| 40 2 0 | 40 2"
+    assert re.sub(r"\s+", " ", dets[1][1].splitlines()[0]).strip() == "| 12 −1 0 | 12 −1"
 
 
 def test_cramer3_second_example_and_solution():
     """
-    A = [[10,−2,−6],[−2,13,−5],[−6,−5,13]]:
-      Δ = 10(169−25) + 2(−26−30) − 6(10+78) = 1440 − 112 − 528 = 800
+    A = [[7,−2,−3],[−2,9,−4],[−3,−4,10]]:
+      Δ = 7(90−16) + 2(−20−12) − 3(8+27) = 518 − 64 − 105 = 349
     """
-    A = [[10, -2, -6], [-2, 13, -5], [-6, -5, 13]]
-    b = [100, 0, 0]
+    A = [[7, -2, -3], [-2, 9, -4], [-3, -4, 10]]
+    b = [50, 0, 0]
     dets = cramer3(A, b, fmt)
-    assert dets[0][2] == pytest.approx(800)
-    # Δ₁ = 100(169−25) = 14400 → x₁ = 18 ; Cramer çözümü numpy ile aynı
+    assert dets[0][2] == pytest.approx(349)
+    # Δ₁ = 50(90−16) = 3700 → x₁ = 3700/349 ≈ 10.60 ; Cramer çözümü numpy ile aynı
     import numpy as np
     x = np.linalg.solve(np.array(A, dtype=float), np.array(b, dtype=float))
     for k in range(3):
         assert dets[k + 1][2] / dets[0][2] == pytest.approx(x[k], rel=1e-9)
-    assert dets[1][2] / dets[0][2] == pytest.approx(18.0)
+    assert dets[1][2] / dets[0][2] == pytest.approx(3700 / 349)
 
 
 def test_sarrus_value_and_layout():
