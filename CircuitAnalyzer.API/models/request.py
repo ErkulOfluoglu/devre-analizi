@@ -52,6 +52,8 @@ class AnalysisType(str, Enum):
     MILLMAN:  Millman teoremi — iki ana düğüm arasındaki paralel kollar (yalnızca DC)
     SOURCE_TRANSFORM: Kaynak dönüşümü — seçilen iki terminalden Thevenin/Norton eşdeğerine
               gerilim↔akım kaynağı dönüşümleriyle ulaşılır (yalnızca DC)
+    TRANSIENT: Geçici durum (Faz 2) — anahtarlı, tek C ya da tek L içeren DC devrede
+              x(t) = x(∞) + [x(0) − x(∞)]·e^(−t/τ); sonuç yanıtın 'transient' alanında
 
     Not: 'thevenin_terminals' alanı THEVENIN, NORTON ve SOURCE_TRANSFORM analizi için
     hedef port (terminal çifti) tanımlamasında ortak kullanılır.
@@ -63,6 +65,7 @@ class AnalysisType(str, Enum):
     SUPERPOSITION = "SUPERPOSITION"
     MILLMAN = "MILLMAN"
     SOURCE_TRANSFORM = "SOURCE_TRANSFORM"
+    TRANSIENT = "TRANSIENT"
 
 
 # ═══════════════════════════════════════════════════════
@@ -294,7 +297,7 @@ class AnalysisRequest(BaseModel):
 
     analysis_type: AnalysisType = Field(
         default=AnalysisType.NODAL,
-        description="Çözüm yöntemi: NODAL (Düğüm gerilimleri), MESH (Çevre akımları), THEVENIN (Thevenin eşdeğeri), NORTON (Norton eşdeğeri), SUPERPOSITION, MILLMAN (Millman teoremi) veya SOURCE_TRANSFORM (kaynak dönüşümü)",
+        description="Çözüm yöntemi: NODAL (Düğüm gerilimleri), MESH (Çevre akımları), THEVENIN (Thevenin eşdeğeri), NORTON (Norton eşdeğeri), SUPERPOSITION, MILLMAN (Millman teoremi), SOURCE_TRANSFORM (kaynak dönüşümü) veya TRANSIENT (anahtarlı RC/RL geçici durum)",
         examples=["NODAL"],
     )
 

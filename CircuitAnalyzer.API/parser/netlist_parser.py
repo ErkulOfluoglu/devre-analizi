@@ -17,6 +17,8 @@ her satırı regex ile eşleştirir ve ParsedCircuit veri yapısına dönüştü
         VAC1 1 0 AC_PHASOR(10, 30)    → AC Kaynak (fazör alanı)
         Z1 2 3 COMPLEX(50, 30)        → Empedans (dikdörtgensel)
         Z1 2 3 POLAR(58.31, 30.96)    → Empedans (kutupsal)
+        S1 1 2 NO / S1 1 2 NC         → Anahtar: t=0'da kapanır / açılır
+        S1 3 1 2 SPDT                 → İki konumlu anahtar (ortak 3; t<0: 3–1, t≥0: 3–2)
         E1 3 0 V(R2) 3                → Gerilim kontrollü gerilim kaynağı (GKGK)
         G1 3 0 V(-R2) 1m              → Gerilim kontrollü akım kaynağı    (GKAK)
         H1 3 0 I(R2) 100              → Akım kontrollü gerilim kaynağı    (AKGK)
@@ -65,6 +67,12 @@ class ElementType(str, Enum):
     VCCS = "G"
     CCVS = "H"
     CCCS = "F"
+    # Anahtar (Faz 2 — geçici durum). Tüm anahtarlar t = 0 anında konum değiştirir:
+    #   S1 a b NO          t < 0 açık, t ≥ 0 kapalı
+    #   S1 a b NC          t < 0 kapalı, t ≥ 0 açık
+    #   S1 c a b SPDT      t < 0 c–a bağlı (konum 1), t ≥ 0 c–b bağlı (konum 2)
+    # Kapalı anahtar ideal kısa devre, açık anahtar ideal açık devredir.
+    SWITCH = "S"
 
 
 # ── Kaynak grupları (tüm modüller buradan kullanır) ──
@@ -282,6 +290,16 @@ _PATTERNS = {
         re.IGNORECASE
     ),
 
+    # ── Anahtar (Faz 2) ──
+    # S1 a b NO   /   S1 a b NC
+    "switch_two": re.compile(
+        r"^(S\w*)\s+(\w+)\s+(\w+)\s+(NO|NC)\s*$", re.IGNORECASE
+    ),
+    # S1 c a b SPDT   (c = ortak uç, a = konum 1, b = konum 2)
+    "switch_spdt": re.compile(
+        r"^(S\w*)\s+(\w+)\s+(\w+)\s+(\w+)\s+SPDT\s*$", re.IGNORECASE
+    ),
+
     # ── Ölçüm Probu (Yorum satırı) ──
     "probe": re.compile(
         r"^\*\s*PROBE\s+(\w+)\s+([VI])\(([^)]+)\)\s*$"
@@ -354,6 +372,8 @@ def parse_netlist(netlist_text: str) -> ParsedCircuit:
     for element in circuit.elements:
         all_nodes.add(element.node_positive)
         all_nodes.add(element.node_negative)
+        if element.element_type == ElementType.SWITCH and element.params.get("pos2"):
+            all_nodes.add(element.params["pos2"])
     circuit.node_count = len(all_nodes)
     return circuit
 
@@ -462,6 +482,10 @@ def _parse_element_line(
     if m:
         return _parse_dependent(m, line_num, circuit)
 
+    # ── Anahtar: S1 1 2 NO  /  S1 1 2 NC  /  S1 1 2 3 SPDT ──
+    if line[0].upper() == "S":
+        return _parse_switch(line, line_num, circuit)
+
     # E/F/G/H ile başlayan ama biçimi bozuk satır: sessizce atlanırsa devre
     # kaynaksız çözülür ve yanlış sonuç çıkar → hata olarak bildir.
     if line[0].upper() in "EFGH":
@@ -486,6 +510,52 @@ def _reject(circuit: ParsedCircuit, message: str) -> None:
     """Çözümü engelleyen Türkçe hata: hem uyarılara hem hatalara yazılır."""
     circuit.warnings.append(message)
     circuit.errors.append(message)
+
+
+def _parse_switch(
+    line: str, line_num: int, circuit: ParsedCircuit
+) -> Optional[ParsedElement]:
+    """
+    Anahtar satırını ayrıştırır (Faz 2 sözleşmesi).
+
+    S1 a b NO       → params: kind="NO"   (t<0 açık,  t≥0 kapalı)
+    S1 a b NC       → params: kind="NC"   (t<0 kapalı, t≥0 açık)
+    S1 c a b SPDT   → params: kind="SPDT", common=c, pos1=a, pos2=b
+                      (t<0 c–a bağlı, t≥0 c–b bağlı)
+
+    node_positive / node_negative: NO/NC'de (a, b); SPDT'de (c, a). SPDT'nin
+    ikinci konumu params["pos2"]'dedir. Geçersiz satırlar Türkçe hatayla reddedilir.
+    """
+    expected = ("Beklenen biçim: S1 <a> <b> NO (t = 0'da kapanır), S1 <a> <b> NC "
+                "(t = 0'da açılır) ya da S1 <ortak> <konum 1> <konum 2> SPDT.")
+    m = _PATTERNS["switch_two"].match(line)
+    if m:
+        sid, a, b, kind = m.group(1), m.group(2), m.group(3), m.group(4).upper()
+        if a == b:
+            _reject(circuit,
+                    f"Satır {line_num}: {sid} anahtarının iki ucu da aynı düğüme (Düğüm {a}) "
+                    "bağlı; böyle bir anahtar devreyi değiştirmez. Uçlarını farklı düğümlere bağlayın.")
+            return None
+        return ParsedElement(
+            id=sid, element_type=ElementType.SWITCH,
+            node_positive=a, node_negative=b, value=0.0,
+            params={"kind": kind},
+        )
+    m = _PATTERNS["switch_spdt"].match(line)
+    if m:
+        sid, c, a, b = m.group(1), m.group(2), m.group(3), m.group(4)
+        if len({c, a, b}) < 3:
+            _reject(circuit,
+                    f"Satır {line_num}: {sid} iki konumlu anahtarının ortak ucu (Düğüm {c}) ile "
+                    f"iki konumu (Düğüm {a} ve Düğüm {b}) birbirinden farklı düğümler olmalı.")
+            return None
+        return ParsedElement(
+            id=sid, element_type=ElementType.SWITCH,
+            node_positive=c, node_negative=a, value=0.0,
+            params={"kind": "SPDT", "common": c, "pos1": a, "pos2": b},
+        )
+    _reject(circuit, f"Satır {line_num}: Anahtar satırı anlaşılamadı → '{line}'. {expected}")
+    return None
 
 
 def _parse_dependent(
@@ -696,6 +766,95 @@ def _parse_impedance_polar(m: re.Match) -> ParsedElement:
 
 
 # ═══════════════════════════════════════════════════════
+#  ANAHTARLAR — t < 0 ve t > 0 devreleri (Faz 2)
+# ═══════════════════════════════════════════════════════
+
+# Anahtarlı devre başka bir yöntemle çözülürken anlatımın başına eklenen not
+SWITCH_NOTE = ("Anahtarlar t > 0 konumunda alındı; anahtarın etkisini görmek için "
+               "Geçici Durum yöntemini seçin.")
+
+
+def has_switches(circuit: ParsedCircuit) -> bool:
+    """Devrede en az bir anahtar var mı?"""
+    return any(e.element_type == ElementType.SWITCH for e in circuit.elements)
+
+
+def switch_closed_pair(switch: ParsedElement, when: str) -> Optional[Tuple[str, str]]:
+    """
+    Anahtarın o anda kısa devre ettiği düğüm çifti; açıksa None.
+
+    when: "before" (t < 0) ya da "after" (t ≥ 0).
+        NO:   before açık,  after kapalı (a–b)
+        NC:   before kapalı (a–b), after açık
+        SPDT: before c–a,   after c–b (her zaman biri kapalıdır)
+    """
+    if when not in ("before", "after"):
+        raise ValueError("when 'before' ya da 'after' olmalı.")
+    kind = switch.params.get("kind")
+    if kind == "SPDT":
+        target = switch.params["pos1"] if when == "before" else switch.params["pos2"]
+        return switch.params["common"], target
+    closed = (kind == "NC") if when == "before" else (kind == "NO")
+    return (switch.node_positive, switch.node_negative) if closed else None
+
+
+def circuit_at_time(circuit: ParsedCircuit, when: str) -> ParsedCircuit:
+    """
+    Anahtarlar o zamanki konumuna getirilmiş devre kopyası.
+
+    when="before" → t < 0 konumu, when="after" → t > 0 konumu.
+    Kapalı anahtar ideal kısa devredir: iki ucu TEK düğümde birleşir (GND "0" varsa
+    o kalır, yoksa küçük numara). Açık anahtar devreden çıkarılır. Anahtarsız
+    devre için aynı nesne döner. Çıktıda hiç anahtar kalmaz; çözücü ve anlatım
+    bu kopyayı sıradan bir devre gibi kullanır.
+    """
+    if not has_switches(circuit):
+        return circuit
+
+    parent: Dict[str, str] = {}
+
+    def find(n: str) -> str:
+        parent.setdefault(n, n)
+        while parent[n] != n:
+            parent[n] = parent[parent[n]]
+            n = parent[n]
+        return n
+
+    for sw in circuit.elements:
+        if sw.element_type != ElementType.SWITCH:
+            continue
+        pair = switch_closed_pair(sw, when)
+        if pair is None:
+            continue
+        ra, rb = find(pair[0]), find(pair[1])
+        if ra != rb:
+            keep, drop = sorted((ra, rb), key=lambda x: (x != "0", len(x), x))
+            parent[drop] = keep
+
+    def rename(n: str) -> str:
+        return find(n) if n in parent else n
+
+    new = ParsedCircuit(
+        probes=[], has_ground=circuit.has_ground, raw_netlist=circuit.raw_netlist,
+        warnings=list(circuit.warnings), errors=list(circuit.errors),
+    )
+    for e in circuit.elements:
+        if e.element_type == ElementType.SWITCH:
+            continue
+        new.elements.append(dataclasses.replace(
+            e, node_positive=rename(e.node_positive), node_negative=rename(e.node_negative),
+            params=dict(e.params)))
+    for p in circuit.probes:
+        new.probes.append(ParsedProbe(
+            id=p.id, probe_type=p.probe_type,
+            target=rename(p.target) if p.probe_type == "V" else p.target))
+    for n, xy in circuit.node_positions.items():
+        new.node_positions.setdefault(rename(n), xy)
+    new.node_count = len({n for e in new.elements for n in (e.node_positive, e.node_negative)})
+    return new
+
+
+# ═══════════════════════════════════════════════════════
 #  LCAPY DÖNÜŞTÜRÜCÜ
 # ═══════════════════════════════════════════════════════
 
@@ -726,6 +885,9 @@ def to_lcapy_netlist(circuit: ParsedCircuit, frequency: float = None) -> str:
     Returns:
         str: lcapy-uyumlu Netlist metni
     """
+    if has_switches(circuit):
+        # lcapy anahtar bilmez: anahtarlar t > 0 konumunda (kapalı = tel) alınır
+        circuit = circuit_at_time(circuit, "after")
     lines = []
     sense = lcapy_sense_map(circuit)
     by_id = {e.id: e for e in circuit.elements}

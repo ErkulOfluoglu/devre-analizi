@@ -29,6 +29,7 @@ import sympy
 
 from models.response import (
     AnalysisResults, SolutionStep, ComplexNumber,
+    ExplanationBlock, ExplanationSection, TransientQuantityResult, TransientResult,
     NodeVoltage, ElementCurrent, ProbeResult, TheveninResult, NortonResult,
     ElementPower, PowerAnalysis, SeriesParallelReduction, MeshInfo,
     SourceContribution,
@@ -41,6 +42,7 @@ from parser.netlist_parser import (
     ElementType, to_lcapy_netlist, lcapy_sense_map,
     ALL_SOURCES, CURRENT_SOURCES, DEPENDENT_SOURCES, DEPENDENT_CURRENT_OUTPUT,
     VOLTAGE_SOURCES,
+    SWITCH_NOTE, circuit_at_time, has_switches,
 )
 from explainer.step_generator import generate_solution_steps
 from explainer.topology import generate_topology_step
@@ -49,6 +51,9 @@ from solver.frequency_check import check_source_frequencies
 from solver.mesh import analyze_meshes
 from solver.superposition import solve_contributions
 from practice.questions import build_questions
+from practice.transient_questions import build_transient_questions
+from explainer.transient_narrative import build_transient_explanation
+from solver.transient import TransientNotApplicable, analyze_transient
 
 
 # ═══════════════════════════════════════════════════════
@@ -415,6 +420,94 @@ def _evaluate_impedance(
 # ═══════════════════════════════════════════════════════
 
 def solve_circuit(
+    parsed: ParsedCircuit,
+    mode: AnalysisMode,
+    frequency: Optional[float] = None,
+    analysis_type: AnalysisType = AnalysisType.NODAL,
+    thevenin_terminals: Optional[TheveninTerminals] = None,
+    target_probes: Optional[List[ProbeTarget]] = None,
+    warnings: Optional[List[str]] = None
+) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
+    """
+    Devreyi çözer (anahtarlı devreler için giriş noktası).
+
+    • TRANSIENT: geçici durum (RC / RL) çözülür; devre uygun değilse Türkçe gerekçeyle
+      anahtarların t > 0 konumunda Düğüm Gerilimleri yöntemine döner.
+    • Anahtar içeren devre BAŞKA bir yöntemle çözülürse anahtarlar t > 0 konumunda alınır
+      ve anlatımın başına bu durumu söyleyen bir not eklenir.
+    • Anahtarsız devrede doğrudan _solve_core çalışır.
+    """
+    if analysis_type == AnalysisType.TRANSIENT:
+        return _solve_transient(parsed, mode, frequency, target_probes, warnings)
+    if has_switches(parsed) and not parsed.errors:
+        results, steps, errors = _solve_core(
+            circuit_at_time(parsed, "after"), mode, frequency, analysis_type,
+            thevenin_terminals, target_probes, warnings)
+        results.explanation.insert(0, ExplanationSection(
+            title="Anahtar Konumu",
+            blocks=[ExplanationBlock(kind="note", text=SWITCH_NOTE)]))
+        return results, steps, errors
+    return _solve_core(parsed, mode, frequency, analysis_type,
+                       thevenin_terminals, target_probes, warnings)
+
+
+def _solve_transient(
+    parsed: ParsedCircuit,
+    mode: AnalysisMode,
+    frequency: Optional[float],
+    target_probes: Optional[List[ProbeTarget]],
+    warnings: Optional[List[str]],
+) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
+    """
+    Geçici durum: devre t > 0 konumunda sıradan DC (ya da verilen mod) analiziyle çözülür
+    (düğüm gerilimleri, akımlar, güç = t → ∞ kararlı hâl); geçici durum uygulanabilirse
+    anlatım, alıştırma soruları ve `transient` sonucu bunların yerine/üstüne yazılır.
+    Uygulanamaz ya da lcapy doğrulaması tutmazsa anlatımın başına Türkçe gerekçe eklenir.
+    """
+    after = circuit_at_time(parsed, "after")
+    results, steps, errors = _solve_core(
+        after, mode, frequency, AnalysisType.NODAL, None, target_probes, warnings)
+    if parsed.errors:
+        return results, steps, errors
+
+    analysis = None
+    try:
+        analysis = analyze_transient(parsed, mode == AnalysisMode.DC)
+    except TransientNotApplicable as e:
+        reason = str(e)
+    except Exception as e:      # beklenmeyen hata: yanlış sonuç yerine dürüst yedek
+        reason = f"Geçici durum hesaplanırken beklenmeyen bir hata oluştu ({type(e).__name__})."
+
+    if analysis is None:
+        fb = ExplanationSection(title="Geçici Durum (Anahtar)", blocks=[ExplanationBlock(
+            kind="note",
+            text=(f"Bu devrede geçici durum analizi uygulanamadı: {reason} "
+                  "Devreyi anahtarların t > 0 konumunda “Düğüm Gerilimleri” yöntemiyle "
+                  "çözüyoruz."))])
+        results.explanation.insert(0, fb)
+        return results, steps, errors
+
+    # Geçici durum çözüldü. t > 0 devresinin sıradan çözümü tekil çıktıysa (ör: C'nin
+    # bağlı olduğu kol yüzer) o hata geçerli değildir: geçici durumun kendi çözücüsü kullanıldı.
+    errors = [m for m in errors if not m.startswith(UNSOLVABLE_PREFIX)]
+    results.explanation = build_transient_explanation(analysis)
+    results.practice = build_transient_questions(analysis, make_complex_number)
+    results.transient = TransientResult(
+        element=analysis.storage.id,
+        kind=analysis.kind,
+        tau=sig_round(analysis.tau),
+        r_th=sig_round(analysis.r_th),
+        quantities=[
+            TransientQuantityResult(
+                id=q.id, label=q.label, unit=q.unit,
+                before=sig_round(q.before), start=sig_round(q.start), final=sig_round(q.final))
+            for q in analysis.quantities
+        ],
+    )
+    return results, steps, errors
+
+
+def _solve_core(
     parsed: ParsedCircuit,
     mode: AnalysisMode,
     frequency: Optional[float] = None,

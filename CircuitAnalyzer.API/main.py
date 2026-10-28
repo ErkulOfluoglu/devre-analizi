@@ -31,7 +31,7 @@ from models.response import (
     LlmPullStatus, LlmStatusResponse
 )
 from practice.checker import check_answer
-from parser.netlist_parser import parse_netlist, to_lcapy_netlist
+from parser.netlist_parser import parse_netlist, to_lcapy_netlist, circuit_at_time
 from solver.circuit_solver import solve_circuit, UNSOLVABLE_PREFIX
 
 
@@ -221,7 +221,8 @@ async def analyze_circuit(
         results=results,
         solution_steps=solution_steps,
         errors=errors,
-        warnings=warnings
+        warnings=warnings,
+        transient=results.transient,
     )
 
 
@@ -482,9 +483,12 @@ def llm_ask(request: LlmAskRequest):
         frequency = next((e.params["frequency"] for e in parsed.elements
                           if e.params.get("frequency")), None)
 
+    # Geçici durum çözüldüyse asistan anahtarlı devreyi görür; diğer durumlarda devre t > 0
+    # konumuyla çözülmüştür, asistan da aynı devreyi görsün
+    shown = parsed if results.transient is not None else circuit_at_time(parsed, "after")
     try:
         out = answer_question(
-            parsed, results, request.analysis_type, is_dc, frequency,
+            shown, results, request.analysis_type, is_dc, frequency,
             request.thevenin_terminals, request.question,
             [t.model_dump() for t in request.history], model,
             practice=request.practice, practice_questions=request.practice_questions,

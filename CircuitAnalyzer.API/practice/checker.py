@@ -27,13 +27,14 @@ REL_OK = 0.01       # doğru
 REL_CLOSE = 0.05    # çok yakın
 REL_DIAG = 0.03     # hata teşhisinde oranların toleransı
 
-_QUANTITY = {"V": "gerilim", "A": "akım", "Ω": "direnç/empedans", "W": "aktif güç"}
-_UNIT_NAME = {"V": "volt (V)", "A": "amper (A)", "Ω": "ohm (Ω)", "W": "watt (W)"}
+_QUANTITY = {"V": "gerilim", "A": "akım", "Ω": "direnç/empedans", "W": "aktif güç", "s": "süre"}
+_UNIT_NAME = {"V": "volt (V)", "A": "amper (A)", "Ω": "ohm (Ω)", "W": "watt (W)", "s": "saniye (s)"}
 _PREFIX_EXAMPLE = {
     "A": "4 mA için “4m” ya da “4 mA”",
     "V": "50 mV için “50m” ya da “50 mV”",
     "Ω": "2.2 kΩ için “2.2k” ya da “2.2 kΩ”",
     "W": "3.6 mW için “3.6m” ya da “3.6 mW”",
+    "s": "2 ms için “2m” ya da “2 ms”",
 }
 
 

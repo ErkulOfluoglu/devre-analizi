@@ -37,6 +37,7 @@ _METHOD_NAMES = {
     AnalysisType.SUPERPOSITION: "Süperpozisyon",
     AnalysisType.MILLMAN: "Millman teoremi",
     AnalysisType.SOURCE_TRANSFORM: "Kaynak dönüşümü (Thevenin/Norton eşdeğerine ulaşma)",
+    AnalysisType.TRANSIENT: "Geçici durum (anahtarlı RC / RL devresi, zaman sabitesi τ)",
 }
 
 _RULES = """Sen meslek yüksekokulu elektronik öğrencilerine devre analizi anlatan sabırlı bir öğretmensin.
@@ -88,6 +89,13 @@ def describe_element(e: ParsedElement) -> str:
         f_txt = f", f = {freq:g} Hz" if freq else ""
         return (f"{e.id}: AC akım kaynağı, genlik (tepe) {eng(amp, 'A')}, faz {p.get('phase', 0):g}°{f_txt}, "
                 f"akım kaynak içinde {_node(e.node_positive)} → {_node(e.node_negative)} yönünde")
+    if t == ElementType.SWITCH:
+        kind = p.get("kind")
+        if kind == "SPDT":
+            return (f"{e.id}: iki konumlu anahtar, ortak uç {_node(p['common'])}; t < 0'da "
+                    f"{_node(p['pos1'])} ile, t = 0'da {_node(p['pos2'])} ile bağlanır")
+        what = "t < 0'da açık, t = 0'da kapanır" if kind == "NO" else "t < 0'da kapalı, t = 0'da açılır"
+        return f"{e.id}: anahtar, {between}; {what}"
     if t in DEPENDENT_SOURCES:
         # Ters kontrolde eksi yazılmaz; V_R2 / I_R2 ekrandaki işaretlere göre tanımlanır
         ctrl = f"{p['control_kind']}_{p['control_id']}"
@@ -248,6 +256,11 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
         if results.norton.z_n:
             values.append(cn(results.norton.z_n))
     values += [cn(m.current) for m in results.meshes]
+    tr = getattr(results, "transient", None)
+    if tr is not None:
+        values += [tr.tau, tr.r_th]
+        for q in tr.quantities:
+            values += [q.before, q.start, q.final]
     for c in results.superposition:
         values += [cn(v) for v in c.node_voltages.values()]
         values += [cn(v) for v in c.element_currents.values()]

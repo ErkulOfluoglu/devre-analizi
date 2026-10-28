@@ -409,7 +409,8 @@ class PracticeQuestion(BaseModel):
     id: str = Field(..., description="Soru kimliği (ör: V2, I_R1, MESH1, VTH, RTH)")
     label: str = Field(..., description="Gösterim sembolü (ör: V₂, I_R1, I₁, Vth)")
     description: str = Field(..., description="Türkçe soru metni")
-    unit: Literal["V", "A", "Ω", "W"] = Field(..., description="Beklenen birim")
+    unit: Literal["V", "A", "Ω", "W", "s"] = Field(
+        ..., description="Beklenen birim (s: saniye — geçici durum sorularında zaman sabitesi / süre)")
     group: Literal["main", "extra"] = Field(
         ..., description="main: yöntemin asıl bilinmeyenleri; extra: ek sorular")
     is_ac: bool = Field(..., description="True → cevap fazör (karmaşık) olmalı")
@@ -498,6 +499,37 @@ class LlmAnswerResponse(BaseModel):
         default=None, description="Doğrulanamayan / gizlenen sayılar için Türkçe uyarı")
 
 
+class TransientQuantityResult(BaseModel):
+    """
+    Geçici durumda bir büyüklüğün zaman fonksiyonu.
+
+    t < 0 iken değer `before` (sabit); t ≥ 0 iken
+    x(t) = final + (start − final)·e^(−t/τ).
+    """
+    id: str = Field(..., description="Büyüklük kimliği (ör: V_C1, I_C1)")
+    label: str = Field(..., description="Gösterim etiketi (ör: V_C1)")
+    unit: Literal["V", "A"] = Field(..., description="Birim (SI)")
+    before: float = Field(..., description="x(0⁻): anahtar değişmeden önceki sabit değer")
+    start: float = Field(..., description="x(0⁺): anahtar değiştikten hemen sonraki değer")
+    final: float = Field(..., description="x(∞): kararlı hâl değeri")
+
+
+class TransientResult(BaseModel):
+    """
+    Geçici durum sonucu (analysis_type = TRANSIENT ve devre uygunsa dolu, yoksa null).
+
+    quantities: ilk iki büyüklük depolayıcı elemanın gerilimi (V) ve akımı (I)'dır;
+    sonrasında isteğe bağlı olarak diğer elemanlar gelebilir. Yönler elemanın netlistteki
+    düğüm sırasıyla aynıdır (akım n1 → n2, V = V(n1) − V(n2)).
+    """
+    element: str = Field(..., description="Depolayıcı elemanın Id'si (ör: C1)")
+    kind: Literal["C", "L"] = Field(..., description="'C' kondansatör, 'L' bobin")
+    tau: float = Field(..., description="Zaman sabitesi τ (saniye)")
+    r_th: float = Field(..., description="Elemanın t > 0 devresinde gördüğü direnç (ohm)")
+    quantities: List[TransientQuantityResult] = Field(
+        default_factory=list, description="Zamana bağlı büyüklükler (V sonra I)")
+
+
 class AnalysisResults(BaseModel):
     """Tüm analiz sonuçlarını birleştiren konteyner."""
     node_voltages: Dict[str, NodeVoltage] = Field(
@@ -535,6 +567,9 @@ class AnalysisResults(BaseModel):
     practice: List[PracticeQuestion] = Field(
         default_factory=list,
         description="Alıştırma modu soruları — öğrenci önce kendisi çözer, cevaplar /practice/check ile kontrol edilir")
+    transient: Optional[TransientResult] = Field(
+        default=None, exclude=True,
+        description="İç kullanım: çözücü sonucu buraya yazar; API yanıtına AnalysisResponse.transient olarak taşınır")
 
 
 # ═══════════════════════════════════════════════════════
@@ -568,6 +603,11 @@ class AnalysisResponse(BaseModel):
     errors: List[str] = Field(
         default_factory=list,
         description="Hata ve uyarı mesajları")
+    transient: Optional[TransientResult] = Field(
+        default=None,
+        description=(
+            "Geçici durum (TRANSIENT) sonucu: zaman sabitesi ve zamana bağlı büyüklükler. "
+            "Yalnızca TRANSIENT başarılıysa dolu, aksi hâlde null"))
     warnings: List[str] = Field(
         default_factory=list,
         description=(

@@ -52,7 +52,7 @@ def test_enum_definitions(client):
 
     assert schemas["AnalysisMode"]["enum"] == ["DC", "AC_TIME", "AC_PHASOR"]
     assert schemas["AnalysisType"]["enum"] == ["NODAL", "MESH", "THEVENIN", "NORTON", "SUPERPOSITION",
-                                                  "MILLMAN", "SOURCE_TRANSFORM"]
+                                                  "MILLMAN", "SOURCE_TRANSFORM", "TRANSIENT"]
 
 
 def test_all_schema_properties_have_descriptions(client):
@@ -163,6 +163,7 @@ def test_wire_format_regression_guard(client):
         "solution_steps",
         "errors",
         "warnings",   # Madde 8 — eklemeli (additive) alan
+        "transient",  # Faz 2 — eklemeli alan (yalnızca TRANSIENT başarılıysa dolu)
     }
     assert response_props == expected_response_props, f"AnalysisResponse alanları değişmiş: {response_props}"
 
