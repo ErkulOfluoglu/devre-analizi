@@ -358,7 +358,7 @@ def test_api_get_llm_status_not_available_no_app(client, monkeypatch):
     data = resp.json()
     assert data["available"] is False
     assert data["ollama_installed"] is False
-    assert "ollama.com" in data["message"]
+    assert "ollama.com adresinden" in data["message"]
 
 
 def test_api_get_llm_status_available_with_model(client, monkeypatch):

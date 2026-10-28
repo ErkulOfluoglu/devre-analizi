@@ -207,7 +207,7 @@ def test_api_status_unavailable(client, monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["available"] is False
-    assert "ollama.com" in data["message"]
+    assert "ollama.com adresinden" in data["message"]
 
 
 def test_api_status_no_models(client, monkeypatch):

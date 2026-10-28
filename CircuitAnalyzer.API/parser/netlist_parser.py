@@ -286,7 +286,7 @@ _PATTERNS = {
     # Gruplar: (1)=ID, (2)=n+, (3)=n−, (4)=V|I, (5)='-' (ters çevirme) veya '',
     #          (6)=kontrol elemanı, (7)=kazanç
     "dependent": re.compile(
-        r"^([EFGH]\w*)\s+(\w+)\s+(\w+)\s+([VI])\(\s*(-?)\s*(\w+)\s*\)\s+([\w.eE+-]+)\s*$",
+        r"^([EFGH]\w*)\s+(\w+)\s+(\w+)\s+([VI])\(\s*(?:(-)\s*)?(\w+)\s*\)\s+([\w.eE+-]+)\s*$",
         re.IGNORECASE
     ),
 
