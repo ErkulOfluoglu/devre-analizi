@@ -191,6 +191,13 @@ namespace CircuitAnalyzer.WPF
             Top = 0;
             ShowActivated = false;
             Height = 1500;
+            // Görüntü kullanıcının kaydettiği panel genişliğine bağlı kalmasın
+            AnalysisColumn.Width = new GridLength(AnalysisPanelDefaultWidth);
+            // README görselleri için: --width 1600 (çizim alanı genişler)
+            string[] cmd = Environment.GetCommandLineArgs();
+            int w = Array.FindIndex(cmd, a => string.Equals(a, "--width", StringComparison.OrdinalIgnoreCase));
+            if (w >= 0 && w + 1 < cmd.Length && double.TryParse(cmd[w + 1], out double width))
+                Width = width;
             try
             {
                 if (options.OpenFile is { } filePath)

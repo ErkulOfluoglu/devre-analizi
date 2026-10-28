@@ -32,6 +32,7 @@ namespace CircuitAnalyzer.WPF
         // ── Standart sayısal alanlar ──
         private readonly List<TextBox> _valueBoxes = new();
         private readonly List<Action<double>> _setters = new();
+        private readonly List<double> _unitScales = new();
 
         // ── Karmaşık sayı alanları ──
         private TextBox? _complexInputBox = null;
@@ -105,13 +106,13 @@ namespace CircuitAnalyzer.WPF
                 case Capacitor c:
                     Title = $"{c.Id} — Kapasitör Düzenle";
                     AddField("Kapasitans (µF)", c.Value * 1e6,
-                        v => c.Value = v * 1e-6);
+                        v => c.Value = v * 1e-6, unitScale: 1e6);
                     break;
 
                 case Inductor l:
                     Title = $"{l.Id} — Bobin Düzenle";
                     AddField("İndüktans (mH)", l.Value * 1e3,
-                        v => l.Value = v * 1e-3);
+                        v => l.Value = v * 1e-3, unitScale: 1e3);
                     break;
 
                 case TestProbe probe:
@@ -237,6 +238,7 @@ namespace CircuitAnalyzer.WPF
             _dynamicPanel.Children.Clear();
             _valueBoxes.Clear();
             _setters.Clear();
+            _unitScales.Clear();
             _complexInputBox = null;
             _complexSetter = null;
 
@@ -312,6 +314,7 @@ namespace CircuitAnalyzer.WPF
             _dynamicPanel.Children.Clear();
             _valueBoxes.Clear();
             _setters.Clear();
+            _unitScales.Clear();
             _complexInputBox = null;
             _complexSetter = null;
 
@@ -531,14 +534,16 @@ namespace CircuitAnalyzer.WPF
         // ═══════════════════════════════════════════════════════
 
         /// <summary>Standart sayısal alan ekler (ana panele).</summary>
-        private void AddField(string label, double currentValue, Action<double> setter)
+        /// <param name="unitScale">Alan birimi SI biriminin kaçta biriyse (µF için 1e6). Önekli
+        /// girişler ("100µ", "47 mH") SI değeri olarak okunup alan birimine çevrilir.</param>
+        private void AddField(string label, double currentValue, Action<double> setter, double unitScale = 1)
         {
-            AddFieldTo(PropertiesPanel, label, currentValue, setter);
+            AddFieldTo(PropertiesPanel, label, currentValue, setter, unitScale);
         }
 
         /// <summary>Standart sayısal alan ekler (belirtilen panele).</summary>
         private void AddFieldTo(Panel panel, string label, double currentValue,
-            Action<double> setter)
+            Action<double> setter, double unitScale = 1)
         {
             var lbl = new TextBlock
             {
@@ -558,6 +563,7 @@ namespace CircuitAnalyzer.WPF
 
             _valueBoxes.Add(textBox);
             _setters.Add(setter);
+            _unitScales.Add(unitScale);
         }
 
         /// <summary>
@@ -707,8 +713,19 @@ namespace CircuitAnalyzer.WPF
         //  DOĞRULAMA VE UYGULAMA
         // ═══════════════════════════════════════════════════════
 
-        private static bool TryParseSpiceNumber(string text, out double val)
-            => TurkishNumber.TryParseSpice(text, out val);
+        /// <summary>
+        /// Alan değerini okur. Düz sayı ("2,2") alanın kendi birimindedir (ör. µF);
+        /// önekli/birimli giriş ("100µ", "47 mH") SI değeri olarak okunup alan birimine çevrilir.
+        /// </summary>
+        internal static bool TryParseFieldValue(string text, double unitScale, out double val)
+        {
+            if (TurkishNumber.TryParse(text, out val))
+                return true;
+            if (!TurkishNumber.TryParseSpice(text, out double si))
+                return false;
+            val = si * unitScale;
+            return true;
+        }
 
         private void BtnApply_Click(object sender, RoutedEventArgs e)
         {
@@ -717,7 +734,7 @@ namespace CircuitAnalyzer.WPF
             {
                 string text = _valueBoxes[i].Text.Trim();
 
-                if (!TryParseSpiceNumber(text, out double val))
+                if (!TryParseFieldValue(text, _unitScales[i], out double val))
                 {
                     MessageBox.Show(
                         $"Geçersiz sayı: \"{text}\"\n\n" +
@@ -901,6 +918,7 @@ namespace CircuitAnalyzer.WPF
             _dynamicPanel.Children.Clear();
             _valueBoxes.Clear();
             _setters.Clear();
+            _unitScales.Clear();
             _stringInputBox = null;
             _stringSetter = null;
 

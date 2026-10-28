@@ -105,6 +105,35 @@ public class TurkishNumberTests
     }
 
     [Theory]
+    [InlineData("1M", 1e6)]
+    [InlineData("2,2 MΩ", 2.2e6)]
+    [InlineData("1meg", 1e6)]
+    [InlineData("1MEG", 1e6)]
+    [InlineData("5m", 5e-3)]
+    [InlineData("50 mA", 50e-3)]
+    public void EditorParsing_UpperMIsMegaLowerMIsMilli(string input, double expected)
+    {
+        Assert.True(TurkishNumber.TryParseSpice(input, out double val));
+        Assert.Equal(expected, val, 9);
+    }
+
+    [Theory]
+    [InlineData("2,2", 1e6, 2.2)]        // düz sayı alanın biriminde (µF)
+    [InlineData("100µ", 1e6, 100)]       // 100 µF
+    [InlineData("100u", 1e6, 100)]
+    [InlineData("470n", 1e6, 0.47)]      // 470 nF = 0,47 µF
+    [InlineData("10 µF", 1e6, 10)]
+    [InlineData("47m", 1e3, 47)]         // 47 mH
+    [InlineData("1,5", 1e3, 1.5)]        // 1,5 mH
+    [InlineData("4,7k", 1, 4700)]        // direnç alanı
+    [InlineData("1e-3", 1e6, 1e-3)]      // üslü düz sayı da alanın biriminde
+    public void EditorField_PrefixedInputIsConvertedToFieldUnit(string input, double unitScale, double expected)
+    {
+        Assert.True(CircuitAnalyzer.WPF.ElementEditorWindow.TryParseFieldValue(input, unitScale, out double val));
+        Assert.Equal(expected, val, 9);
+    }
+
+    [Theory]
     [InlineData("1.000,5")]
     [InlineData("1,000.5")]
     [InlineData("1.2.3")]

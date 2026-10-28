@@ -97,8 +97,11 @@ namespace CircuitAnalyzer.WPF.Services
                 return true;
             }
 
+            // Büyük M = mega (ders kitabı ve alıştırma modu gibi); küçük m = mili
+            bool upperM = match.Groups[2].Value.StartsWith('M') && !suffix.StartsWith("mil");
+
             double multiplier = 1.0;
-            if (suffix.StartsWith("meg")) multiplier = 1e6;
+            if (suffix.StartsWith("meg") || upperM) multiplier = 1e6;
             else if (suffix.StartsWith("mil")) multiplier = 25.4e-6;
             else if (suffix.StartsWith("g")) multiplier = 1e9;
             else if (suffix.StartsWith("t")) multiplier = 1e12;

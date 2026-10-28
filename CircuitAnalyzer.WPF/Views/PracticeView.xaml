@@ -14,7 +14,7 @@
                    Style="{DynamicResource Text.Caption}"
                    Margin="0,0,0,3"/>
 
-        <TextBlock Text="Yazım: 4m · 4 mA · 0.004 · 2.5k   |   AC: 3.03∠-72.3 veya 0.92-j2.89"
+        <TextBlock Text="Yazım: 4m · 4 mA · 0,004 · 2,5k   |   AC: 3,03∠-72,3 veya 0,92-j2,89"
                    Style="{DynamicResource Text.Caption}"
                    Margin="0,0,0,10"/>
 
