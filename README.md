@@ -19,7 +19,7 @@
 <p align="center">
   <a href="../../releases/latest"><b>⬇ Son sürümü indir</b></a> ·
   <a href="../../wiki">📖 Kullanım rehberi (Wiki)</a> ·
-  <a href="../../wiki/SSS">❓ Sıkça sorulanlar</a> ·
+  <a href="../../wiki/S%C4%B1k%C3%A7a-Sorulan-Sorular">❓ Sıkça sorulanlar</a> ·
   <a href="../../issues">💬 Hata bildir / öneri</a>
 </p>
 
@@ -42,13 +42,13 @@ https://github.com/user-attachments/assets/8298aa93-6456-4b34-bcca-171816584310
 
 | Yöntem | Ne bulursunuz? | Rehber |
 |---|---|---|
-| **Düğüm gerilimleri** | Bütün düğüm gerilimleri ve eleman akımları (bağımlı kaynaklar ve Cramer kuralıyla) | [Wiki](../../wiki/Yontem-Dugum-Gerilimleri) |
-| **Çevre akımları** | Göz (çevre) akımları ve eleman akımları | [Wiki](../../wiki/Yontem-Cevre-Akimlari) |
-| **Thevenin / Norton** | İki uç arasındaki eşdeğer devre ve maksimum güç aktarımı | [Wiki](../../wiki/Yontem-Thevenin-ve-Norton) |
-| **Süperpozisyon** | Her kaynağın ayrı katkısı ve toplamı (farklı frekanslı AC kaynaklar dahil) | [Wiki](../../wiki/Yontem-Superpozisyon) |
-| **Millman** | Paralel kollu devrelerde iki düğüm arası gerilim, tek formülle | [Wiki](../../wiki/Yontem-Millman) |
-| **Kaynak dönüşümü** | Gerilim ⇄ akım kaynağı dönüşümleriyle sadeleştirme, gerekirse Δ–Y | [Wiki](../../wiki/Yontem-Kaynak-Donusumu) |
-| **Geçici durum (anahtar)** | Kondansatör/bobin şarj–deşarjı: τ, x(t) formülü, τ tablosu, enerji ve zaman grafiği | [Wiki](../../wiki/Yontem-Gecici-Durum) |
+| **Düğüm gerilimleri** | Bütün düğüm gerilimleri ve eleman akımları (bağımlı kaynaklar ve Cramer kuralıyla) | [Wiki](../../wiki/Düğüm-Gerilimleri) |
+| **Çevre akımları** | Göz (çevre) akımları ve eleman akımları | [Wiki](../../wiki/Çevre-Akımları) |
+| **Thevenin / Norton** | İki uç arasındaki eşdeğer devre ve maksimum güç aktarımı | [Wiki](../../wiki/Thevenin-ve-Norton) |
+| **Süperpozisyon** | Her kaynağın ayrı katkısı ve toplamı (farklı frekanslı AC kaynaklar dahil) | [Wiki](../../wiki/Süperpozisyon) |
+| **Millman** | Paralel kollu devrelerde iki düğüm arası gerilim, tek formülle | [Wiki](../../wiki/Millman) |
+| **Kaynak dönüşümü** | Gerilim ⇄ akım kaynağı dönüşümleriyle sadeleştirme, gerekirse Δ–Y | [Wiki](../../wiki/Kaynak-Dönüşümü) |
+| **Geçici durum (anahtar)** | Kondansatör/bobin şarj–deşarjı: τ, x(t) formülü, τ tablosu, enerji ve zaman grafiği | [Wiki](../../wiki/Geçici-Durum) |
 
 DC ve AC (fazör) devrelerin hepsinde çalışır. Köprü gibi seri/paralele indirgenemeyen devrelerde **Δ–Y (üçgen–yıldız) dönüşümü** kendiliğinden devreye girer.
 
@@ -98,7 +98,7 @@ DC ve AC (fazör) devrelerin hepsinde çalışır. Köprü gibi seri/paralele in
 - Kurulum program içinden, terminal açmadan yapılır; program belleğinize uygun modeli kendisi seçer (8 GB RAM ve üstü önerilir).
 - Yanıtlardaki sayılar programın kesin çözümüyle karşılaştırılır; tutmayanlar için uyarır, alıştırma modunda cevabı veren sayıları gizler. **Yardımcıyı bir öğretmen yerine değil, ipucu veren bir arkadaş gibi kullanın.**
 
-Ayrıntılar: [Yapay zekâ yardımcısı](../../wiki/Yapay-Zeka-Yardimcisi). Ollama (MIT) ve Gemma 4 (Apache 2.0) programla birlikte dağıtılmaz; kurarsanız kendi lisans koşulları geçerlidir.
+Ayrıntılar: [Yapay zekâ yardımcısı](../../wiki/Yapay-Zekâ-Yardımcısı). Ollama (MIT) ve Gemma 4 (Apache 2.0) programla birlikte dağıtılmaz; kurarsanız kendi lisans koşulları geçerlidir.
 
 ## Gizlilik
 
