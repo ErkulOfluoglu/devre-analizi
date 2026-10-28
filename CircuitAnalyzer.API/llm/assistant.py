@@ -14,7 +14,7 @@ Güvenlik katmanları:
 
 from typing import Dict, List, Optional, Sequence
 
-from explainer.formatting import eng, polar
+from explainer.formatting import eng, num, polar
 from explainer.step_generator import _node_groups
 from llm import ollama
 from llm.numbers import KnownValues, check_answer_numbers, known_from
@@ -71,14 +71,14 @@ def describe_element(e: ParsedElement) -> str:
         return f"{e.id}: bobin {eng(e.value, 'H')}, {between}"
     if t == ElementType.IMPEDANCE:
         z = complex(p.get("impedance", e.value))
-        return f"{e.id}: empedans {z.real:g} {'+' if z.imag >= 0 else '−'} j{abs(z.imag):g} Ω, {between}"
+        return f"{e.id}: empedans {num(z.real)} {'+' if z.imag >= 0 else '−'} j{num(abs(z.imag))} Ω, {between}"
     if t == ElementType.DC_SOURCE:
         return f"{e.id}: DC gerilim kaynağı {eng(e.value, 'V')}, (+) ucu {_node(e.node_positive)}, (−) ucu {_node(e.node_negative)}"
     if t in (ElementType.AC_SOURCE_SINE, ElementType.AC_SOURCE_PHASOR):
         amp = p.get("amplitude", e.value)
         freq = p.get("frequency")
-        f_txt = f", f = {freq:g} Hz" if freq else ""
-        return (f"{e.id}: AC gerilim kaynağı, genlik (tepe) {eng(amp, 'V')}, faz {p.get('phase', 0):g}°{f_txt}, "
+        f_txt = f", f = {num(freq)} Hz" if freq else ""
+        return (f"{e.id}: AC gerilim kaynağı, genlik (tepe) {eng(amp, 'V')}, faz {num(p.get('phase', 0))}°{f_txt}, "
                 f"(+) ucu {_node(e.node_positive)}, (−) ucu {_node(e.node_negative)}")
     if t == ElementType.CURRENT_DC:
         return (f"{e.id}: DC akım kaynağı {eng(e.value, 'A')}, akım kaynak içinde "
@@ -86,8 +86,8 @@ def describe_element(e: ParsedElement) -> str:
     if t in (ElementType.CURRENT_AC_SINE, ElementType.CURRENT_AC_PHASOR):
         amp = p.get("amplitude", e.value)
         freq = p.get("frequency")
-        f_txt = f", f = {freq:g} Hz" if freq else ""
-        return (f"{e.id}: AC akım kaynağı, genlik (tepe) {eng(amp, 'A')}, faz {p.get('phase', 0):g}°{f_txt}, "
+        f_txt = f", f = {num(freq)} Hz" if freq else ""
+        return (f"{e.id}: AC akım kaynağı, genlik (tepe) {eng(amp, 'A')}, faz {num(p.get('phase', 0))}°{f_txt}, "
                 f"akım kaynak içinde {_node(e.node_positive)} → {_node(e.node_negative)} yönünde")
     if t == ElementType.SWITCH:
         kind = p.get("kind")
@@ -108,7 +108,7 @@ def describe_element(e: ParsedElement) -> str:
                 if t in DEPENDENT_VOLTAGE_OUTPUT else
                 f"akım kaynağı, akım kaynak içinde {_node(e.node_positive)} → "
                 f"{_node(e.node_negative)} yönünde")
-        return (f"{e.id}: {DEPENDENT_NAMES[t].lower()} ({what}); {e.id} = {p['gain']:g}·{ctrl}, "
+        return (f"{e.id}: {DEPENDENT_NAMES[t].lower()} ({what}); {e.id} = {num(p['gain'])}·{ctrl}, "
                 f"kontrol elemanı {p['control_id']}")
     return f"{e.id}: {between}"
 
@@ -116,7 +116,7 @@ def describe_element(e: ParsedElement) -> str:
 def circuit_text(parsed: ParsedCircuit, is_dc: bool, frequency: Optional[float]) -> str:
     lines = ["DEVRE:"]
     lines += [f"- {describe_element(e)}" for e in parsed.elements]
-    lines.append(f"Analiz: {'DC' if is_dc else f'AC (fazör), f = {frequency:g} Hz' if frequency else 'AC (fazör)'}")
+    lines.append(f"Analiz: {'DC' if is_dc else f'AC (fazör), f = {num(frequency)} Hz' if frequency else 'AC (fazör)'}")
     return "\n".join(lines)
 
 

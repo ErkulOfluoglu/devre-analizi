@@ -300,8 +300,8 @@ async def parse_only(
         "Alıştırma modunda öğrencinin yazdığı cevapları değerlendirir.\n\n"
         "Sorular /analyze yanıtındaki `results.practice` listesinden aynen gönderilir; "
         "sunucu durum tutmaz.\n\n"
-        "Cevap yazımları: `4m`, `4 mA`, `0.004`, `2.5k`, `1k5`, `3.03∠-72.3`, "
-        "`0.92-j2.89`, `(0.92 - j2.89) mA`.\n\n"
+        "Cevap yazımları: `4m`, `4 mA`, `0,004`, `2,5k`, `1k5`, `3,03∠-72,3`, "
+        "`0,92-j2,89`, `(0,92 - j2,89) mA`.\n\n"
         "Yanlış cevaplarda sık yapılan hatalar teşhis edilir (işaret, birim öneki, "
         "tepe/etkin değer, radyan/derece, açının işareti) — doğru cevap söylenmez."
     ),
@@ -407,7 +407,7 @@ def llm_pull(request: LlmPullRequest = Body(default=LlmPullRequest())):
         raise HTTPException(
             status_code=400,
             detail=f"Diskte yeterli yer yok: yaklaşık {size + system_info.DISK_MARGIN_GB:.0f} GB gerekli, "
-                   f"{disk:.1f} GB boş.")
+                   f"{disk:.1f}".replace(".", ",") + " GB boş.")
     if not pull.MANAGER.start(model):
         raise HTTPException(status_code=409, detail="Bir model indirmesi zaten sürüyor.")
     return _pull_status()

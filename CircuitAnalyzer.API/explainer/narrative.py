@@ -1440,7 +1440,7 @@ def _power(ctx: _Ctx) -> List[_Section]:
                     "ileri": "ileri — akım gerilimin önünde, devre kapasitif",
                     "birim": "birim — devre saf dirençli gibi davranıyor"}.get(pw.power_factor_type or "", "")
             s.math(f"cos φ = P/|S| = {eng(sup.real, 'W')} / {eng(abs(sup), 'VA')} = "
-                   f"{pw.power_factor:.3f}" + (f" ({kind})" if kind else ""))
+                   f"{pw.power_factor:.3f}".replace(".", ",") + (f" ({kind})" if kind else ""))
     return [s]
 
 

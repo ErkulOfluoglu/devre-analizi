@@ -574,8 +574,8 @@ namespace CircuitAnalyzer.WPF.Services
 
         private static string Number(double x, int significant)
         {
-            string s = x.ToString("G" + significant, CultureInfo.InvariantCulture);
-            return s.Contains('E') ? x.ToString("0.###", CultureInfo.InvariantCulture) : s;
+            string s = x.ToString("G" + significant, TurkishNumber.Culture);
+            return s.Contains('E') ? x.ToString("0.###", TurkishNumber.Culture) : s;
         }
     }
 

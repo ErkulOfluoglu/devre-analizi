@@ -62,7 +62,7 @@ def test_ac_series_capacitors_use_inverse_rule(solve):
     red = final_reduction(results)
     assert red.result_name == "Ceq1"
     assert red.formula.startswith("Ceq1 = C1·C2/(C1+C2) = ")
-    assert red.formula.endswith("5e-06 F")
+    assert red.formula.endswith("0,000005 F")
     assert_close(as_complex(red.impedance), 1 / (1j * 2 * math.pi * f * 5e-6))
     assert_close(as_complex(red.impedance), zin_from_solution(results, "VAC1", 5))
 

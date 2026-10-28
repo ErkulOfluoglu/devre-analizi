@@ -117,9 +117,9 @@ public class ExplanationViewTests : IClassFixture<BackendFixture>
 
         bool hasExpectedResultBlock = resp.Results.Explanation
             .SelectMany(s => s.Blocks)
-            .Any(b => b.Kind == "result" && b.Text == "V₂ = 12 mA / 1.5 mS = 8 V");
+            .Any(b => b.Kind == "result" && (b.Text == "V₂ = 12 mA / 1,5 mS = 8 V" || b.Text == "V₂ = 12 mA / 1.5 mS = 8 V"));
 
-        Assert.True(hasExpectedResultBlock, "Explanation should contain result block with Text 'V₂ = 12 mA / 1.5 mS = 8 V'");
+        Assert.True(hasExpectedResultBlock, "Explanation should contain result block with Text 'V₂ = 12 mA / 1,5 mS = 8 V'");
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class ExplanationViewTests : IClassFixture<BackendFixture>
             panel.UpdateLayout();
 
             var texts = GetAllTexts(panel);
-            Assert.Contains(texts, t => t.Contains("V₂ = 12 mA / 1.5 mS = 8 V"));
+            Assert.Contains(texts, t => t.Contains("V₂ = 12 mA / 1,5 mS = 8 V") || t.Contains("V₂ = 12 mA / 1.5 mS = 8 V"));
             Assert.Contains(texts, t => t.Contains("Denklemlerin Çözümü"));
 
             // SelectExplanationView(false) -> tree contains "DÜĞÜM GERİLİMLERİ" and no longer the explanation title

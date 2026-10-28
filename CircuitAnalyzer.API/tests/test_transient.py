@@ -116,8 +116,8 @@ def test_rc_charge(solve):
     assert any("V_C1(t) = U · (1 − e^(−t/τ))" in x for x in t)          # kitaptaki kısa biçim
     assert any("I_C1(0⁺) = (V_C1(∞) − V_C1(0⁺)) / R_th = (12 V − 0 V) / 2 kΩ = 6 mA" in x for x in t)
     # τ tablosu: yüzdeler ve her τ'daki değer (12·(1 − e^−n))
-    for pct, volt in [("63.2", "7.585"), ("86.5", "10.38"), ("95.0", "11.4"),
-                      ("98.2", "11.78"), ("99.3", "11.92")]:
+    for pct, volt in [("63,2", "7,585"), ("86,5", "10,38"), ("95,0", "11,4"),
+                      ("98,2", "11,78"), ("99,3", "11,92")]:
         assert any(f"%{pct}" in x and f"V_C1 = {volt} V" in x for x in t), pct
     assert any("hiçbir zaman tam olarak ulaşmaz" in x and "5τ = 10 ms" in x for x in t)
     # Enerji: W = ½·C·V² = ½ · 1e-6 · 144 = 72 µJ (t=0⁺'da V=0 → W(0⁺) satırı yok)
@@ -169,10 +169,10 @@ def test_rc_nonzero_initial_voltage_and_reduced_rth(solve):
     assert any("Req2 = R3·Req1/(R3+Req1)" in x and "= 400 Ω" in x for x in t)
     assert "R_th = 400 Ω" in t
     assert any("V_C1(0⁻) = V₂ − V₀ = 8 − 0 = 8 V" in x for x in t)
-    assert any("V_C1(t) = 4.8 V + (3.2 V) · e^(−t/τ)" in x for x in t)       # genel biçim (kısa biçim yok)
+    assert any("V_C1(t) = 4,8 V + (3,2 V) · e^(−t/τ)" in x for x in t)       # genel biçim (kısa biçim yok)
     assert not any("kısa biçim" in x for x in t)
-    assert any("W(0⁺) = ½ · 100 µF · (8 V)² = 3.2 mJ" in x for x in t)
-    assert any("W(∞) = ½ · 100 µF · (4.8 V)² = 1.152 mJ" in x for x in t)
+    assert any("W(0⁺) = ½ · 100 µF · (8 V)² = 3,2 mJ" in x for x in t)
+    assert any("W(∞) = ½ · 100 µF · (4,8 V)² = 1,152 mJ" in x for x in t)
 
 
 def test_rc_rth_needs_delta_y(solve):
@@ -374,7 +374,7 @@ def test_transient_practice_questions(solve):
     assert qs["XINF"].expected.real == pytest.approx(12.0)
     assert qs["XTAU"].expected.real == pytest.approx(12 * (1 - math.exp(-1)))      # 7.585 V
     # %90'a ulaşma: 10.8 V → t = τ·ln(12/(12−10.8)) = 2 ms · ln 10 = 4.605 ms
-    assert "10.8 V" in qs["TLEVEL"].description
+    assert "10,8 V" in qs["TLEVEL"].description
     assert qs["TLEVEL"].expected.real == pytest.approx(0.002 * math.log(10))
     assert "ln" in qs["TLEVEL"].hint
     # t = 2τ = 4 ms: 12·(1 − e⁻²) = 10.376 V
@@ -383,7 +383,7 @@ def test_transient_practice_questions(solve):
     assert qs["TAU"].group == "main" and qs["XT"].group == "extra"
     assert all(not q.is_ac and q.hint and q.sign_hint for q in qs.values())
     # ipucu cevabı vermez
-    assert "2 ms" not in qs["TAU"].hint and "7.585" not in qs["XTAU"].hint
+    assert "2 ms" not in qs["TAU"].hint and "7,585" not in qs["XTAU"].hint
 
 
 def test_transient_practice_answers_are_checked_with_seconds(solve):

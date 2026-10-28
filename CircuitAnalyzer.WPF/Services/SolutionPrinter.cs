@@ -190,7 +190,7 @@ namespace CircuitAnalyzer.WPF.Services
             }
             if (!string.IsNullOrWhiteSpace(input.Frequency))
             {
-                pMethod.Inlines.Add(new Run("   ·   Frekans: " + input.Frequency) { Foreground = brushSecondary });
+                pMethod.Inlines.Add(new Run("   ·   Frekans: " + TurkishNumber.NormalizeForDisplay(input.Frequency)) { Foreground = brushSecondary });
             }
             doc.Blocks.Add(pMethod);
 
@@ -461,9 +461,9 @@ namespace CircuitAnalyzer.WPF.Services
                                 rg.Rows.Add(CreateRow(doc, new[]
                                 {
                                     elem,
-                                    $"{ep.ActivePower:0.###} W",
-                                    $"{ep.ReactivePower:0.###} VAR",
-                                    $"{ep.ApparentPower:0.###} VA",
+                                    $"{TurkishNumber.Format(ep.ActivePower, "0.###")} W",
+                                    $"{TurkishNumber.Format(ep.ReactivePower, "0.###")} VAR",
+                                    $"{TurkishNumber.Format(ep.ApparentPower, "0.###")} VA",
                                     roleStr
                                 }));
                             }

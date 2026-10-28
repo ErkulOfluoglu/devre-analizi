@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from models.request import AnalysisMode
+from explainer.formatting import num
 from models.response import SolutionStep
 from parser.netlist_parser import (
     ParsedCircuit, ElementType, DC_SOURCES, SINE_SOURCES, PHASOR_SOURCES,
@@ -38,7 +39,7 @@ class FrequencyCheck:
 
 
 def _fmt_hz(f: float) -> str:
-    return "DC (0 Hz)" if f == 0 else f"{f:g} Hz"
+    return "DC (0 Hz)" if f == 0 else f"{num(f)} Hz"
 
 
 def check_source_frequencies(
@@ -75,7 +76,7 @@ def check_source_frequencies(
             )
         if offsets:
             ids = ", ".join(
-                f"{e.id}: {e.params['offset']:g} V" for e in offsets)
+                f"{e.id}: {num(e.params['offset'])} V" for e in offsets)
             check.warnings.append(
                 f"⚠ SINE kaynak ofseti ({ids}) DC analizde hesaba "
                 "katılmadı. Ofseti DC kaynak olarak ayrıca modelleyin."
@@ -97,7 +98,7 @@ def check_source_frequencies(
             ids = ", ".join(sine_freqs)
             check.warnings.append(
                 "ℹ Analiz frekansı belirtilmedi; kaynak frekansı "
-                f"kullanıldı: f = {frequency:g} Hz ({ids})."
+                f"kullanıldı: f = {num(frequency)} Hz ({ids})."
             )
 
     # Her kaynağın gerçek frekansı
@@ -128,7 +129,7 @@ def check_source_frequencies(
                 f"⚠ Devrede farklı frekanslarda kaynaklar var — {listing}.\n"
                 "Fazör analizi tek bir ω için geçerlidir; farklı frekanslı "
                 "fazörler doğrudan toplanamaz. Bu sonuçlar tüm AC kaynaklar "
-                f"f = {frequency:g} Hz kabul edilerek hesaplandı ve fiziksel "
+                f"f = {num(frequency)} Hz kabul edilerek hesaplandı ve fiziksel "
                 "olarak GEÇERSİZDİR.\n"
                 "Doğru çözüm için yöntem olarak Süperpozisyon'u seçin: program "
                 "her kaynağı kendi frekansında çözüp sonuçları zaman domeninde toplar."
@@ -138,17 +139,17 @@ def check_source_frequencies(
                 and sine_freqs and ac_freqs[0] != frequency):
             ids = ", ".join(sine_freqs)
             check.warnings.append(
-                f"⚠ Kaynak frekansı ({ids}: {ac_freqs[0]:g} Hz) analiz "
-                f"frekansından ({frequency:g} Hz) farklı. Analiz "
-                f"{frequency:g} Hz'de yapıldı; kaynağın gerçek yanıtı için "
-                f"frequency = {ac_freqs[0]:g} gönderin."
+                f"⚠ Kaynak frekansı ({ids}: {num(ac_freqs[0])} Hz) analiz "
+                f"frekansından ({num(frequency)} Hz) farklı. Analiz "
+                f"{num(frequency)} Hz'de yapıldı; kaynağın gerçek yanıtı için "
+                f"frequency = {num(ac_freqs[0])} gönderin."
             )
         if 0.0 in groups and ac_freqs:
             check.warnings.append(
                 f"ℹ AC analizde DC bileşenler ({', '.join(groups[0.0])}) "
                 "sıfırlandı (gerilim kaynağı → kısa devre, akım kaynağı → "
                 "açık devre). Sonuçlar yalnızca "
-                f"f = {ac_freqs[0]:g} Hz AC bileşenidir; toplam yanıt için "
+                f"f = {num(ac_freqs[0])} Hz AC bileşenidir; toplam yanıt için "
                 "DC analizini ayrıca yapıp süperpozisyonla ekleyin: "
                 "v(t) = V_DC + |V|·cos(ωt + θ)."
             )

@@ -149,3 +149,24 @@ def test_parse_errors(bad_text):
         parse_answer(bad_text)
     msg = str(exc_info.value).strip()
     assert len(msg) > 0
+
+
+def test_comma_and_dot_decimal_equal():
+    """Answer parser accepts '7,5' and '7.5' (as well as 4,7k, 2,2 mA, 3,03∠-72,3) equally."""
+    p_dot = parse_answer("7.5")
+    p_comma = parse_answer("7,5")
+    assert p_dot.value == p_comma.value == pytest.approx(7.5)
+
+    p_k_dot = parse_answer("4.7k")
+    p_k_comma = parse_answer("4,7k")
+    assert p_k_dot.value == p_k_comma.value == pytest.approx(4700.0)
+
+    p_ma_dot = parse_answer("2.2 mA")
+    p_ma_comma = parse_answer("2,2 mA")
+    assert p_ma_dot.value == p_ma_comma.value == pytest.approx(2.2e-3)
+    assert p_ma_dot.unit == p_ma_comma.unit == "A"
+
+    p_pol_dot = parse_answer("3.03∠-72.3")
+    p_pol_comma = parse_answer("3,03∠-72,3")
+    assert abs(p_pol_dot.value) == pytest.approx(abs(p_pol_comma.value), rel=1e-9)
+    assert p_pol_dot.angle_input == pytest.approx(p_pol_comma.angle_input, rel=1e-9)

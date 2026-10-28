@@ -10,6 +10,15 @@ namespace CircuitAnalyzer.WPF
     {
         protected override void OnStartup(StartupEventArgs e)
         {
+            // Türkçe sayı ve arayüz biçimlendirmesi (ondalık virgülü)
+            System.Globalization.CultureInfo.DefaultThreadCurrentCulture = TurkishNumber.Culture;
+            System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = TurkishNumber.Culture;
+            System.Threading.Thread.CurrentThread.CurrentCulture = TurkishNumber.Culture;
+            System.Threading.Thread.CurrentThread.CurrentUICulture = TurkishNumber.Culture;
+            FrameworkElement.LanguageProperty.OverrideMetadata(
+                typeof(FrameworkElement),
+                new FrameworkPropertyMetadata(System.Windows.Markup.XmlLanguage.GetLanguage("tr-TR")));
+
             // Ekran testi için: --theme light|dark (kayıtlı seçimi değiştirmez)
             ThemeChoice? forced = null;
             int i = Array.FindIndex(e.Args, a => string.Equals(a, "--theme", StringComparison.OrdinalIgnoreCase));

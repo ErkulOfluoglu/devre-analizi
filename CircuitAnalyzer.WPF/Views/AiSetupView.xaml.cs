@@ -487,7 +487,7 @@ namespace CircuitAnalyzer.WPF.Views
             {
                 double doneGb = pull.CompletedBytes / (1024.0 * 1024 * 1024);
                 double totalGb = pull.TotalBytes / (1024.0 * 1024 * 1024);
-                parts.Add(string.Create(CultureInfo.InvariantCulture, $"{doneGb:0.0} / {totalGb:0.0} GB"));
+                parts.Add($"{TurkishNumber.Format(doneGb, "0.0")} / {TurkishNumber.Format(totalGb, "0.0")} GB");
             }
             if (pull.SpeedBps > 0)
             {

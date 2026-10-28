@@ -15,7 +15,7 @@ Doğru değerler çözücünün sonuçlarından alınır (anlatımla aynı sayı
 
 from typing import Callable, Dict, List, Optional
 
-from explainer.formatting import node_v
+from explainer.formatting import node_v, num
 from explainer.mesh_narrative import mesh_symbol
 from explainer.step_generator import _node_groups
 from explainer.superposition_narrative import mark
@@ -332,7 +332,7 @@ def _superposition_questions(q, contributions, unknown_nodes, v_scale,
             if single_freq:
                 alts.append((total, f"Bu toplam değer. Burada yalnız {src} aktifken oluşan "
                                     "katkı soruluyor."))
-            domain = "" if c.is_dc else f" ({c.frequency:g} Hz fazörü)"
+            domain = "" if c.is_dc else f" ({num(c.frequency)} Hz fazörü)"
             out.append(q(
                 f"V{n}_{src}", f"{node_v(n)}{mark(k)}",
                 f"Yalnız {src} aktifken {_node_name(n)} gerilimi{domain}", "V", "main",

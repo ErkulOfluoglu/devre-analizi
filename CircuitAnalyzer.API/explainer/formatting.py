@@ -1,11 +1,11 @@
 """
 CircuitAnalyzer API — Anlatım için sayı biçimlendirme
 
-Öğrencinin defterine yazacağı biçim:
+Öğrencinin defterine yazacağı biçim (Türkçe ondalık virgül):
     0.004 A        → "4 mA"
-    666.666 Ω      → "666.7 Ω"
-    0.92-2.89j V   → "0.92 − j2.89 V"
-    polar          → "3.033∠−72.34° V"
+    666.666 Ω      → "666,7 Ω"
+    0.92-2.89j V   → "0,92 − j2,89 V"
+    polar          → "3,033∠−72,34° V"
     düğüm "2"      → "V₂"
 
 Eksi işareti olarak Unicode "−" kullanılır (tire ile karışmasın).
@@ -29,7 +29,7 @@ MINUS = "−"
 
 
 def num(x: float, digits: int = 4) -> str:
-    """Sade sayı: 4 anlamlı basamak, bilimsel gösterim yok, Unicode eksi."""
+    """Sade sayı: 4 anlamlı basamak, bilimsel gösterim yok, Unicode eksi, ondalık virgül."""
     if abs(x) < 1e-15:
         return "0"
     s = f"{x:.{digits}g}"
@@ -45,7 +45,15 @@ def num(x: float, digits: int = 4) -> str:
             s = format(rounded, "f")
         else:
             s = f"{x:.{digits - 1 - exponent}f}".rstrip("0").rstrip(".")
-    return s.replace("-", MINUS)
+    return s.replace("-", MINUS).replace(".", ",")
+
+
+def fmt(x: float, spec: str = "g") -> str:
+    """Belirtilen format ile Türkçe virgüllü gösterim (ör. spec='.3f', '.1f')."""
+    if abs(x) < 1e-15:
+        return "0"
+    s = format(x, spec)
+    return s.replace("-", MINUS).replace(".", ",")
 
 
 def _prefix_for(magnitude: float):
@@ -72,7 +80,7 @@ def is_real(z: Number, rel: float = 1e-9) -> bool:
 
 
 def rect(z: Number, unit: str = "", digits: int = 4) -> str:
-    """Dikdörtgensel: '0.92 − j2.89 V', saf sanal '−j31.83 Ω', gerçek '12 V'."""
+    """Dikdörtgensel: '0,92 − j2,89 V', saf sanal '−j31,83 Ω', gerçek '12 V'."""
     z = complex(z)
     unit_s = f" {unit}" if unit else ""
     re_, im = z.real, z.imag
@@ -87,7 +95,7 @@ def rect(z: Number, unit: str = "", digits: int = 4) -> str:
 
 
 def polar(z: Number, unit: str = "", digits: int = 4, scaled: bool = True) -> str:
-    """Kutupsal: '3.033∠−72.34° V'. scaled=True → '95.29∠17.66° mA'."""
+    """Kutupsal: '3,033∠−72,34° V'. scaled=True → '95,29∠17,66° mA'."""
     z = complex(z)
     mag = abs(z)
     if mag < 1e-15:
@@ -103,7 +111,7 @@ def value(z: Number, unit: str, is_dc: bool, digits: int = 4) -> str:
     """
     Sonuç değeri:
         DC  → eng gösterimi: '8 V'
-        AC  → kutupsal (+ dikdörtgensel): '3.033∠−72.34° V  (= 0.92 − j2.89 V)'
+        AC  → kutupsal (+ dikdörtgensel): '3,033∠−72,34° V  (= 0,92 − j2,89 V)'
     """
     z = complex(z)
     if is_dc:
@@ -112,7 +120,7 @@ def value(z: Number, unit: str, is_dc: bool, digits: int = 4) -> str:
 
 
 def paren(text: str) -> str:
-    """Toplam/negatif ifadeleri paranteze al: '−j31.83 Ω' → '(−j31.83 Ω)'."""
+    """Toplam/negatif ifadeleri paranteze al: '−j31,83 Ω' → '(−j31,83 Ω)'."""
     t = text.strip()
     if t.startswith(MINUS) or " + " in t or f" {MINUS} " in t:
         return f"({t})"

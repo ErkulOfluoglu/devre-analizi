@@ -35,10 +35,10 @@ def test_millman_three_source_branches(solve):
     t = texts(results)
     assert any("V_AB = (12/1000 + 6/3000 + (" + MINUS + "9)/2000) / (1/1000 + 1/3000 + 1/2000)" in x
                for x in t)
-    assert any("V_AB = 9.5 mA / 1.833 mS" in x for x in t)
-    assert any("V_AB = V₂ " + MINUS + " V₀ = 5.182 V" in x for x in t)
-    assert any("= 6.818 mA" in x for x in t)
-    assert any("= " + MINUS + "7.091 mA" in x for x in t)
+    assert any("V_AB = 9,5 mA / 1,833 mS" in x for x in t)
+    assert any("V_AB = V₂ " + MINUS + " V₀ = 5,182 V" in x for x in t)
+    assert any("= 6,818 mA" in x for x in t)
+    assert any("= " + MINUS + "7,091 mA" in x for x in t)
     assert not any("uygulanamadı" in x for x in t)
 
 
@@ -51,8 +51,8 @@ def test_millman_current_source_branch(solve):
     results, _, errors = solve(net, "DC", analysis_type="MILLMAN")
     assert not errors
     t = texts(results)
-    assert any("V_AB = 8 mA / 1.5 mS" in x for x in t)
-    assert any("V_AB = V₁ " + MINUS + " V₀ = 5.333 V" in x for x in t)
+    assert any("V_AB = 8 mA / 1,5 mS" in x for x in t)
+    assert any("V_AB = V₁ " + MINUS + " V₀ = 5,333 V" in x for x in t)
     assert any("kolun akımını değiştirmez" in x for x in t)       # seri R3 etkisiz
     assert any("I₃ = I1 akım kaynağının akımı = 3 mA" in x for x in t)
 

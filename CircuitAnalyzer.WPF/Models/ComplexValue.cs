@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using CircuitAnalyzer.WPF.Services;
 
 namespace CircuitAnalyzer.WPF.Models
 {
@@ -122,13 +123,13 @@ namespace CircuitAnalyzer.WPF.Models
             // Önce kontrol: çünkü "10<30" içindeki < işareti
             // dikdörtgensel parseri karıştırabilir.
             var polarPattern = new Regex(
-                @"^([+-]?\d+\.?\d*(?:[eE][+-]?\d+)?)\s*[∠<]\s*([+-]?\d+\.?\d*(?:[eE][+-]?\d+)?)$");
+                @"^([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?)\s*[∠<]\s*([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?)$");
             var polarMatch = polarPattern.Match(s);
             if (polarMatch.Success)
             {
-                if (double.TryParse(polarMatch.Groups[1].Value,
+                if (double.TryParse(polarMatch.Groups[1].Value.Replace(',', '.'),
                         NumberStyles.Float, CultureInfo.InvariantCulture, out double r) &&
-                    double.TryParse(polarMatch.Groups[2].Value,
+                    double.TryParse(polarMatch.Groups[2].Value.Replace(',', '.'),
                         NumberStyles.Float, CultureInfo.InvariantCulture, out double theta))
                 {
                     result = FromPolar(r, theta);
@@ -145,7 +146,8 @@ namespace CircuitAnalyzer.WPF.Models
             // ── Adım 4: 'j' yoksa → saf reel sayı ──
             if (!s.Contains('j'))
             {
-                if (double.TryParse(s, NumberStyles.Float,
+                string realStr = s.Replace(',', '.');
+                if (double.TryParse(realStr, NumberStyles.Float,
                     CultureInfo.InvariantCulture, out double realOnly))
                 {
                     result = FromRectangular(realOnly, 0);
@@ -168,13 +170,13 @@ namespace CircuitAnalyzer.WPF.Models
                 return true;
             }
 
-            // Saf sanal, j önde: "j30", "-j30", "+j30", "j3.14"
+            // Saf sanal, j önde: "j30", "-j30", "+j30", "j3.14", "j3,14"
             var jPrefixOnly = new Regex(
-                @"^([+-]?)j(\d+\.?\d*(?:[eE][+-]?\d+)?)$");
+                @"^([+-]?)j((?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?)$");
             var jPrefixOnlyMatch = jPrefixOnly.Match(s);
             if (jPrefixOnlyMatch.Success)
             {
-                if (double.TryParse(jPrefixOnlyMatch.Groups[2].Value,
+                if (double.TryParse(jPrefixOnlyMatch.Groups[2].Value.Replace(',', '.'),
                     NumberStyles.Float, CultureInfo.InvariantCulture, out double imag))
                 {
                     result = FromRectangular(0,
@@ -185,11 +187,11 @@ namespace CircuitAnalyzer.WPF.Models
 
             // Saf sanal, j sonda: "30j", "-30j", "+30j"
             var jSuffixOnly = new Regex(
-                @"^([+-]?\d+\.?\d*(?:[eE][+-]?\d+)?)j$");
+                @"^([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?)j$");
             var jSuffixOnlyMatch = jSuffixOnly.Match(s);
             if (jSuffixOnlyMatch.Success)
             {
-                if (double.TryParse(jSuffixOnlyMatch.Groups[1].Value,
+                if (double.TryParse(jSuffixOnlyMatch.Groups[1].Value.Replace(',', '.'),
                     NumberStyles.Float, CultureInfo.InvariantCulture, out double imag))
                 {
                     result = FromRectangular(0, imag);
@@ -200,14 +202,14 @@ namespace CircuitAnalyzer.WPF.Models
             // Tam karmaşık, j önde: "50+j30", "50-j30", "-50+j30"
             // "50+j" → sanal kısım = 1
             var complexJPrefix = new Regex(
-                @"^([+-]?\d+\.?\d*(?:[eE][+-]?\d+)?)([+-])j(\d*\.?\d*(?:[eE][+-]?\d+)?)$");
+                @"^([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?)([+-])j((?:\d*(?:[.,]\d*)?|[.,]\d+)?(?:[eE][+-]?\d+)?)$");
             var cjpMatch = complexJPrefix.Match(s);
             if (cjpMatch.Success)
             {
-                string imagStr = cjpMatch.Groups[3].Value;
+                string imagStr = cjpMatch.Groups[3].Value.Replace(',', '.');
                 if (string.IsNullOrEmpty(imagStr)) imagStr = "1";
 
-                if (double.TryParse(cjpMatch.Groups[1].Value,
+                if (double.TryParse(cjpMatch.Groups[1].Value.Replace(',', '.'),
                         NumberStyles.Float, CultureInfo.InvariantCulture, out double real) &&
                     double.TryParse(imagStr,
                         NumberStyles.Float, CultureInfo.InvariantCulture, out double imag))
@@ -220,13 +222,13 @@ namespace CircuitAnalyzer.WPF.Models
 
             // Tam karmaşık, j sonda: "50+30j", "50-30j"
             var complexJSuffix = new Regex(
-                @"^([+-]?\d+\.?\d*(?:[eE][+-]?\d+)?)([+-])(\d+\.?\d*(?:[eE][+-]?\d+)?)j$");
+                @"^([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?)([+-])((?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?)j$");
             var cjsMatch = complexJSuffix.Match(s);
             if (cjsMatch.Success)
             {
-                if (double.TryParse(cjsMatch.Groups[1].Value,
+                if (double.TryParse(cjsMatch.Groups[1].Value.Replace(',', '.'),
                         NumberStyles.Float, CultureInfo.InvariantCulture, out double real) &&
-                    double.TryParse(cjsMatch.Groups[3].Value,
+                    double.TryParse(cjsMatch.Groups[3].Value.Replace(',', '.'),
                         NumberStyles.Float, CultureInfo.InvariantCulture, out double imag))
                 {
                     result = FromRectangular(real,
@@ -249,22 +251,22 @@ namespace CircuitAnalyzer.WPF.Models
         public string ToRectangularString()
         {
             if (Math.Abs(Imaginary) < 1e-10)
-                return $"{Real:G4}";
+                return TurkishNumber.Format(Real, "G4");
             if (Math.Abs(Real) < 1e-10)
-                return $"j{Imaginary:G4}";
+                return $"j{TurkishNumber.Format(Imaginary, "G4")}";
 
             string sign = Imaginary >= 0 ? "+" : "−";
-            return $"{Real:G4}{sign}j{Math.Abs(Imaginary):G4}";
+            return $"{TurkishNumber.Format(Real, "G4")}{sign}j{TurkishNumber.Format(Math.Abs(Imaginary), "G4")}";
         }
 
         /// <summary>
-        /// Kutupsal formatta gösterir: "58.31∠30.96°"
+        /// Kutupsal formatta gösterir: "58.31∠30.96°" -> "58,31∠30,96°"
         /// </summary>
         public string ToPolarString()
         {
             if (Math.Abs(Magnitude) < 1e-10)
                 return "0∠0°";
-            return $"{Magnitude:G4}∠{AngleDegrees:G4}°";
+            return $"{TurkishNumber.Format(Magnitude, "G4")}∠{TurkishNumber.Format(AngleDegrees, "G4")}°";
         }
 
         /// <summary>

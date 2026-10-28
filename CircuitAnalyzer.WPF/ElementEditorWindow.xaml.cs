@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using CircuitAnalyzer.WPF.Models;
+using CircuitAnalyzer.WPF.Services;
 
 namespace CircuitAnalyzer.WPF
 {
@@ -252,7 +253,7 @@ namespace CircuitAnalyzer.WPF
             else
             {
                 // ── Fazör mod: kutupsal metin girişi ──
-                string currentText = $"{ac.Amplitude}∠{ac.Phase}";
+                string currentText = $"{TurkishNumber.Format(ac.Amplitude, "G4")}∠{TurkishNumber.Format(ac.Phase, "G4")}";
 
                 AddComplexFieldTo(_dynamicPanel, "Fazör değeri (V∠θ°):",
                     currentText, cv =>
@@ -262,7 +263,7 @@ namespace CircuitAnalyzer.WPF
                     });
 
                 AddHintTextTo(_dynamicPanel,
-                    "Örnek: 10∠30, 12<45, 7.07+j7.07");
+                    "Örnek: 10∠30, 12<45, 7,07+j7,07");
             }
 
             // İlk kutuya odaklan
@@ -325,7 +326,7 @@ namespace CircuitAnalyzer.WPF
             }
             else
             {
-                string currentText = $"{ac.Amplitude}∠{ac.Phase}";
+                string currentText = $"{TurkishNumber.Format(ac.Amplitude, "G4")}∠{TurkishNumber.Format(ac.Phase, "G4")}";
 
                 AddComplexFieldTo(_dynamicPanel, "Fazör değeri (A∠θ°):",
                     currentText, cv =>
@@ -335,7 +336,7 @@ namespace CircuitAnalyzer.WPF
                     });
 
                 AddHintTextTo(_dynamicPanel,
-                    "Örnek: 10∠30, 0.01<45, 0.007+j0.007");
+                    "Örnek: 10∠30, 0,01<45, 0,007+j0,007");
             }
 
             if (_valueBoxes.Count > 0)
@@ -548,7 +549,7 @@ namespace CircuitAnalyzer.WPF
 
             var textBox = new TextBox
             {
-                Text = currentValue.ToString("G6", CultureInfo.InvariantCulture),
+                Text = currentValue.ToString("G6", TurkishNumber.Culture),
                 Margin = new Thickness(0, 0, 0, 8)
             };
 
@@ -706,49 +707,8 @@ namespace CircuitAnalyzer.WPF
         //  DOĞRULAMA VE UYGULAMA
         // ═══════════════════════════════════════════════════════
 
-        private static readonly Regex SpiceNumberRegex = new(
-            @"^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([a-zA-ZµΩ°]*)\s*$",
-            RegexOptions.Compiled);
-
         private static bool TryParseSpiceNumber(string text, out double val)
-        {
-            val = 0;
-            if (string.IsNullOrWhiteSpace(text))
-                return false;
-
-            var match = SpiceNumberRegex.Match(text.Trim());
-            if (!match.Success)
-                return false;
-
-            if (!double.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double num))
-                return false;
-
-            string suffix = match.Groups[2].Value.ToLowerInvariant();
-            if (string.IsNullOrEmpty(suffix))
-            {
-                val = num;
-                return true;
-            }
-
-            double multiplier = 1.0;
-            if (suffix.StartsWith("meg")) multiplier = 1e6;
-            else if (suffix.StartsWith("mil")) multiplier = 25.4e-6;
-            else if (suffix.StartsWith("g")) multiplier = 1e9;
-            else if (suffix.StartsWith("t")) multiplier = 1e12;
-            else if (suffix.StartsWith("k")) multiplier = 1e3;
-            else if (suffix.StartsWith("m")) multiplier = 1e-3;
-            else if (suffix.StartsWith("u") || suffix.StartsWith("µ")) multiplier = 1e-6;
-            else if (suffix.StartsWith("n")) multiplier = 1e-9;
-            else if (suffix.StartsWith("p")) multiplier = 1e-12;
-            else if (suffix.StartsWith("f")) multiplier = 1e-15;
-            else if (suffix == "a" || suffix == "v" || suffix == "hz" || suffix == "ohm" || suffix == "ω" || suffix == "h")
-                multiplier = 1.0;
-            else
-                return false;
-
-            val = num * multiplier;
-            return true;
-        }
+            => TurkishNumber.TryParseSpice(text, out val);
 
         private void BtnApply_Click(object sender, RoutedEventArgs e)
         {
@@ -756,15 +716,13 @@ namespace CircuitAnalyzer.WPF
             for (int i = 0; i < _valueBoxes.Count; i++)
             {
                 string text = _valueBoxes[i].Text.Trim();
-                if (_element is DependentSource)
-                    text = text.Replace(',', '.'); // Türkçe ondalık virgülü de kabul et
 
                 if (!TryParseSpiceNumber(text, out double val))
                 {
                     MessageBox.Show(
                         $"Geçersiz sayı: \"{text}\"\n\n" +
                         "Lütfen geçerli bir ondalıklı sayı girin.\n" +
-                        "Örnek: 1000, 4.7, 0.01",
+                        "Örnek: 1000, 4,7, 0,01",
                         "Giriş Hatası",
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);

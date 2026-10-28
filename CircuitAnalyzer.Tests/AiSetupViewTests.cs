@@ -273,7 +273,7 @@ namespace CircuitAnalyzer.Tests
             string text = AiSetupView.FormatProgressText(pull);
 
             Assert.Contains("%50", text);
-            Assert.Contains("2.5 / 5.0 GB", text);
+            Assert.Contains("2,5 / 5,0 GB", text);
             Assert.Contains("20 MB/sn", text);
             Assert.Contains("yaklaşık 4 dk kaldı", text);
             Assert.Contains("İnerken programı kullanmaya devam edebilirsiniz", text);

@@ -26,6 +26,7 @@ import traceback
 from typing import Tuple, List, Optional, Union
 
 import sympy
+from explainer.formatting import MINUS, num
 
 from models.response import (
     AnalysisResults, SolutionStep, ComplexNumber,
@@ -221,18 +222,18 @@ def make_complex_number(value: Union[float, complex]) -> ComplexNumber:
 
     # Dikdörtgensel gösterim: "50+j30" veya "6"
     if abs(imag) < 1e-10:
-        rect_str = f"{real:.4g}"
+        rect_str = num(real)
     elif abs(real) < 1e-10:
-        rect_str = f"{'−' if imag < 0 else ''}j{abs(imag):.4g}"
+        rect_str = f"{'−' if imag < 0 else ''}j{num(abs(imag))}"
     else:
         sign = "+" if imag >= 0 else "−"
-        rect_str = f"{real:.4g}{sign}j{abs(imag):.4g}"
+        rect_str = f"{num(real)}{sign}j{num(abs(imag))}"
 
     # Kutupsal gösterim: "58.31∠30.96°"
     if magnitude < 1e-15:
         polar_str = "0∠0°"
     else:
-        polar_str = f"{magnitude:.4g}∠{phase_deg:.4g}°"
+        polar_str = f"{num(magnitude)}∠{num(phase_deg)}°"
 
     return ComplexNumber(
         real=sig_round(real),
@@ -972,13 +973,13 @@ def _solve_node_voltages(
         for node, val in solved_nodes.items():
             if isinstance(val, complex):
                 sign = "-" if val.imag < 0 else "+"
-                eq = f"V({node}) = {val.real:.4g} {sign} j{abs(val.imag):.4g} V"
+                eq = f"V({node}) = {num(val.real)} {sign} j{num(abs(val.imag))} V"
                 latex_parts.append(
-                    f"V_{{{node}}} = {val.real:.4g} {sign} j{abs(val.imag):.4g}"
+                    f"V_{{{node}}} = {num(val.real)} {sign} j{num(abs(val.imag))}"
                 )
             else:
-                eq = f"V({node}) = {val:.4g} V"
-                latex_parts.append(f"V_{{{node}}} = {val:.4g}")
+                eq = f"V({node}) = {num(val)} V"
+                latex_parts.append(f"V_{{{node}}} = {num(val)}")
             equations.append(eq)
 
         steps.append(SolutionStep(
@@ -1561,16 +1562,16 @@ def _compute_power(
 
         if is_dc:
             equations.append(
-                f"P_{elem.id} = V·I = ({v.real:.4g})·({i.real:.4g}) "
-                f"= {p:.4g} W"
+                f"P_{elem.id} = V·I = ({num(v.real)})·({num(i.real)}) "
+                f"= {num(p)} W"
                 + ("  (güç verir)" if is_source and p < 0 else "")
             )
         else:
             equations.append(
-                f"S_{elem.id} = ½·V·I* = {s.real:.4g} {'+' if q >= 0 else '-'} "
-                f"j{abs(q):.4g} VA  →  P = {p:.4g} W, Q = {q:.4g} VAR, "
-                f"|S| = {s_mag:.4g} VA"
-                + (f", cos φ = {pf:.4f} ({pf_type})" if pf is not None else "")
+                f"S_{elem.id} = ½·V·I* = {num(s.real)} {'+' if q >= 0 else '-'} "
+                f"j{num(abs(q))} VA  →  P = {num(p)} W, Q = {num(q)} VAR, "
+                f"|S| = {num(s_mag)} VA"
+                + (f", cos φ = {num(pf, 4)} ({pf_type})" if pf is not None else "")
             )
 
     if not elements:
@@ -1580,8 +1581,8 @@ def _compute_power(
     scale = max(abs(supplied), abs(absorbed), 1e-12)
     if balance > 1e-6 * scale:
         errors.append(
-            f"ℹ Güç dengesi tam sağlanmadı: verilen {supplied:.6g} VA, "
-            f"çekilen {absorbed:.6g} VA."
+            f"ℹ Güç dengesi tam sağlanmadı: verilen {num(supplied.real, 6)} VA, "
+            f"çekilen {num(absorbed.real, 6)} VA."
         )
 
     pf, pf_type = _power_factor(
@@ -1591,12 +1592,12 @@ def _compute_power(
     if is_dc:
         convention = "DC: P = V·I (pasif işaret kuralı, emilen güç)"
         equations.append(
-            f"Denge: ΣP_kaynak = {supplied.real:.4g} W = "
-            f"ΣP_yük = {absorbed.real:.4g} W"
+            f"Denge: ΣP_kaynak = {num(supplied.real)} W = "
+            f"ΣP_yük = {num(absorbed.real)} W"
         )
         latex_parts.append(
             "P = V \\cdot I \\quad , \\quad "
-            f"\\sum P_{{\\text{{kaynak}}}} = {supplied.real:.4g} \\text{{ W}} = "
+            f"\\sum P_{{\\text{{kaynak}}}} = {num(supplied.real)} \\text{{ W}} = "
             f"\\sum P_{{\\text{{yük}}}}"
         )
     else:
@@ -1605,13 +1606,13 @@ def _compute_power(
             "cos φ = P/|S| (pasif işaret kuralı, emilen güç)"
         )
         equations.append(
-            f"Denge: S_verilen = {supplied.real:.4g} {'+' if supplied.imag >= 0 else '-'} "
-            f"j{abs(supplied.imag):.4g} VA = S_çekilen"
+            f"Denge: S_verilen = {num(supplied.real)} {'+' if supplied.imag >= 0 else '-'} "
+            f"j{num(abs(supplied.imag))} VA = S_çekilen"
         )
         if pf is not None:
             equations.append(
-                f"Devre güç faktörü: cos φ = P/|S| = {supplied.real:.4g} / "
-                f"{abs(supplied):.4g} = {pf:.4f} ({pf_type})"
+                f"Devre güç faktörü: cos φ = P/|S| = {num(supplied.real)} / "
+                f"{num(abs(supplied))} = {num(pf, 4)} ({pf_type})"
             )
         latex_parts.append(
             "S = \\tfrac{1}{2} V I^{*} = P + jQ \\quad , \\quad "

@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using CircuitAnalyzer.WPF.Services;
 
 namespace CircuitAnalyzer.WPF.Models
 {
@@ -202,12 +203,12 @@ namespace CircuitAnalyzer.WPF.Models
         private string FormatValue()
         {
             if (Value >= 1_000)
-                return $"{Value / 1_000:G4}kV";
+                return $"{TurkishNumber.Format(Value / 1_000, "G4")}kV";
             if (Value >= 1)
-                return $"{Value:G4}V";
+                return $"{TurkishNumber.Format(Value, "G4")}V";
             if (Value >= 0.001)
-                return $"{Value * 1_000:G4}mV";
-            return $"{Value:G4}V";
+                return $"{TurkishNumber.Format(Value * 1_000, "G4")}mV";
+            return $"{TurkishNumber.Format(Value, "G4")}V";
         }
     }
 }

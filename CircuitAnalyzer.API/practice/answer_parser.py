@@ -67,7 +67,7 @@ _RECT_TERM_RE = re.compile(
     r"([+-]?)([ji])?((?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)?([ji])?"
 )
 
-EXAMPLES = "Örnek yazımlar: 4m, 4 mA, 0.004, 2.5k, 3.03∠-72.3, 0.92-j2.89"
+EXAMPLES = "Örnek yazımlar: 4m, 4 mA, 0,004, 2,5k, 3,03∠-72,3, 0,92-j2,89"
 
 
 def _normalize(text: str) -> str:
@@ -128,7 +128,7 @@ def _parse_real(text: str) -> Tuple[float, float, Optional[str]]:
 def _parse_polar(text: str, sep: str) -> ParsedAnswer:
     left, right = text.split(sep, 1)
     if not left.strip():
-        raise AnswerParseError(f"Açının önüne büyüklüğü yazın (ör. 3.03∠-72.3). {EXAMPLES}")
+        raise AnswerParseError(f"Açının önüne büyüklüğü yazın (ör. 3,03∠-72,3). {EXAMPLES}")
     mag, scale, unit = _parse_real(left)
 
     r = right.strip()

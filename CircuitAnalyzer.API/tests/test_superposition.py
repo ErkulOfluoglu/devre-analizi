@@ -155,7 +155,7 @@ def test_superposition_dc_two_voltage_sources(solve):
     toplam_sec = section_by_title(res.explanation, "Toplam: Katkıların Toplanması")
     assert toplam_sec is not None
     toplam_texts = [b.text for b in toplam_sec.blocks]
-    assert any("V₂ = V₂′ + V₂″ = 4.8 V + 2.4 V = 7.2 V" in t for t in toplam_texts)
+    assert any("V₂ = V₂′ + V₂″ = 4,8 V + 2,4 V = 7,2 V" in t for t in toplam_texts)
     assert any("tam çözümle aynı ✓" in t for t in toplam_texts)
 
     # 1. Adım anlatımında DC'de sıfırlanma ifadesi
@@ -322,7 +322,7 @@ def test_superposition_different_frequencies(client, solve):
     res_sup, _, _ = solve(net, "AC_TIME", None, "SUPERPOSITION")
     texts = all_texts(res_sup.explanation)
     assert any(
-        "v₂(t) = 2.685·sin(314.2t − 57.52°) + 1.172·sin(377t − 62.05°) V" in t
+        "v₂(t) = 2,685·sin(314,2t − 57,52°) + 1,172·sin(377t − 62,05°) V" in t
         for t in texts
     )
 
@@ -391,7 +391,7 @@ def test_superposition_ac_dc_mix(solve):
     # Anlatım Toplam bölümünde DC bileşen v₂(t) = 2.5 + ... olarak yer alır
     res, _, _ = solve(net, "AC_TIME", None, "SUPERPOSITION")
     texts = all_texts(res.explanation)
-    assert any("v₂(t) = 2.5 +" in t for t in texts)
+    assert any("v₂(t) = 2,5 +" in t for t in texts)
 
 
 # ═══════════════════════════════════════════════════════

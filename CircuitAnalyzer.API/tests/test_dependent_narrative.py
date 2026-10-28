@@ -46,7 +46,7 @@ _PREFIX = {"": 1.0, "k": 1e3, "m": 1e-3, "µ": 1e-6, "M": 1e6}
 
 def _value_in(text):
     """'… = 6.667 V' ya da '… = −20 V' ya da '… = 750 mV' → float (DC, son '=' sonrası)."""
-    tail = text.rsplit("=", 1)[1].strip()
+    tail = text.rsplit("=", 1)[1].strip().replace(",", ".")
     m = re.match(r"^([−-]?[\d.]+)\s*([kmµM]?)V$", tail)
     assert m, tail
     return float(m.group(1).replace(MINUS, "-")) * _PREFIX[m.group(2)]
@@ -158,7 +158,7 @@ def test_vcvs_nodal_steps(solve):
     # KCL yerine kısıt: Düğüm 3 için KCL yazılmaz
     kcl_text = "\n".join(b.text for b in blocks_of(res, "Düğüm Denklemleri (KCL)"))
     assert "Düğüm 3: " not in kcl_text
-    assert "0.75·V₂ = 5" in text and f"{MINUS}3·V₂ + V₃ = 0" in text
+    assert "0,75·V₂ = 5" in text and f"{MINUS}3·V₂ + V₃ = 0" in text
     assert final_voltages(res) == pytest.approx({"2": 20 / 3, "3": 20.0}, rel=2e-3)
     assert_text_matches_solver(res)
 
@@ -171,9 +171,9 @@ def test_vccs_nodal_steps(solve):
     res, _, _ = solve(BASE + "G1 3 0 V(R2) 0.5\nR3 3 0 6" + GND)
     text = full_text(res)
     assert OLD_NOTE not in text
-    assert "Düğüm 3: V₃/R3 + 0.5·V_R2 = 0" in text       # önce kontrol büyüklüğünün adıyla
-    assert "⇒ V₃/6 + 0.5·V₂ = 0" in text                  # sonra düğüm gerilimiyle
-    assert "0.5·V₂ + 0.1667·V₃ = 0" in text               # bilinmeyenler solda toplandı
+    assert "Düğüm 3: V₃/R3 + 0,5·V_R2 = 0" in text       # önce kontrol büyüklüğünün adıyla
+    assert "⇒ V₃/6 + 0,5·V₂ = 0" in text                  # sonra düğüm gerilimiyle
+    assert "0,5·V₂ + 0,1667·V₃ = 0" in text               # bilinmeyenler solda toplandı
     assert final_voltages(res) == pytest.approx({"2": 20 / 3, "3": -20.0}, rel=2e-3)
     assert_text_matches_solver(res)
 
@@ -184,7 +184,7 @@ def test_ccvs_nodal_steps(solve):
     """
     res, _, _ = solve(BASE + "H1 3 0 I(R2) 3\nR3 3 0 6" + GND)
     text = full_text(res)
-    assert "I_R2 = V₂/R2" in text and "= 0.25·V₂" in text
+    assert "I_R2 = V₂/R2" in text and "= 0,25·V₂" in text
     assert "Kısıt (H1): V₃ = 3·I_R2" in text and "⇒ V₃ = 3·V₂/4" in text
     assert final_voltages(res) == pytest.approx({"2": 20 / 3, "3": 5.0}, rel=2e-3)
     assert_text_matches_solver(res)
@@ -298,9 +298,9 @@ def test_ac_phasor_nodal_steps(solve):
     for b in blocks_of(res, "Denklemlerin Çözümü"):
         if b.kind == "result" and b.text.startswith("V"):
             node = {"₂": "2", "₃": "3", "₄": "4"}[b.text[1]]
-            m = re.search(r"= ([\d.]+)∠([−\d.]+)° V$", b.text)
+            m = re.search(r"= ([\d.,]+)∠([−\d.,]+)° V$", b.text)
             assert m, b.text
-            mag, ang = float(m.group(1)), float(m.group(2).replace(MINUS, "-"))
+            mag, ang = float(m.group(1).replace(",", ".")), float(m.group(2).replace(MINUS, "-").replace(",", "."))
             z = as_complex(res.node_voltages[node].value)
             assert mag == pytest.approx(abs(z), rel=2e-3)
             assert ang == pytest.approx(math.degrees(cmath.phase(z)), abs=0.02)
@@ -319,7 +319,7 @@ def test_current_control_through_voltage_source_falls_back_with_reason(solve):
     assert "Çözücüden alınmıştır" in text.replace("çözücüden", "Çözücüden") or "çözücüden alınmıştır" in text
     assert OLD_NOTE not in text
     # Çözücü sonuçları yine verilir:  V₂ = 6.667, F1 = 2·(−5/3) = −3.333 A → V₃ = +20 V
-    assert "V₃ = 20 V" in text and "V₂ = 6.667 V" in text
+    assert "V₃ = 20 V" in text and "V₂ = 6,667 V" in text
     assert as_complex(res.node_voltages["3"].value).real == pytest.approx(20.0, rel=1e-6)
 
 
@@ -346,8 +346,8 @@ def test_thevenin_uses_isc_and_vth_over_in(solve):
     res, _, _ = solve(THEV.format(g="0.25"), analysis_type="THEVENIN", terminals=("2", "0"))
     text = full_text(res)
     assert "SIFIRLANMAZ" in text
-    assert "In = Isc = 2.5 A" in text
-    assert "Rth = Vth / In = 10 V / 2.5 A" in text
+    assert "In = Isc = 2,5 A" in text
+    assert "Rth = Vth / In = 10 V / 2,5 A" in text
     assert "Rth = 4 Ω" in text
     assert "test kaynağı" not in text.split("2. Adım")[0]
     assert as_complex(res.thevenin.zth).real == pytest.approx(4.0)
@@ -358,8 +358,8 @@ def test_norton_isc_is_computed_not_derived_from_rth(solve):
     text = full_text(res)
     assert "Thevenin–Norton dönüşümüyle" not in text          # In = Vth/Rn döngüsel olurdu
     assert "kısa devre edilip devre bu hâliyle yeniden çözüldüğünde" in text
-    assert "In = 2.5 A" in text
-    assert "Rn = Vth / In = 10 V / 2.5 A" in text and "Rn = 4 Ω" in text
+    assert "In = 2,5 A" in text
+    assert "Rn = Vth / In = 10 V / 2,5 A" in text and "Rn = 4 Ω" in text
 
 
 def test_thevenin_negative_rth_keeps_the_note(solve):
@@ -384,7 +384,7 @@ def test_thevenin_with_only_dependent_sources_uses_test_source(solve):
     assert "V_test = 1 V" in text
     assert f"I_test = {MINUS}750 mA" in text
     assert f"Rth = V_test / I_test = 1 V / ({MINUS}750 mA)" in text
-    assert f"Rth = {MINUS}1.333 Ω" in text
+    assert f"Rth = {MINUS}1,333 Ω" in text
     assert "negatif" in text
     assert as_complex(res.thevenin.zth).real == pytest.approx(-4 / 3, rel=1e-6)
 
@@ -399,8 +399,8 @@ def test_norton_with_only_dependent_sources_uses_test_source(solve):
     res, _, _ = solve(net, analysis_type="NORTON", terminals=("1", "0"))
     text = full_text(res)
     assert "test kaynağı yöntemi" in text
-    assert "I_test = 233.3 mA" in text
-    assert "Rn = V_test / I_test = 1 V / 233.3 mA" in text and "Rn = 4.286 Ω" in text
+    assert "I_test = 233,3 mA" in text
+    assert "Rn = V_test / I_test = 1 V / 233,3 mA" in text and "Rn = 4,286 Ω" in text
     assert as_complex(res.norton.z_n).real == pytest.approx(30 / 7, rel=1e-6)
 
 

@@ -32,8 +32,8 @@ _UNIT_NAME = {"V": "volt (V)", "A": "amper (A)", "Ω": "ohm (Ω)", "W": "watt (W
 _PREFIX_EXAMPLE = {
     "A": "4 mA için “4m” ya da “4 mA”",
     "V": "50 mV için “50m” ya da “50 mV”",
-    "Ω": "2.2 kΩ için “2.2k” ya da “2.2 kΩ”",
-    "W": "3.6 mW için “3.6m” ya da “3.6 mW”",
+    "Ω": "2,2 kΩ için “2,2k” ya da “2,2 kΩ”",
+    "W": "3,6 mW için “3,6m” ya da “3,6 mW”",
     "s": "2 ms için “2m” ya da “2 ms”",
 }
 
@@ -170,7 +170,7 @@ def check_answer(q: PracticeQuestion, answer: str) -> AnswerVerdict:
     if q.is_ac and p.form == "real" and abs(abs(ans) - abs(exp)) <= REL_OK * max(abs(exp), floor):
         return _verdict(q, "partial",
                         "Büyüklük doğru. AC'de cevabı fazör olarak açısıyla birlikte yazın "
-                        "(ör. 5∠30 ya da 4.33+j2.5).", understood)
+                        "(ör. 5∠30 ya da 4,33+j2,5).", understood)
 
     if err <= REL_CLOSE:
         pct = f"{100 * err:.1f}".replace(".", ",")

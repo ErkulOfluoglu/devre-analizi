@@ -234,8 +234,8 @@ def test_dependent_constraint_row_is_labelled_and_scaled(solve):
     v = {n: as_complex(res.node_voltages[n].value).real for n in ("2", "3", "4")}
     assert v == pytest.approx({"2": 9.6, "3": 4.8, "4": -2.4}, abs=1e-6)
     lines = result_lines(res)
-    assert lines["V₂"].endswith("= 9.6 V") and lines["V₃"].endswith("= 4.8 V")
-    assert lines["V₄"].endswith(f"= {MINUS}2.4 V")
+    assert lines["V₂"].endswith("= 9,6 V") and lines["V₃"].endswith("= 4,8 V")
+    assert lines["V₄"].endswith(f"= {MINUS}2,4 V")
 
 
 def test_mesh_kilo_ohm_system_is_scaled(solve):
@@ -251,7 +251,7 @@ def test_mesh_kilo_ohm_system_is_scaled(solve):
     assert f"Çevre 1 denklemini 5 ile çarpalım:  16·I₁ {MINUS} 5·I₂ = 50" in joined
     assert f"Çevre 2 denklemini 5 ile çarpalım:  {MINUS}5·I₁ + 29·I₂ = 0" in joined
     assert f"Δ = 16·29 {MINUS} ({MINUS}5)·({MINUS}5) = 439" in joined
-    assert "I₁ = Δ₁/Δ = 1450 / 439 = 3.303 mA" in joined
+    assert "I₁ = Δ₁/Δ = 1450 / 439 = 3,303 mA" in joined
     i1, i2 = (m.current.real for m in res.meshes)
     assert i1 == pytest.approx(1450 / 439e3, rel=1e-6)
     assert i2 == pytest.approx(250 / 439e3, rel=1e-6)
@@ -271,6 +271,6 @@ def test_dependent_mesh_system_is_scaled(solve):
     assert f"Çevre 2 denklemini 2 ile çarpalım:  {MINUS}5·I₁ + 15·I₂ = 0" in joined
     assert "Çevre 1 denklemini" not in joined
     assert f"Δ = 7·15 {MINUS} ({MINUS}5)·({MINUS}5) = 80" in joined
-    assert "I₁ = Δ₁/Δ = 180 / 80 = 2.25 A" in joined
+    assert "I₁ = Δ₁/Δ = 180 / 80 = 2,25 A" in joined
     i1, i2 = (m.current.real for m in res.meshes)
     assert (i1, i2) == pytest.approx((2.25, 0.75), abs=1e-6)

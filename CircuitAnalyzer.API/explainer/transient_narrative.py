@@ -334,9 +334,10 @@ def build_transient_explanation(a: TransientAnalysis) -> List[ExplanationSection
            "değişimin ne kadarının tamamlandığı hazır yüzdelerle bulunur:")
     for n, pct in _PERCENT:
         t = n * a.tau
-        s.math(f"t = {n}τ = {eng(t, 's')}  →  değişimin %{pct:.1f} kadarı tamamlanır  →  "
+        pct_txt = f"{pct:.1f}".replace(".", ",")
+        s.math(f"t = {n}τ = {eng(t, 's')}  →  değişimin %{pct_txt} kadarı tamamlanır  →  "
                f"{x_lbl} = {_x(a, a.x_at(t))}")
-    s.text("Eğri son değere hiçbir zaman tam olarak ulaşmaz; ama 5τ sonunda değişimin %99.3'ü "
+    s.text("Eğri son değere hiçbir zaman tam olarak ulaşmaz; ama 5τ sonunda değişimin %99,3'ü "
            f"tamamlandığı için {sid} pratikte {_done_word(a)} kabul edilir: "
            f"5τ = {eng(5 * a.tau, 's')}.")
     sections.append(s)

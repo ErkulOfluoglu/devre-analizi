@@ -28,6 +28,8 @@ import math
 from dataclasses import dataclass, field
 from typing import List, Optional, Set, Tuple
 
+from explainer.formatting import MINUS, num
+
 from models.response import SolutionStep
 from parser.netlist_parser import (
     ParsedCircuit, ElementType, VOLTAGE_SOURCES, CURRENT_SOURCES, DEPENDENT_SOURCES,
@@ -71,12 +73,7 @@ class Reduction:
 
 
 def _fmt(x: float) -> str:
-    if abs(x) < 1e-15:
-        return "0"
-    s = f"{x:.4g}"
-    if "e+0" in s:
-        return f"{float(s):.0f}"
-    return s
+    return num(x)
 
 
 def _fmt_z(z: complex) -> str:
@@ -89,7 +86,7 @@ def _fmt_z(z: complex) -> str:
 
 
 def _paren(text: str) -> str:
-    return f"({text})" if ("+" in text[1:] or "-" in text) else text
+    return f"({text})" if ("+" in text[1:] or "-" in text or MINUS in text) else text
 
 
 def _impedance(kind: str, value: float, omega: Optional[float]) -> Optional[complex]:

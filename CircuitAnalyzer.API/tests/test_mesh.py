@@ -337,7 +337,7 @@ def test_mesh_narrative_supermesh(solve):
 
     texts = all_texts(res.explanation)
     assert any("süperçevre" in t.lower() for t in texts)
-    assert any("= 0.002 A" in t for t in texts)
+    assert any("= 0,002 A" in t for t in texts)
     assert any("birlikte çözülünce" in t for t in texts)
 
     # Dal akımları çözücüyle eşleşmeli

@@ -38,8 +38,8 @@ public class ApiModelsTests
     [Theory]
     [InlineData(0.004, "A", "4 mA")]
     [InlineData(8.0, "V", "8 V")]
-    [InlineData(2000.0 / 3, "Ω", "666.7 Ω")]
-    [InlineData(4700.0, "Ω", "4.7 kΩ")]
+    [InlineData(2000.0 / 3, "Ω", "666,7 Ω")]
+    [InlineData(4700.0, "Ω", "4,7 kΩ")]
     [InlineData(1e-6, "F", "1 µF")]
     [InlineData(-0.048, "W", "-48 mW")]
     [InlineData(0.0, "V", "0 V")]
@@ -53,7 +53,7 @@ public class ApiModelsTests
     public void EngFormat_ComplexUsesPolarWithPrefixAtEnd()
     {
         var v = ResultValue.FromComplex(new ComplexNumberDto { Real = 0.0316292, Imaginary = 0.0044364 });
-        Assert.Equal("31.94∠7.984° mA", EngFormat.Format(v, "A"));
+        Assert.Equal("31,94∠7,984° mA", EngFormat.Format(v, "A"));
     }
 
     [Fact]

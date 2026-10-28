@@ -76,7 +76,7 @@ namespace CircuitAnalyzer.WPF.Views
             _tMinSeconds = -0.5 * tau;
             _tMaxSeconds = 5.0 * tau;
 
-            TxtTauInfo.Text = $"τ = {tau * _timeScale:G4} {_timeUnit}  |  R_th = {EngFormat.Format(data.Rth, "Ω")}";
+            TxtTauInfo.Text = $"τ = {TurkishNumber.Format(tau * _timeScale, "G4")} {_timeUnit}  |  R_th = {EngFormat.Format(data.Rth, "Ω")}";
 
             // Seçiciler
             if (data.Quantities.Count > 2)
@@ -232,6 +232,19 @@ namespace CircuitAnalyzer.WPF.Views
             double ySpan = Math.Max(1e-6, yMax - yMin);
             plot.Axes.SetLimits(xMin, xMax, yMin - ySpan * 0.15, yMax + ySpan * 0.15);
 
+            // Eksen sayı formatlayıcıları (Türkçe ondalık virgülü)
+            var autoBottom = new ScottPlot.TickGenerators.NumericAutomatic
+            {
+                LabelFormatter = pos => TurkishNumber.Format(pos, "G4")
+            };
+            plot.Axes.Bottom.TickGenerator = autoBottom;
+
+            var autoLeft = new ScottPlot.TickGenerators.NumericAutomatic
+            {
+                LabelFormatter = pos => TurkishNumber.Format(pos, "G4")
+            };
+            plot.Axes.Left.TickGenerator = autoLeft;
+
             // Crosshair (fare ile gezinme)
             crosshair = plot.Add.Crosshair(0, 0);
             crosshair.IsVisible = false;
@@ -310,7 +323,7 @@ namespace CircuitAnalyzer.WPF.Views
             crosshair.IsVisible = true;
             wpfPlot.Refresh();
 
-            txtHover.Text = $"t = {tScaled:G4} {_timeUnit}, {q.Label} = {val:G4} {q.Unit}";
+            txtHover.Text = $"t = {TurkishNumber.Format(tScaled, "G4")} {_timeUnit}, {q.Label} = {TurkishNumber.Format(val, "G4")} {q.Unit}";
         }
 
         private void BtnEnlarge_Click(object sender, RoutedEventArgs e)

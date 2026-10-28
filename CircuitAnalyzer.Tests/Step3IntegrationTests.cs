@@ -320,10 +320,10 @@ public class Step3IntegrationTests : IClassFixture<BackendFixture>
         Assert.Equal(4.8, v1MiddleContrib.Value, 4);
         Assert.Equal(2.4, v2MiddleContrib.Value, 4);
 
-        // explanation contains "Toplam: Katkıların Toplanması" with "7.2 V" and a check block containing "✓"
+        // explanation contains "Toplam: Katkıların Toplanması" with "7,2 V" and a check block containing "✓"
         var totalSection = response.Results.Explanation.FirstOrDefault(s => s.Title == "Toplam: Katkıların Toplanması");
         Assert.NotNull(totalSection);
-        Assert.Contains(totalSection.Blocks, b => b.Text.Contains("7.2 V"));
+        Assert.Contains(totalSection.Blocks, b => b.Text.Contains("7,2 V"));
         Assert.Contains(totalSection.Blocks, b => b.Kind == "check" && b.Text.Contains("✓"));
     }
 

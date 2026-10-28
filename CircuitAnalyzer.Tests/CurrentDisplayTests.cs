@@ -107,7 +107,7 @@ public class CurrentDisplayTests
         string expectedEngFormat = EngFormat.Format(negatedPhasor, "A");
 
         Assert.Equal(expectedEngFormat, value);
-        Assert.Contains("319.4", value);
+        Assert.Contains("319,4", value);
         Assert.Contains("mA", value);
     }
 

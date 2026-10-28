@@ -35,8 +35,8 @@ from explainer.formatting import (
 # ═══════════════════════════════════════════════════════
 
 def test_num_four_significant_digits():
-    assert num(12.3456) == "12.35"
-    assert num(1.234) == "1.234"
+    assert num(12.3456) == "12,35"
+    assert num(1.234) == "1,234"
     assert num(1234.0) == "1234"
     # 4 anlamlı basamak, bilimsel gösterim yok, yarımda yukarı yuvarlama
     assert num(12345.0) == "12350"
@@ -51,18 +51,25 @@ def test_num_zero_and_near_zero():
     assert num(-1e-16) == "0"
 
 
+def test_num_uses_comma():
+    assert num(6.087) == "6,087"
+    assert num(0.4167) == "0,4167"
+    assert num(1.909) == "1,909"
+    assert num(7.5) == "7,5"
+
+
 def test_num_unicode_minus():
     res = num(-5)
     assert res == f"{MINUS}5"
     assert "-" not in res
-    assert num(-0.005) == f"{MINUS}0.005"
+    assert num(-0.005) == f"{MINUS}0,005"
 
 
 def test_num_no_scientific_exponent():
     # Çok küçük ve çok büyük sayılarda 'e' gösterilmemeli
     small = num(1e-5)
     assert "e" not in small and "E" not in small
-    assert small == "0.00001"
+    assert small == "0,00001"
 
     large = num(1e7)
     assert "e" not in large and "E" not in large
@@ -75,7 +82,7 @@ def test_num_no_scientific_exponent():
 
 def test_eng_standard_values():
     assert eng(0.004, "A") == "4 mA"
-    assert eng(666.666, "Ω") == "666.7 Ω"
+    assert eng(666.666, "Ω") == "666,7 Ω"
     assert eng(0, "V") == "0 V"
     assert eng(0.0, "V") == "0 V"
 
@@ -89,12 +96,12 @@ def test_eng_negative_values():
     res = eng(-0.004, "A")
     assert res == f"{MINUS}4 mA"
     assert "-" not in res
-    assert eng(-666.666, "Ω") == f"{MINUS}666.7 Ω"
+    assert eng(-666.666, "Ω") == f"{MINUS}666,7 Ω"
 
 
 def test_eng_various_prefixes():
-    assert eng(1.5e6, "Ω") == "1.5 MΩ"
-    assert eng(2.2e3, "Ω") == "2.2 kΩ"
+    assert eng(1.5e6, "Ω") == "1,5 MΩ"
+    assert eng(2.2e3, "Ω") == "2,2 kΩ"
     assert eng(100e-6, "F") == "100 µF"
     assert eng(47e-9, "F") == "47 nF"
     assert eng(10e-12, "F") == "10 pF"
@@ -114,7 +121,7 @@ def test_eng_invalid_and_special_values():
 def test_rect_complex_values():
     # 0.92 - 2.89j V → "0.92 − j2.89 V"
     z = complex(0.92, -2.89)
-    assert rect(z, "V") == f"0.92 {MINUS} j2.89 V"
+    assert rect(z, "V") == f"0,92 {MINUS} j2,89 V"
 
     # Pozitif sanal kısım
     z_pos = complex(50, 30)
@@ -122,9 +129,9 @@ def test_rect_complex_values():
 
 
 def test_rect_purely_imaginary():
-    assert rect(-31.83j) == f"{MINUS}j31.83"
-    assert rect(-31.83j, "Ω") == f"{MINUS}j31.83 Ω"
-    assert rect(31.83j, "Ω") == "j31.83 Ω"
+    assert rect(-31.83j) == f"{MINUS}j31,83"
+    assert rect(-31.83j, "Ω") == f"{MINUS}j31,83 Ω"
+    assert rect(31.83j, "Ω") == "j31,83 Ω"
 
 
 def test_rect_real_numbers():
@@ -151,21 +158,21 @@ def test_polar_scaled_milliamperes():
     assert pytest.approx(z.real, abs=1e-4) == 0.0907
     assert pytest.approx(z.imag, abs=1e-4) == 0.0289
     formatted = polar(z, "A", scaled=True)
-    assert formatted == "95.29∠17.66° mA"
+    assert formatted == "95,29∠17,66° mA"
 
 
 def test_polar_negative_phase():
     z = complex(0.92, -2.89)
     res = polar(z, "V", scaled=True)
-    assert res == f"3.033∠{MINUS}72.34° V"
+    assert res == f"3,033∠{MINUS}72,34° V"
 
 
 def test_polar_unscaled():
     z = complex(3, 4)
     res = polar(z, scaled=False)
-    assert res == "5∠53.13°"
+    assert res == "5∠53,13°"
     res_unit = polar(z, "V", scaled=False)
-    assert res_unit == "5∠53.13° V"
+    assert res_unit == "5∠53,13° V"
 
 
 def test_polar_zero():
@@ -178,9 +185,9 @@ def test_polar_zero():
 # ═══════════════════════════════════════════════════════
 
 def test_paren_negative_and_sum_expressions():
-    assert paren(f"{MINUS}j31.83 Ω") == f"({MINUS}j31.83 Ω)"
+    assert paren(f"{MINUS}j31,83 Ω") == f"({MINUS}j31,83 Ω)"
     assert paren("50 + j30 Ω") == "(50 + j30 Ω)"
-    assert paren(f"0.92 {MINUS} j2.89 V") == f"(0.92 {MINUS} j2.89 V)"
+    assert paren(f"0,92 {MINUS} j2,89 V") == f"(0,92 {MINUS} j2,89 V)"
 
 
 def test_paren_plain_expressions():
@@ -218,6 +225,6 @@ def test_value_dc():
 def test_value_ac():
     z = complex(0.92, -2.89)
     val_str = value(z, "V", is_dc=False)
-    expected_polar = f"3.033∠{MINUS}72.34° V"
-    expected_rect = f"0.92 {MINUS} j2.89 V"
+    expected_polar = f"3,033∠{MINUS}72,34° V"
+    expected_rect = f"0,92 {MINUS} j2,89 V"
     assert val_str == f"{expected_polar}  (= {expected_rect})"

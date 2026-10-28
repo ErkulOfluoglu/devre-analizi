@@ -98,11 +98,11 @@ def build_transient_questions(
         "XTAU", f"{x_lbl}(τ)", f"t = τ = {eng(tau, 's')} anında {what} {x_lbl}",
         unit, "main", x_tau, span,
         hint=(f"{x_lbl}(t) = {x_lbl}(∞) + [{x_lbl}(0) − {x_lbl}(∞)] · e^(−t/τ) formülünde t = τ "
-              "yazın: e⁻¹ ≈ 0.368. (Değişimin %63.2'si tamamlanmış olur.)"),
+              "yazın: e⁻¹ ≈ 0,368. (Değişimin %63,2'si tamamlanmış olur.)"),
         sign_hint="İşaret ters: başlangıç ve son değerin işaretlerini kontrol edin.",
         alternatives=[
             (abs(x0 - xf) * (1 - math.exp(-1)),
-             "Bu, tamamlanan değişimin miktarı (%63.2'si); soru değerin kendisini soruyor "
+             "Bu, tamamlanan değişimin miktarı (%63,2'si); soru değerin kendisini soruyor "
              f"({x_lbl}(τ) = {x_lbl}(∞) + [{x_lbl}(0) − {x_lbl}(∞)]·e⁻¹)."),
             (xf, f"Bu {x_lbl}(∞): τ anında henüz son değere ulaşılmadı."),
         ],
@@ -124,7 +124,7 @@ def build_transient_questions(
         alternatives=[
             (tau * math.log10(ratio), "Doğal logaritma (ln) kullanılmalı, 10 tabanlı logaritma (log) değil."),
             (5 * tau, "Bu 5τ (değişimin pratikte bittiği süre); sorulan, belirtilen değere ulaşma süresi."),
-            (tau, "Bu bir τ'dur (değişimin %63.2'si); belirtilen değere ulaşma süresini ln ile bulun."),
+            (tau, "Bu bir τ'dur (değişimin %63,2'si); belirtilen değere ulaşma süresini ln ile bulun."),
         ],
     ))
 

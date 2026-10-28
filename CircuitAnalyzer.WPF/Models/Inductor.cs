@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using CircuitAnalyzer.WPF.Services;
 
 namespace CircuitAnalyzer.WPF.Models
 {
@@ -219,12 +220,12 @@ namespace CircuitAnalyzer.WPF.Models
         private string FormatDisplayValue()
         {
             if (Value >= 1.0)
-                return $"{Value:G3}H";
+                return $"{TurkishNumber.Format(Value, "G3")}H";
             if (Value >= 1e-3)
-                return $"{Value * 1e3:G3}mH";
+                return $"{TurkishNumber.Format(Value * 1e3, "G3")}mH";
             if (Value >= 1e-6)
-                return $"{Value * 1e6:G3}µH";
-            return $"{Value * 1e9:G3}nH";
+                return $"{TurkishNumber.Format(Value * 1e6, "G3")}µH";
+            return $"{TurkishNumber.Format(Value * 1e9, "G3")}nH";
         }
 
         /// <summary>SPICE formatı: "100m", "47u" vb.</summary>

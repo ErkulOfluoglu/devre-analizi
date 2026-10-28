@@ -70,6 +70,7 @@ GND = "* GND1 — Referans toprak (Node 0)"
 
 def _to_sympy(text: str):
     """'(V_2 - 12)/1000 + V_2/(-j31.83)' -> SymPy expression."""
+    text = text.replace(",", ".").replace("−", "-")
     text = re.sub(r"(?<![\w.])j(\d[\d.]*(?:e[+-]?\d+)?)", r"(\1*I)", text)
     return sympy.sympify(text)
 
@@ -329,7 +330,7 @@ def test_narrative_explanation_circuit_3(solve):
     # 1. KCL bölümü
     kcl_texts = sec_map.get("Düğüm Denklemleri (KCL)", [])
     assert any("Düğüm 2: (V₂ − V₁)/R1 + V₂/R2 − I1 = 0" in t for t in kcl_texts)
-    assert any("⇒ (V₂ − 10)/1000 + V₂/1000 − 0.002 = 0" in t for t in kcl_texts)
+    assert any("⇒ (V₂ − 10)/1000 + V₂/1000 − 0,002 = 0" in t for t in kcl_texts)
 
     # 2. Denklemlerin Çözümü bölümü
     solve_texts = sec_map.get("Denklemlerin Çözümü", [])

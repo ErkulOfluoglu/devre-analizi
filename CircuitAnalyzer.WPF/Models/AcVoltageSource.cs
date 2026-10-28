@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using CircuitAnalyzer.WPF.Services;
 
 namespace CircuitAnalyzer.WPF.Models
 {
@@ -293,31 +294,31 @@ namespace CircuitAnalyzer.WPF.Models
         {
             string ampStr;
             if (Amplitude >= 1000)
-                ampStr = $"{Amplitude / 1000:G3}kV";
+                ampStr = $"{TurkishNumber.Format(Amplitude / 1000, "G3")}kV";
             else if (Amplitude >= 1)
-                ampStr = $"{Amplitude:G3}V";
+                ampStr = $"{TurkishNumber.Format(Amplitude, "G3")}V";
             else
-                ampStr = $"{Amplitude * 1000:G3}mV";
+                ampStr = $"{TurkishNumber.Format(Amplitude * 1000, "G3")}mV";
 
             // Fazör modunda: "10V∠30°" (frekans gösterilmez)
             if (InputMode == AcInputMode.Phasor)
             {
-                return $"{ampStr}∠{Phase:G3}°";
+                return $"{ampStr}∠{TurkishNumber.Format(Phase, "G3")}°";
             }
 
             // Fiziksel modda: "10V 50Hz ∠30°"
             string freqStr;
             if (Frequency >= 1_000_000)
-                freqStr = $"{Frequency / 1_000_000:G3}MHz";
+                freqStr = $"{TurkishNumber.Format(Frequency / 1_000_000, "G3")}MHz";
             else if (Frequency >= 1000)
-                freqStr = $"{Frequency / 1000:G3}kHz";
+                freqStr = $"{TurkishNumber.Format(Frequency / 1000, "G3")}kHz";
             else
-                freqStr = $"{Frequency:G3}Hz";
+                freqStr = $"{TurkishNumber.Format(Frequency, "G3")}Hz";
 
             if (Math.Abs(Phase) < 0.01)
                 return $"{ampStr} {freqStr}";
 
-            return $"{ampStr} {freqStr} ∠{Phase:G3}°";
+            return $"{ampStr} {freqStr} ∠{TurkishNumber.Format(Phase, "G3")}°";
         }
     }
 }

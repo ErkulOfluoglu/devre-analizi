@@ -183,7 +183,7 @@ class TestMakeComplexNumber:
         assert c.magnitude == pytest.approx(5.0)
         assert c.phase_degrees == pytest.approx(53.1301, abs=1e-3)
         assert c.rectangular_str == "3+j4"
-        assert c.polar_str == "5∠53.13°"
+        assert c.polar_str == "5∠53,13°"
 
     def test_complex_fourth_quadrant_unicode_minus(self):
         """3-4j için dikdörtgensel gösterimde U+2212 eksi işareti bulunmalıdır."""
@@ -193,7 +193,7 @@ class TestMakeComplexNumber:
     def test_pure_negative_imaginary(self):
         """-31.83j için gerçel kısmı olmayan negatif sanal gösterim."""
         c = make_complex_number(-31.83j)
-        assert c.rectangular_str == "\u2212j31.83"
+        assert c.rectangular_str == "\u2212j31,83"
 
     def test_pure_positive_imaginary(self):
         """2j için 'j2' dikdörtgensel gösterim."""
@@ -463,19 +463,19 @@ class TestStepGeneratorHelpers:
         """_format_complex_latex ile karmaşık sayıların LaTeX biçimlendirmesi."""
         assert _format_complex_latex(8.0, "V") == "8 \\; \\text{V}"
         assert _format_complex_latex(50 + 30j, "Ω").startswith("50 + j30")
-        assert _format_complex_latex(-2.5j) == "-j2.5"
-        assert _format_complex_latex(-31.83j) == "-j31.83"
+        assert _format_complex_latex(-2.5j) == "-j2,5"
+        assert _format_complex_latex(-31.83j) == "-j31,83"
 
     def test_format_polar_latex(self):
         """_format_polar_latex ile kutupsal LaTeX formatı."""
-        assert _format_polar_latex(3 + 4j) == "5 \\angle 53.13^\\circ"
+        assert _format_polar_latex(3 + 4j) == "5 \\angle 53,13^\\circ"
 
     @pytest.mark.parametrize("val,unit,expected", [
         (0.004, "A", "4 mA"),
         (1000, "Ω", "1 kΩ"),
         (1e-6, "F", "1 µF"),
         (0, "V", "0 V"),
-        (4700, "Ω", "4.7 kΩ"),
+        (4700, "Ω", "4,7 kΩ"),
     ])
     def test_engineering_notation(self, val, unit, expected):
         """_engineering_notation ile mühendislik birim önekleri."""
@@ -483,8 +483,8 @@ class TestStepGeneratorHelpers:
 
     @pytest.mark.parametrize("val,expected", [
         (12, "12"),
-        (-31.83j, "-j31.83"),
-        (14.14 + 14.14j, "14.14+j14.14"),
+        (-31.83j, "-j31,83"),
+        (14.14 + 14.14j, "14,14+j14,14"),
         (3 - 4j, "3-j4"),
     ])
     def test_format_complex_text(self, val, expected):
@@ -493,9 +493,9 @@ class TestStepGeneratorHelpers:
 
     @pytest.mark.parametrize("val,expected", [
         (1000, "1000"),
-        (-31.83j, "(-j31.83)"),
+        (-31.83j, "(-j31,83)"),
         (3 + 4j, "(3+j4)"),
-        (-5, "(-5)"),
+        (-5, "(−5)"),
     ])
     def test_paren(self, val, expected):
         """_paren ile negatif ve toplam ifadeleri paranteze alma."""

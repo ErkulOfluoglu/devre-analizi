@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using CircuitAnalyzer.WPF.Services;
 
 namespace CircuitAnalyzer.WPF.Models
 {
@@ -170,16 +171,16 @@ namespace CircuitAnalyzer.WPF.Models
             double abs = Math.Abs(Value);
             string sign = Value < 0 ? "-" : "";
             if (abs >= 1_000)
-                return $"{sign}{abs / 1_000:G4} kA";
+                return $"{sign}{TurkishNumber.Format(abs / 1_000, "G4")} kA";
             if (abs >= 1)
-                return $"{sign}{abs:G4} A";
+                return $"{sign}{TurkishNumber.Format(abs, "G4")} A";
             if (abs >= 0.001)
-                return $"{sign}{abs * 1_000:G4} mA";
+                return $"{sign}{TurkishNumber.Format(abs * 1_000, "G4")} mA";
             if (abs >= 0.000_001)
-                return $"{sign}{abs * 1_000_000:G4} µA";
+                return $"{sign}{TurkishNumber.Format(abs * 1_000_000, "G4")} µA";
             if (abs >= 0.000_000_001)
-                return $"{sign}{abs * 1_000_000_000:G4} nA";
-            return $"{sign}{abs:G4} A";
+                return $"{sign}{TurkishNumber.Format(abs * 1_000_000_000, "G4")} nA";
+            return $"{sign}{TurkishNumber.Format(abs, "G4")} A";
         }
     }
 }

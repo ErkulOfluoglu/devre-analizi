@@ -156,7 +156,7 @@ public partial class PracticeView : UserControl
             items.Add(new AnswerCheckItemDto
             {
                 Question = q,
-                Answer = text
+                Answer = text.Replace(',', '.')
             });
         }
 
@@ -222,7 +222,7 @@ public partial class PracticeView : UserControl
 
                     if (!string.IsNullOrEmpty(verdict.Message))
                     {
-                        row.FeedbackText.Text = verdict.Message;
+                        row.FeedbackText.Text = TurkishNumber.NormalizeForDisplay(verdict.Message);
                         row.FeedbackText.SetResourceReference(TextBlock.ForegroundProperty, colorToken);
                         row.FeedbackText.Visibility = Visibility.Visible;
                     }
@@ -233,7 +233,7 @@ public partial class PracticeView : UserControl
 
                     if (!string.IsNullOrEmpty(verdict.UnderstoodAs))
                     {
-                        row.UnderstoodText.Text = $"Okunan: {verdict.UnderstoodAs}";
+                        row.UnderstoodText.Text = $"Okunan: {TurkishNumber.NormalizeForDisplay(verdict.UnderstoodAs)}";
                         row.UnderstoodText.Visibility = Visibility.Visible;
                     }
                     else
@@ -367,14 +367,14 @@ public partial class PracticeView : UserControl
         var textBox = new TextBox();
 
         string placeholder = q.IsAc
-            ? "ör. 3.03∠-72.3"
+            ? "ör. 3,03∠-72,3"
             : q.Unit switch
             {
                 "A" => "ör. 4m veya 4 mA",
-                "Ω" => "ör. 2.2k veya 2200",
+                "Ω" => "ör. 2,2k veya 2200",
                 "W" => "ör. 36m veya 36 mW",
                 "s" => "ör. 2m veya 2 ms",
-                _ => "ör. 7.5 veya 750m",
+                _ => "ör. 7,5 veya 750m",
             };
         var watermark = new TextBlock
         {

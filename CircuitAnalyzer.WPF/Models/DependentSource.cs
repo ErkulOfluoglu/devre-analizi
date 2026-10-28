@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using CircuitAnalyzer.WPF.Services;
 
 namespace CircuitAnalyzer.WPF.Models
 {
@@ -158,7 +159,7 @@ namespace CircuitAnalyzer.WPF.Models
 
         /// <summary>Ekranda gösterilen kazanç metni (Türkçe virgül, gerçek eksi işareti): "0,5", "−3".</summary>
         public static string FormatGain(double gain)
-            => gain.ToString("G6", Turkish).Replace('-', '−');
+            => TurkishNumber.Format(gain, "G6").Replace('-', '−');
 
         /// <summary>
         /// Etiketin düz metin karşılığı (testler ve erişilebilirlik için): "3·V_R2", "0,5·I_R2" (ters kontrolde de eksi yok).

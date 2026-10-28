@@ -176,9 +176,9 @@ def test_two_mesh_vccs_single_mesh_constraint(mesh_case):
     assert ma.cs_voltages["G1"].real == pytest.approx(-8.0)     # V(3) − V(0)
     t = texts_of(build_mesh_sections(ctx, ma))
     assert any("G1 bağımlı akım kaynağı yalnızca Çevre" in x for x in t)
-    assert any(x.endswith("= 0.5·V_R2") for x in t)             # I₂ = 0.5·V_R2 (kısıt)
+    assert any(x.endswith("= 0,5·V_R2") for x in t)             # I₂ = 0.5·V_R2 (kısıt)
     assert any(x.startswith("V_R2 = R2·") for x in t)
-    assert any(x == "Bağımlı kaynağın değeri: G1 = 0.5·V_R2 = 0.5 · 4 V = 2 A" for x in t)
+    assert any(x == "Bağımlı kaynağın değeri: G1 = 0,5·V_R2 = 0,5 · 4 V = 2 A" for x in t)
 
 
 def test_two_mesh_ccvs(mesh_case):
@@ -219,7 +219,7 @@ def test_two_mesh_cccs(mesh_case):
     assert any(x == "I₂ = 3·I_R2" for x in t)                      # kısıt: bilinmeyen içerir
     assert any(x == "I_R2 = I₁ − I₂" for x in t)
     assert any(x == "I₂ = 3·(I₁ − I₂)" for x in t)                 # yerine koyma
-    assert any(x == "Bağımlı kaynağın değeri: F1 = 3·I_R2 = 3 · 833.3 mA = 2.5 A" for x in t)
+    assert any(x == "Bağımlı kaynağın değeri: F1 = 3·I_R2 = 3 · 833,3 mA = 2,5 A" for x in t)
 
 
 def test_dependent_current_source_shared_supermesh(mesh_case):
@@ -320,7 +320,7 @@ def test_control_is_independent_voltage_source_voltage(mesh_case):
     assert d.value.real == pytest.approx(5.0)
     t = texts_of(build_mesh_sections(ctx, ma))
     assert any(x == "V_V1 = V1 = 10 V" for x in t)
-    assert any(x == "Bağımlı kaynağın değeri: E1 = 0.5·V_V1 = 0.5 · 10 V = 5 V" for x in t)
+    assert any(x == "Bağımlı kaynağın değeri: E1 = 0,5·V_V1 = 0,5 · 10 V = 5 V" for x in t)
 
 
 def test_ac_phasor_dependent(mesh_case):

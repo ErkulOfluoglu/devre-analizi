@@ -20,6 +20,7 @@ def kcl_step(steps):
 
 def _to_sympy(text):
     """'(V_2 - 12)/1000 + V_2/(-j31.83)' → SymPy ifadesi."""
+    text = text.replace(",", ".").replace("−", "-")
     text = re.sub(r"(?<![\w.])j(\d[\d.]*(?:e[+-]?\d+)?)", r"(\1*I)", text)
     return sympy.sympify(text)
 
@@ -91,7 +92,7 @@ def test_symbolic_line_precedes_numeric_line(solve):
     sym = next(i for i, e in enumerate(eqs) if "(sembolik)" in e)
     assert "(sayısal)" in eqs[sym + 1]
     assert "Z_C1" in eqs[sym]
-    assert "(-j31.83)" in eqs[sym + 1]
+    assert "(-j31,83)" in eqs[sym + 1]
 
 
 def test_source_node_has_no_kcl_equation(solve):
@@ -117,8 +118,8 @@ def test_ac_known_node_is_phasor(solve):
     net, mode, f = CASES["ac_rl_phase"]
     step = kcl_step(solve(net, mode, f)[1])
     # 20∠45° = 14.14 + j14.14
-    assert step.result_snapshot["known_nodes"]["1"] == "14.14+j14.14"
-    assert "(V_2 - (14.14+j14.14))/50" in step.result_snapshot["kcl_equations"][0]["numeric"]
+    assert step.result_snapshot["known_nodes"]["1"] == "14,14+j14,14"
+    assert "(V_2 - (14,14+j14,14))/50" in step.result_snapshot["kcl_equations"][0]["numeric"]
 
 
 def test_latex_has_no_malformed_imaginary(solve):

@@ -24,6 +24,12 @@ import math
 import cmath
 from typing import List, Optional, Dict, Any
 
+from explainer.formatting import MINUS, num
+
+
+def _n(x):
+    """Sayıysa ondalık virgülle yaz (num); değilse olduğu gibi bırak."""
+    return num(float(x)) if isinstance(x, (int, float)) and not isinstance(x, bool) else str(x)
 from models.response import SolutionStep
 from parser.netlist_parser import (
     ParsedCircuit, ParsedElement, ElementType,
@@ -48,34 +54,34 @@ def _format_complex_latex(z: complex, unit: str = "") -> str:
     unit_tex = f" \\; \\text{{{unit}}}" if unit else ""
 
     if isinstance(z, (int, float)):
-        return f"{z:.4g}{unit_tex}"
+        return f"{num(z)}{unit_tex}"
 
     r, i = z.real, z.imag
 
     if abs(i) < 1e-10:
-        return f"{r:.4g}{unit_tex}"
+        return f"{num(r)}{unit_tex}"
     elif abs(r) < 1e-10:
         if abs(i - 1) < 1e-10:
             return f"j{unit_tex}"
         elif abs(i + 1) < 1e-10:
             return f"-j{unit_tex}"
         sign = "-" if i < 0 else ""
-        return f"{sign}j{abs(i):.4g}{unit_tex}"
+        return f"{sign}j{num(abs(i))}{unit_tex}"
     else:
         sign = "+" if i >= 0 else "-"
-        return f"{r:.4g} {sign} j{abs(i):.4g}{unit_tex}"
+        return f"{num(r)} {sign} j{num(abs(i))}{unit_tex}"
 
 
 def _format_polar_latex(z: complex, unit: str = "") -> str:
     """
     Karmaşık sayıyı kutupsal LaTeX formatında döndürür.
 
-    Örnek: (3+4j), "V" → "5 \\angle 53.13^\\circ \\; \\text{V}"
+    Örnek: (3+4j), "V" → "5 \\angle 53,13^\\circ \\; \\text{V}"
     """
     mag = abs(z)
     phase = math.degrees(cmath.phase(z)) if mag > 1e-15 else 0
     unit_tex = f" \\; \\text{{{unit}}}" if unit else ""
-    return f"{mag:.4g} \\angle {phase:.4g}^\\circ{unit_tex}"
+    return f"{num(mag)} \\angle {num(phase)}^\\circ{unit_tex}"
 
 
 def _engineering_notation(value: float, unit: str) -> str:
@@ -100,9 +106,9 @@ def _engineering_notation(value: float, unit: str) -> str:
             scaled = value / threshold
             if abs(scaled - round(scaled)) < 1e-6:
                 return f"{int(round(scaled))} {prefix}{unit}"
-            return f"{scaled:.4g} {prefix}{unit}"
+            return f"{num(scaled)} {prefix}{unit}"
 
-    return f"{value:.4g} {unit}"
+    return f"{num(value)} {unit}"
 
 
 # ═══════════════════════════════════════════════════════
@@ -138,31 +144,31 @@ def generate_impedance_steps(
     latex_parts = []
 
     # Başlık adımı
-    equations.append(f"ω = 2πf = 2π × {frequency} = {omega:.4g} rad/s")
+    equations.append(f"ω = 2πf = 2π × {num(frequency)} = {num(omega)} rad/s")
     latex_parts.append(
-        f"\\omega = 2\\pi f = 2\\pi \\times {frequency} = {omega:.4g} "
+        f"\\omega = 2\\pi f = 2\\pi \\times {num(frequency)} = {num(omega)} "
         f"\\; \\text{{rad/s}}"
     )
 
     # Kapasitörler: Zc = 1/(jωC)
     for c in capacitors:
         zc = 1 / (1j * omega * c.value)
-        eq = f"Z_{c.id} = 1/(jωC) = 1/(j×{omega:.4g}×{c.value:.4g}) = {_format_complex_latex(zc, 'Ω')}"
+        eq = f"Z_{c.id} = 1/(jωC) = 1/(j×{num(omega)}×{num(c.value)}) = {_format_complex_latex(zc, 'Ω')}"
         equations.append(eq)
         latex_parts.append(
             f"Z_{{{c.id}}} = \\frac{{1}}{{j\\omega C}} = "
-            f"\\frac{{1}}{{j \\cdot {omega:.4g} \\cdot {c.value:.4g}}} = "
+            f"\\frac{{1}}{{j \\cdot {num(omega)} \\cdot {num(c.value)}}} = "
             f"{_format_complex_latex(zc, 'Ω')}"
         )
 
     # Bobinler: ZL = jωL
     for l in inductors:
         zl = 1j * omega * l.value
-        eq = f"Z_{l.id} = jωL = j×{omega:.4g}×{l.value:.4g} = {_format_complex_latex(zl, 'Ω')}"
+        eq = f"Z_{l.id} = jωL = j×{num(omega)}×{num(l.value)} = {_format_complex_latex(zl, 'Ω')}"
         equations.append(eq)
         latex_parts.append(
             f"Z_{{{l.id}}} = j\\omega L = "
-            f"j \\cdot {omega:.4g} \\cdot {l.value:.4g} = "
+            f"j \\cdot {num(omega)} \\cdot {num(l.value)} = "
             f"{_format_complex_latex(zl, 'Ω')}"
         )
 
@@ -183,7 +189,7 @@ def generate_impedance_steps(
         title="Empedans Hesaplama",
         description=(
             "AC devrede reaktif elemanların (C, L) empedansları "
-            f"ω = 2π×{frequency} Hz = {omega:.4g} rad/s frekansında "
+            f"ω = 2π×{num(frequency)} Hz = {num(omega)} rad/s frekansında "
             "hesaplanır."
         ),
         equations=equations,
@@ -208,24 +214,24 @@ DEPENDENT_KCL_NOTE = (
 
 def _format_complex_text(z) -> str:
     """
-    Sayıyı düz metin denklem formatına çevirir (4 anlamlı basamak).
+    Sayıyı düz metin denklem formatına çevirir (4 anlamlı basamak, virgül).
 
-    Örnekler: 12 → "12", -31.83j → "-j31.83", 14.14+14.14j → "14.14+j14.14"
+    Örnekler: 12 → "12", -31.83j → "-j31,83", 14.14+14.14j → "14,14+j14,14"
     """
     z = complex(z)
     r, i = z.real, z.imag
     if abs(i) < 1e-12 * max(abs(r), 1.0):
-        return f"{r:.4g}"
+        return num(r)
     if abs(r) < 1e-12 * max(abs(i), 1.0):
-        return f"{'-' if i < 0 else ''}j{abs(i):.4g}"
+        return f"{'-' if i < 0 else ''}j{num(abs(i))}"
     sign = "+" if i >= 0 else "-"
-    return f"{r:.4g}{sign}j{abs(i):.4g}"
+    return f"{num(r)}{sign}j{num(abs(i))}"
 
 
 def _paren(z) -> str:
     """Toplam/negatif değerleri parantez içine alır: -j31.83 → (-j31.83)."""
     text = _format_complex_text(z)
-    if text.startswith("-") or "+" in text[1:] or "-" in text[1:]:
+    if text.startswith("-") or text.startswith(MINUS) or "+" in text[1:] or "-" in text[1:] or MINUS in text[1:]:
         return f"({text})"
     return text
 
@@ -560,14 +566,14 @@ def generate_kvl_steps(
         if src.element_type == ElementType.DC_SOURCE:
             equations.append(
                 f"V({src.node_positive}) - V({src.node_negative}) = "
-                f"{src.value} V  ({src.id})"
+                f"{_n(src.value)} V  ({src.id})"
             )
         else:
             amp = src.params.get("amplitude", src.value)
             phase = src.params.get("phase", 0)
             equations.append(
                 f"V({src.node_positive}) - V({src.node_negative}) = "
-                f"{amp}∠{phase}° V  ({src.id})"
+                f"{_n(amp)}∠{_n(phase)}° V  ({src.id})"
             )
 
     return [SolutionStep(
@@ -605,9 +611,9 @@ def generate_result_verification_step(
             polar = val.get("polar_str", "")
             equations.append(f"V({node}) = {rect} V = {polar} V")
         elif hasattr(val, 'value'):
-            equations.append(f"V({node}) = {val.value} V")
+            equations.append(f"V({node}) = {_n(val.value)} V")
         else:
-            equations.append(f"V({node}) = {val} V")
+            equations.append(f"V({node}) = {_n(val)} V")
 
     # Akımları özetle
     for eid, ec in element_currents.items():
@@ -616,9 +622,9 @@ def generate_result_verification_step(
             rect = val.get("rectangular_str", str(val))
             equations.append(f"I({eid}) = {rect} A")
         elif hasattr(val, 'value'):
-            equations.append(f"I({eid}) = {val.value} A")
+            equations.append(f"I({eid}) = {_n(val.value)} A")
         else:
-            equations.append(f"I({eid}) = {val} A")
+            equations.append(f"I({eid}) = {_n(val)} A")
 
     return SolutionStep(
         step_number=0,

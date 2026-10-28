@@ -1016,7 +1016,7 @@ public partial class AnalysisPanel : UserControl
                 string? secVal = null;
                 if (kvp.Value.Value.IsComplex && !string.IsNullOrWhiteSpace(kvp.Value.Value.RectangularStr))
                 {
-                    secVal = $"{kvp.Value.Value.RectangularStr} {kvp.Value.Unit ?? "V"}";
+                    secVal = $"{TurkishNumber.NormalizeForDisplay(kvp.Value.Value.RectangularStr)} {kvp.Value.Unit ?? "V"}";
                 }
                 tiles.Add(CreateValueTile(nodeName, formattedVal, secVal));
             }
@@ -1058,12 +1058,12 @@ public partial class AnalysisPanel : UserControl
             var th = response.Results.Thevenin;
             AddSectionHeader(panel, "Thevenin eşdeğeri");
 
-            string vthRect = !string.IsNullOrEmpty(th.Vth.RectangularStr) ? th.Vth.RectangularStr : th.Vth.Real.ToString("G4", CultureInfo.InvariantCulture);
-            string vthPolar = !string.IsNullOrEmpty(th.Vth.PolarStr) ? th.Vth.PolarStr : th.Vth.Real.ToString("G4", CultureInfo.InvariantCulture);
+            string vthRect = !string.IsNullOrEmpty(th.Vth.RectangularStr) ? TurkishNumber.NormalizeForDisplay(th.Vth.RectangularStr) : TurkishNumber.Format(th.Vth.Real, "G4");
+            string vthPolar = !string.IsNullOrEmpty(th.Vth.PolarStr) ? TurkishNumber.NormalizeForDisplay(th.Vth.PolarStr) : TurkishNumber.Format(th.Vth.Real, "G4");
             string? secVth = !string.IsNullOrEmpty(th.Vth.PolarStr) && Math.Abs(th.Vth.Imaginary) > 1e-12 ? $"{vthPolar} V" : null;
 
-            string zthRect = !string.IsNullOrEmpty(th.Zth.RectangularStr) ? th.Zth.RectangularStr : th.Zth.Real.ToString("G4", CultureInfo.InvariantCulture);
-            string zthPolar = !string.IsNullOrEmpty(th.Zth.PolarStr) ? th.Zth.PolarStr : th.Zth.Real.ToString("G4", CultureInfo.InvariantCulture);
+            string zthRect = !string.IsNullOrEmpty(th.Zth.RectangularStr) ? TurkishNumber.NormalizeForDisplay(th.Zth.RectangularStr) : TurkishNumber.Format(th.Zth.Real, "G4");
+            string zthPolar = !string.IsNullOrEmpty(th.Zth.PolarStr) ? TurkishNumber.NormalizeForDisplay(th.Zth.PolarStr) : TurkishNumber.Format(th.Zth.Real, "G4");
             string? secZth = !string.IsNullOrEmpty(th.Zth.PolarStr) && Math.Abs(th.Zth.Imaginary) > 1e-12 ? $"{zthPolar} Ω" : null;
 
             var tiles = new List<UIElement>
@@ -1080,14 +1080,14 @@ public partial class AnalysisPanel : UserControl
             var no = response.Results.Norton;
             AddSectionHeader(panel, "Norton eşdeğeri");
 
-            string inRect = !string.IsNullOrEmpty(no.In.RectangularStr) ? no.In.RectangularStr : no.In.Real.ToString("G4", CultureInfo.InvariantCulture);
-            string inPolar = !string.IsNullOrEmpty(no.In.PolarStr) ? no.In.PolarStr : no.In.Real.ToString("G4", CultureInfo.InvariantCulture);
+            string inRect = !string.IsNullOrEmpty(no.In.RectangularStr) ? TurkishNumber.NormalizeForDisplay(no.In.RectangularStr) : TurkishNumber.Format(no.In.Real, "G4");
+            string inPolar = !string.IsNullOrEmpty(no.In.PolarStr) ? TurkishNumber.NormalizeForDisplay(no.In.PolarStr) : TurkishNumber.Format(no.In.Real, "G4");
             string? secIn = !string.IsNullOrEmpty(no.In.PolarStr) && Math.Abs(no.In.Imaginary) > 1e-12 ? $"{inPolar} A" : null;
 
             string znStr = no.Zn != null
-                ? (!string.IsNullOrEmpty(no.Zn.RectangularStr) ? no.Zn.RectangularStr : no.Zn.Real.ToString("G4", CultureInfo.InvariantCulture)) + " Ω"
+                ? (!string.IsNullOrEmpty(no.Zn.RectangularStr) ? TurkishNumber.NormalizeForDisplay(no.Zn.RectangularStr) : TurkishNumber.Format(no.Zn.Real, "G4")) + " Ω"
                 : "∞ (ideal)";
-            string? secZn = no.Zn != null && !string.IsNullOrEmpty(no.Zn.PolarStr) && Math.Abs(no.Zn.Imaginary) > 1e-12 ? $"{no.Zn.PolarStr} Ω" : null;
+            string? secZn = no.Zn != null && !string.IsNullOrEmpty(no.Zn.PolarStr) && Math.Abs(no.Zn.Imaginary) > 1e-12 ? $"{TurkishNumber.NormalizeForDisplay(no.Zn.PolarStr)} Ω" : null;
 
             var tiles = new List<UIElement>
             {
@@ -1097,8 +1097,8 @@ public partial class AnalysisPanel : UserControl
 
             if (no.Yn != null)
             {
-                string ynRect = !string.IsNullOrEmpty(no.Yn.RectangularStr) ? no.Yn.RectangularStr : no.Yn.Real.ToString("G4", CultureInfo.InvariantCulture);
-                string ynPolar = !string.IsNullOrEmpty(no.Yn.PolarStr) ? no.Yn.PolarStr : no.Yn.Real.ToString("G4", CultureInfo.InvariantCulture);
+                string ynRect = !string.IsNullOrEmpty(no.Yn.RectangularStr) ? TurkishNumber.NormalizeForDisplay(no.Yn.RectangularStr) : TurkishNumber.Format(no.Yn.Real, "G4");
+                string ynPolar = !string.IsNullOrEmpty(no.Yn.PolarStr) ? TurkishNumber.NormalizeForDisplay(no.Yn.PolarStr) : TurkishNumber.Format(no.Yn.Real, "G4");
                 string? secYn = !string.IsNullOrEmpty(no.Yn.PolarStr) && Math.Abs(no.Yn.Imaginary) > 1e-12 ? $"{ynPolar} S" : null;
                 tiles.Add(CreateValueTile("Yn", $"{ynRect} S", secYn));
             }
@@ -1153,7 +1153,7 @@ public partial class AnalysisPanel : UserControl
                 string pfStr;
                 if (el.PowerFactor.HasValue)
                 {
-                    string num = el.PowerFactor.Value.ToString("0.000", CultureInfo.InvariantCulture);
+                    string num = TurkishNumber.Format(el.PowerFactor.Value, "0.000");
                     pfStr = !string.IsNullOrEmpty(el.PowerFactorType) ? $"{num} {el.PowerFactorType}" : num;
                 }
                 else
@@ -1212,13 +1212,13 @@ public partial class AnalysisPanel : UserControl
                 if (power.TotalSupplied != null)
                 {
                     string supStr = !string.IsNullOrEmpty(power.TotalSupplied.RectangularStr)
-                        ? power.TotalSupplied.RectangularStr
+                        ? TurkishNumber.NormalizeForDisplay(power.TotalSupplied.RectangularStr)
                         : EngFormat.Format(power.TotalSupplied.Magnitude, "");
                     summaryTiles.Add(CreateValueTile("Verilen güç", $"{supStr} VA"));
                 }
                 if (power.PowerFactor.HasValue)
                 {
-                    string dpf = power.PowerFactor.Value.ToString("0.000", CultureInfo.InvariantCulture);
+                    string dpf = TurkishNumber.Format(power.PowerFactor.Value, "0.000");
                     string dpfType = !string.IsNullOrEmpty(power.PowerFactorType) ? $" ({power.PowerFactorType})" : "";
                     summaryTiles.Add(CreateValueTile("Devre güç faktörü", $"{dpf}{dpfType}"));
                 }
