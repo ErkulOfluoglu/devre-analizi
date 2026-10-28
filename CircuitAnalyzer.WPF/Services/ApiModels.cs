@@ -25,6 +25,7 @@ namespace CircuitAnalyzer.WPF.Services
         public const string Superposition = "SUPERPOSITION";
         public const string Millman = "MILLMAN";
         public const string SourceTransform = "SOURCE_TRANSFORM";
+        public const string Transient = "TRANSIENT";
     }
 
     public sealed class TerminalsDto
@@ -235,6 +236,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("explanation")] public List<ExplanationSectionDto> Explanation { get; set; } = new();
         /// <summary>Alıştırma modu soruları (öğrenci önce kendisi çözer).</summary>
         [JsonPropertyName("practice")] public List<PracticeQuestionDto> Practice { get; set; } = new();
+        [JsonPropertyName("transient")] public TransientAnalysisDto? Transient { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -258,7 +260,7 @@ namespace CircuitAnalyzer.WPF.Services
         /// <summary>Sembol: "V₂", "I_R1", "I₁", "Vth".</summary>
         [JsonPropertyName("label")] public string Label { get; set; } = "";
         [JsonPropertyName("description")] public string Description { get; set; } = "";
-        /// <summary>"V", "A", "Ω" veya "W".</summary>
+        /// <summary>"V", "A", "Ω", "W" veya "s".</summary>
         [JsonPropertyName("unit")] public string Unit { get; set; } = "";
         /// <summary>"main" (yöntemin asıl bilinmeyenleri) veya "extra" (ek sorular).</summary>
         [JsonPropertyName("group")] public string Group { get; set; } = "main";
@@ -447,6 +449,25 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("note")] public string? Note { get; set; }
     }
 
+    public sealed class TransientQuantityDto
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("label")] public string Label { get; set; } = "";
+        [JsonPropertyName("unit")] public string Unit { get; set; } = "";
+        [JsonPropertyName("before")] public double Before { get; set; }
+        [JsonPropertyName("start")] public double Start { get; set; }
+        [JsonPropertyName("final")] public double Final { get; set; }
+    }
+
+    public sealed class TransientAnalysisDto
+    {
+        [JsonPropertyName("element")] public string Element { get; set; } = "";
+        [JsonPropertyName("kind")] public string Kind { get; set; } = "";
+        [JsonPropertyName("tau")] public double Tau { get; set; }
+        [JsonPropertyName("r_th")] public double Rth { get; set; }
+        [JsonPropertyName("quantities")] public List<TransientQuantityDto> Quantities { get; set; } = new();
+    }
+
     public sealed class AnalysisResponseDto
     {
         /// <summary>"success" veya "warning".</summary>
@@ -458,6 +479,7 @@ namespace CircuitAnalyzer.WPF.Services
         /// <summary>Hata/uyarı mesajları. '⚠' ile başlayanlar ciddi, 'ℹ' bilgilendirme.</summary>
         [JsonPropertyName("errors")] public List<string> Errors { get; set; } = new();
         [JsonPropertyName("warnings")] public List<string> Warnings { get; set; } = new();
+        [JsonPropertyName("transient")] public TransientAnalysisDto? Transient { get; set; }
     }
 
     public sealed class HealthDto
@@ -554,6 +576,21 @@ namespace CircuitAnalyzer.WPF.Services
         {
             string s = x.ToString("G" + significant, CultureInfo.InvariantCulture);
             return s.Contains('E') ? x.ToString("0.###", CultureInfo.InvariantCulture) : s;
+        }
+    }
+
+    /// <summary>
+    /// Geçici durum analitik eğri hesaplayıcısı.
+    ///   t &lt; 0: before (sabit)
+    ///   t ≥ 0: final + (start − final) · e^(−t/τ)
+    /// </summary>
+    public static class TransientCurveCalculator
+    {
+        public static double Evaluate(double before, double start, double finalVal, double tau, double t)
+        {
+            if (t < 0) return before;
+            if (tau <= 0) return finalVal;
+            return finalVal + (start - finalVal) * Math.Exp(-t / tau);
         }
     }
 }

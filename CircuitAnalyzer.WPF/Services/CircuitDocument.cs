@@ -162,6 +162,13 @@ namespace CircuitAnalyzer.WPF.Services
                 case Inductor: d.Type = "L"; d.Value = e.Value; break;
                 case VoltageSource: d.Type = "V"; d.Value = e.Value; break;
                 case CurrentSource: d.Type = "I"; d.Value = e.Value; break;
+                case SwitchElement sw:
+                    d.Type = "SWITCH";
+                    d.Kind = sw.Mode == SwitchMode.NormallyClosed ? "NC" : "NO";
+                    break;
+                case SpdtSwitch:
+                    d.Type = "SPDT";
+                    break;
                 default:
                     throw new NotSupportedException($"Kaydedilemeyen eleman türü: {e.GetType().Name}");
             }
@@ -297,6 +304,15 @@ namespace CircuitAnalyzer.WPF.Services
                         Type = ParseEnum(d.ProbeType, Models.ProbeType.Voltage),
                         TargetElementId = d.Target ?? string.Empty,
                     };
+                case "SWITCH":
+                case "S":
+                    {
+                        bool isNc = string.Equals(d.Kind, "NC", StringComparison.OrdinalIgnoreCase) ||
+                                    (d.Kind ?? "").Contains("Closed", StringComparison.OrdinalIgnoreCase);
+                        return new SwitchElement(isNc ? SwitchMode.NormallyClosed : SwitchMode.NormallyOpen);
+                    }
+                case "SPDT":
+                    return new SpdtSwitch();
                 default:
                     throw new CircuitFileException($"Tanınmayan eleman türü: “{d.Type}”. Dosya daha yeni bir sürümle kaydedilmiş olabilir.");
             }

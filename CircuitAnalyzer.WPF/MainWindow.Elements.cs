@@ -26,6 +26,7 @@ namespace CircuitAnalyzer.WPF
         private int _groundCounter = 0;
         private int _probeCounter = 0;
         private int _junctionCounter = 0;
+        private int _switchCounter = 0;
 
         private Point? _contextMenuCanvasPos = null;
         private ContextMenu? _canvasContextMenu = null;
@@ -203,6 +204,27 @@ namespace CircuitAnalyzer.WPF
         {
             var source = NewDependentSource(kind);
             BeginPlacement(source, DependentSourceDoneStatus(source));
+        }
+
+        private void BtnAddSwitch_Click(object sender, RoutedEventArgs e)
+        {
+            var sw = new SwitchElement
+            {
+                Id = $"S{_switchCounter + 1}",
+                Mode = SwitchMode.NormallyOpen
+            };
+
+            BeginPlacement(sw, $"{sw.Id} (Anahtar) eklendi — Sürükle/Sağ-tık/Çift-tık");
+        }
+
+        private void BtnAddSpdtSwitch_Click(object sender, RoutedEventArgs e)
+        {
+            var spdt = new SpdtSwitch
+            {
+                Id = $"S{_switchCounter + 1}"
+            };
+
+            BeginPlacement(spdt, $"{spdt.Id} (İki konumlu anahtar) eklendi — Sürükle/Sağ-tık/Çift-tık");
         }
 
         /// <summary>
@@ -755,6 +777,7 @@ namespace CircuitAnalyzer.WPF
             _groundCounter = 0;
             _probeCounter = 0;
             _junctionCounter = 0;
+            _switchCounter = 0;
             _pendingStartSplit = null;
 
             _controlMarkers.Clear();

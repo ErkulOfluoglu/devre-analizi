@@ -38,12 +38,13 @@ public class AnalysisMethodListTests
     [InlineData(4, "Süperpozisyon", AnalysisTypes.Superposition, false)]
     [InlineData(5, "Millman", AnalysisTypes.Millman, false)]
     [InlineData(6, "Kaynak Dönüşümü", AnalysisTypes.SourceTransform, true)]
+    [InlineData(7, "Geçici Durum (Anahtar)", AnalysisTypes.Transient, false)]
     public void ComboItem_MapsToApiTypeAndTerminalsRow(int index, string label, string apiType, bool showsTerminals)
     {
         RunOnSta(() =>
         {
             var panel = new AnalysisPanel();
-            Assert.Equal(7, panel.CmbAnalysisType.Items.Count);
+            Assert.Equal(8, panel.CmbAnalysisType.Items.Count);
             Assert.Equal(label, (panel.CmbAnalysisType.Items[index] as ComboBoxItem)?.Content as string);
 
             panel.CmbAnalysisType.SelectedIndex = index;
@@ -59,6 +60,21 @@ public class AnalysisMethodListTests
     {
         Assert.Equal("MILLMAN", AnalysisTypes.Millman);
         Assert.Equal("SOURCE_TRANSFORM", AnalysisTypes.SourceTransform);
+        Assert.Equal("TRANSIENT", AnalysisTypes.Transient);
+    }
+
+    [Fact]
+    public void Transient_TryGetOptions_NeedsNoTerminals()
+    {
+        RunOnSta(() =>
+        {
+            var panel = new AnalysisPanel();
+            panel.SetAnalysisType(AnalysisTypes.Transient);
+            Assert.Equal(7, panel.CmbAnalysisType.SelectedIndex);
+
+            Assert.True(panel.TryGetOptions(out var opt, out var err), err);
+            Assert.Equal(AnalysisTypes.Transient, opt!.AnalysisType);
+        });
     }
 
     [Fact]

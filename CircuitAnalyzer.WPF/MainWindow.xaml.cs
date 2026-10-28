@@ -204,7 +204,8 @@ namespace CircuitAnalyzer.WPF
         public bool IsModalOverlayOpen =>
             OnboardingOverlay.Visibility == Visibility.Visible ||
             AboutOverlay.Visibility == Visibility.Visible ||
-            DialogOverlay.IsOpen;
+            DialogOverlay.IsOpen ||
+            PlotOverlay.IsOpen;
 
         private void BtnHelp_Click(object sender, RoutedEventArgs e)
         {

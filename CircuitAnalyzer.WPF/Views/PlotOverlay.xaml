@@ -1,0 +1,64 @@
+<UserControl x:Class="CircuitAnalyzer.WPF.Views.PlotOverlay"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:CircuitAnalyzer.WPF.Controls"
+             Focusable="True"
+             FocusVisualStyle="{x:Null}">
+
+    <Grid x:Name="OverlayRoot">
+        <!-- Karartma perdesi -->
+        <Border x:Name="Scrim"
+                Background="{DynamicResource Brush.Overlay.Scrim}"
+                MouseLeftButtonDown="Scrim_MouseDown"
+                MouseRightButtonDown="Scrim_MouseDown"/>
+
+        <!-- Ortalanmış kart -->
+        <Border x:Name="CardBorder"
+                Style="{DynamicResource Card}"
+                Background="{DynamicResource Brush.Bg.Surface}"
+                CornerRadius="22"
+                Effect="{DynamicResource Effect.Popup}"
+                Width="850"
+                Padding="24,20,24,20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                RenderTransformOrigin="0.5,0.5"
+                MouseLeftButtonDown="Card_MouseDown"
+                MouseRightButtonDown="Card_MouseDown">
+            <Border.RenderTransform>
+                <ScaleTransform x:Name="CardScale" ScaleX="1" ScaleY="1"/>
+            </Border.RenderTransform>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,12">
+                    <TextBlock Text="Zaman Grafiği (Geçici Durum)"
+                               Style="{DynamicResource Text.Title}"
+                               VerticalAlignment="Center"/>
+                    <Button x:Name="BtnCloseIcon"
+                            Style="{DynamicResource Button.Icon}"
+                            HorizontalAlignment="Right"
+                            ToolTip="Kapat (Esc)"
+                            Click="BtnClose_Click">
+                        <controls:Icon Data="{DynamicResource Icon.Close}" Width="16" Height="16"/>
+                    </Button>
+                </Grid>
+
+                <Border Grid.Row="1" x:Name="PlotHost" MinHeight="480"/>
+
+                <Button x:Name="BtnClose"
+                        Grid.Row="2"
+                        Content="Kapat"
+                        Style="{DynamicResource Button.Primary}"
+                        HorizontalAlignment="Right"
+                        Margin="0,12,0,0"
+                        Click="BtnClose_Click"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

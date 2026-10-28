@@ -373,6 +373,7 @@ public partial class PracticeView : UserControl
                 "A" => "ör. 4m veya 4 mA",
                 "Ω" => "ör. 2.2k veya 2200",
                 "W" => "ör. 36m veya 36 mW",
+                "s" => "ör. 2m veya 2 ms",
                 _ => "ör. 7.5 veya 750m",
             };
         var watermark = new TextBlock

@@ -16,6 +16,7 @@ namespace CircuitAnalyzer.WPF.Views;
 public partial class AnalysisPanel : UserControl
 {
     public event EventHandler? SolveRequested;
+    public event EventHandler<TransientAnalysisDto>? EnlargePlotRequested;
 
     private BackendState _backendState = BackendState.Starting;
     private bool _isBusy;
@@ -264,6 +265,10 @@ public partial class AnalysisPanel : UserControl
         {
             CmbAnalysisType.SelectedIndex = 6;
         }
+        else if (string.Equals(analysisType, AnalysisTypes.Transient, StringComparison.OrdinalIgnoreCase))
+        {
+            CmbAnalysisType.SelectedIndex = 7;
+        }
         else
         {
             CmbAnalysisType.SelectedIndex = 0;
@@ -349,6 +354,8 @@ public partial class AnalysisPanel : UserControl
             return AnalysisTypes.Millman;
         if (selectedText.Contains("Kaynak Dönüşümü", StringComparison.OrdinalIgnoreCase))
             return AnalysisTypes.SourceTransform;
+        if (selectedText.Contains("Geçici", StringComparison.OrdinalIgnoreCase))
+            return AnalysisTypes.Transient;
         return AnalysisTypes.Nodal;
     }
 
@@ -631,6 +638,28 @@ public partial class AnalysisPanel : UserControl
         if (CurrentAssistantView != null)
         {
             ResultsContainer.Children.Add(CurrentAssistantView);
+        }
+
+        // Zaman Grafiği (Geçici durum analizi başarılıysa)
+        var transientData = response.Transient ?? response.Results?.Transient;
+        if (transientData != null)
+        {
+            var plotCard = new Border
+            {
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            plotCard.SetResourceReference(StyleProperty, "Card");
+
+            var plotView = new TransientPlotView();
+            plotView.LoadData(transientData);
+            plotView.EnlargeClicked += (_, _) =>
+            {
+                EnlargePlotRequested?.Invoke(this, transientData);
+            };
+
+            plotCard.Child = plotView;
+            ResultsContainer.Children.Add(plotCard);
         }
 
         bool hasExplanation = response.Results?.Explanation != null && response.Results.Explanation.Count > 0;

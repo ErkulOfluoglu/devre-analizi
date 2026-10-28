@@ -42,6 +42,7 @@ namespace CircuitAnalyzer.WPF
         {
             _overlay = new ResultOverlay(CircuitCanvas);
             AnalysisPanel.SolveRequested += async (_, _) => await SolveAsync();
+            AnalysisPanel.EnlargePlotRequested += (_, data) => PlotOverlay.Show(data);
             Closed += (_, _) => _backend.Dispose();
 
             AnalysisPanel.AnswerChecker = async req =>
@@ -437,6 +438,7 @@ namespace CircuitAnalyzer.WPF
             _groundCounter = Max("GND");
             _probeCounter = Math.Max(Max("VP"), Max("IP"));
             _junctionCounter = Max("J");
+            _switchCounter = Max("S");
         }
 
         // ═══════════════════════════════════════════════════════

@@ -221,6 +221,31 @@
                             </StackPanel>
                         </Button>
 
+                        <!-- Grup: Anahtarlar (18px grup aralığı) -->
+                        <TextBlock Text="Anahtarlar"
+                                   Style="{DynamicResource Text.Overline}"
+                                   Margin="10,18,10,6"/>
+
+                        <Button x:Name="BtnAddSwitch"
+                                Style="{DynamicResource Button.Nav}"
+                                ToolTip="Tek konumlu anahtar (t = 0'da kapanır veya açılır). Devrede S1, S2… diye adlandırılır."
+                                Click="BtnAddSwitch_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Switch}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Anahtar" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnAddSpdtSwitch"
+                                Style="{DynamicResource Button.Nav}"
+                                ToolTip="İki konumlu anahtar (t &lt; 0 ortak–1, t ≥ 0 ortak–2). Devrede S1, S2… diye adlandırılır."
+                                Click="BtnAddSpdtSwitch_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.SpdtSwitch}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="İki konumlu anahtar" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
                         <!-- Grup 4: Araçlar (18px grup aralığı) -->
                         <TextBlock Text="Araçlar"
                                    Style="{DynamicResource Text.Overline}"
@@ -542,5 +567,10 @@
     <views:DialogOverlay x:Name="DialogOverlay"
                          Panel.ZIndex="1300"
                          Visibility="Collapsed"/>
+
+    <!-- In-Window Büyütülmüş Grafik Katmanı -->
+    <views:PlotOverlay x:Name="PlotOverlay"
+                       Panel.ZIndex="1400"
+                       Visibility="Collapsed"/>
 </Grid>
 </Window>

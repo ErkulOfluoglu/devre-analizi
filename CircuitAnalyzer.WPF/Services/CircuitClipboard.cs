@@ -378,6 +378,8 @@ namespace CircuitAnalyzer.WPF.Services
             AcCurrentSource => "IAC",
             CurrentSource => "I",
             GroundElement => "GND",
+            SwitchElement => "S",
+            SpdtSwitch => "S",
             TestProbe => "VP",
             JunctionElement => "J",
             _ => "X",

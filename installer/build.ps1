@@ -68,7 +68,8 @@ Step "Lisanslar toplanıyor"
 if ($LASTEXITCODE -ne 0) { throw "Lisans toplama başarısız" }
 Copy-Item (Join-Path $Root "LICENSE") (Join-Path $App "LICENSE.txt") -ErrorAction Stop
 Copy-Item (Join-Path $Root "THIRD_PARTY_NOTICES.md") $App -ErrorAction Stop
-Copy-Item (Join-Path $Root "licenses\LGPL-2.1.txt") (Join-Path $App "licenses") -ErrorAction Stop
+# Depodaki licenses\ klasörünün tamamı (LGPL metni ve .NET paketlerinin lisansları: ScottPlot, SkiaSharp…)
+Copy-Item (Join-Path $Root "licenses\*") (Join-Path $App "licenses") -ErrorAction Stop
 
 Step "Çözücü deneniyor"
 $port = 18765

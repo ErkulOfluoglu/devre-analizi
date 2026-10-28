@@ -113,7 +113,8 @@ namespace CircuitAnalyzer.Tests
                     "NumPy",
                     "mpmath",
                     "NetworkX",
-                    "Starlette"
+                    "Starlette",
+                    "ScottPlot"
                 };
 
                 foreach (string comp in components)

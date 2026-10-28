@@ -149,6 +149,7 @@ namespace CircuitAnalyzer.WPF.Models
         /// </summary>
         public static bool CanBeControl(CircuitElement element)
             => element is not GroundElement and not TestProbe and not JunctionElement
+               and not SwitchElement and not SpdtSwitch
                && element.Pins.Count == 2;
 
         // ═══════════════════════════════════════════════════════

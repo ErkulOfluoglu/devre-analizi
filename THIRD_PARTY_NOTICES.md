@@ -13,6 +13,18 @@ derleme sırasında otomatik toplar).
 | .NET 8 çalışma zamanı ve WPF | MIT | https://github.com/dotnet/runtime · https://github.com/dotnet/wpf |
 | Python 3.10 (OpenSSL, libffi vb. dahil) | PSF-2.0 (+ dosyada listelenen lisanslar) | https://www.python.org |
 
+## .NET / WPF paketleri
+
+| Paket | Lisans | Kaynak |
+|---|---|---|
+| ScottPlot.WPF (5.0.54) | MIT — [licenses/ScottPlot.txt](licenses/ScottPlot.txt) | https://github.com/ScottPlot/ScottPlot |
+| SkiaSharp, SkiaSharp.Views.WPF (2.88.9) — Skia ve diğer yerel kütüphaneleri içerir | MIT — [licenses/SkiaSharp.txt](licenses/SkiaSharp.txt), içerdikleri: [licenses/SkiaSharp-THIRD-PARTY-NOTICES.txt](licenses/SkiaSharp-THIRD-PARTY-NOTICES.txt) | https://github.com/mono/SkiaSharp |
+| HarfBuzzSharp (7.3.0.3) | MIT — [licenses/HarfBuzzSharp.txt](licenses/HarfBuzzSharp.txt) (HarfBuzz bildirimi SkiaSharp bildirimlerinde) | https://github.com/mono/SkiaSharp |
+| OpenTK (4.3.0) | MIT — [licenses/OpenTK.txt](licenses/OpenTK.txt) | https://github.com/opentk/opentk |
+| OpenTK.GLWpfControl (4.2.3) | MIT — [licenses/GLWpfControl.txt](licenses/GLWpfControl.txt) | https://github.com/opentk/GLWpfControl |
+| GLFW (OpenTK.redist.glfw) | zlib — [licenses/GLFW.txt](licenses/GLFW.txt) | https://www.glfw.org |
+| System.Drawing.Common, Microsoft.Win32.SystemEvents | MIT — [licenses/System.Drawing.Common.txt](licenses/System.Drawing.Common.txt) | https://github.com/dotnet/runtime |
+
 ## Python çözücüsünün kullandığı paketler
 
 | Paket | Lisans | Kaynak |

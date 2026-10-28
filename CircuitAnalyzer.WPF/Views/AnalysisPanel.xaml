@@ -115,6 +115,7 @@
                     <ComboBoxItem Content="Süperpozisyon"/>
                     <ComboBoxItem Content="Millman"/>
                     <ComboBoxItem Content="Kaynak Dönüşümü"/>
+                    <ComboBoxItem Content="Geçici Durum (Anahtar)"/>
                 </ComboBox>
 
                 <!-- Terminaller (Thevenin/Norton için) -->

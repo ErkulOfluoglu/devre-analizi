@@ -123,6 +123,14 @@ namespace CircuitAnalyzer.WPF
                         "Bağlı olduğu ağ otomatik olarak Node 0 atanır.\n" +
                         "Düzenlenecek parametresi yoktur.");
                     break;
+
+                case SwitchElement sw:
+                    BuildSwitchForm(sw);
+                    break;
+
+                case SpdtSwitch spdt:
+                    BuildSpdtSwitchForm(spdt);
+                    break;
             }
 
             // İlk TextBox'a odaklan
@@ -443,6 +451,78 @@ namespace CircuitAnalyzer.WPF
                 selected = ids.Count - 1;
             }
             return (labels, ids, selected);
+        }
+
+        private TextBox AddNameField(string currentId, Action<string> setter)
+        {
+            var lbl = new TextBlock
+            {
+                Text = "Eleman Adı (ID)",
+                Style = (Style)FindResource("Text.Caption"),
+                Margin = new Thickness(0, 4, 0, 4)
+            };
+
+            var textBox = new TextBox
+            {
+                Text = currentId,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+
+            PropertiesPanel.Children.Add(lbl);
+            PropertiesPanel.Children.Add(textBox);
+
+            _commitActions.Add(() =>
+            {
+                string text = textBox.Text.Trim();
+                if (!string.IsNullOrEmpty(text))
+                {
+                    setter(text);
+                }
+            });
+
+            return textBox;
+        }
+
+        private void BuildSwitchForm(SwitchElement sw)
+        {
+            Title = $"{sw.Id} — Anahtar Düzenle";
+            AddNameField(sw.Id, id => sw.Id = id);
+
+            var lbl = new TextBlock
+            {
+                Text = "Konum Değişimi (t = 0 anında)",
+                Style = (Style)FindResource("Text.Caption"),
+                Margin = new Thickness(0, 8, 0, 4)
+            };
+
+            var combo = new ComboBox
+            {
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            combo.Items.Add(new ComboBoxItem { Content = "t = 0'da kapanır (Normalde Açık — NO)" });
+            combo.Items.Add(new ComboBoxItem { Content = "t = 0'da açılır (Normalde Kapalı — NC)" });
+            combo.SelectedIndex = sw.Mode == SwitchMode.NormallyOpen ? 0 : 1;
+
+            PropertiesPanel.Children.Add(lbl);
+            PropertiesPanel.Children.Add(combo);
+
+            _commitActions.Add(() =>
+            {
+                sw.Mode = combo.SelectedIndex == 1 ? SwitchMode.NormallyClosed : SwitchMode.NormallyOpen;
+            });
+
+            AddHintText("NO (Normalde Açık): t < 0 açık, t ≥ 0 kapalı.\n" +
+                        "NC (Normalde Kapalı): t < 0 kapalı, t ≥ 0 açık.");
+        }
+
+        private void BuildSpdtSwitchForm(SpdtSwitch spdt)
+        {
+            Title = $"{spdt.Id} — İki Konumlu Anahtar";
+            AddNameField(spdt.Id, id => spdt.Id = id);
+
+            AddHintText("İki konumlu anahtar (SPDT — tek kutuplu çift yönlü).\n" +
+                        "Ortak uç (c): t < 0 anında 1. uca (a), t ≥ 0 anında 2. uca (b) bağlıdır.\n" +
+                        "İsim dışında düzenlenecek parametresi yoktur.");
         }
 
         // ═══════════════════════════════════════════════════════

@@ -23,6 +23,8 @@
     <Geometry x:Key="Icon.DepCcvs">M1,12 H5 M19,12 H23 M12,5 L19,12 L12,19 L5,12 Z M12,1.5 V5 M10.5,3.5 L12,5 L13.5,3.5 M8.5,12 H11 M9.75,10.75 V13.25 M13,12 H15.5</Geometry>
     <Geometry x:Key="Icon.DepCccs">M1,12 H5 M19,12 H23 M12,5 L19,12 L12,19 L5,12 Z M12,1.5 V5 M10.5,3.5 L12,5 L13.5,3.5 M8.5,12 H15.5 M13,10 L15.5,12 L13,14</Geometry>
     <Geometry x:Key="Icon.Ground">M12,3 V12 M6,12 H18 M8,15.5 H16 M10.5,19 H13.5</Geometry>
+    <Geometry x:Key="Icon.Switch">M2,12 H6 M18,12 H22 M6,12 A1.5,1.5 0 1 0 9,12 A1.5,1.5 0 1 0 6,12 Z M15,12 A1.5,1.5 0 1 0 18,12 A1.5,1.5 0 1 0 15,12 Z M8,11 L16,6 M12,4 A4,4 0 0 1 14,8 M12.5,7 L14,8 L14.5,6.5</Geometry>
+    <Geometry x:Key="Icon.SpdtSwitch">M2,12 H6 M6,12 A1.5,1.5 0 1 0 9,12 A1.5,1.5 0 1 0 6,12 Z M15,7 A1.5,1.5 0 1 0 18,7 A1.5,1.5 0 1 0 15,7 Z M18,7 H22 M15,17 A1.5,1.5 0 1 0 18,17 A1.5,1.5 0 1 0 15,17 Z M18,17 H22 M8,11 L15,7 M13,9 A5,5 0 0 1 14,14 M12.5,13 L14,14 L14.5,12.5</Geometry>
     <Geometry x:Key="Icon.Wire">M3,17 A2,2 0 1 0 7,17 A2,2 0 1 0 3,17 Z M17,7 A2,2 0 1 0 21,7 A2,2 0 1 0 17,7 Z M7,17 H12 V7 H17</Geometry>
     <Geometry x:Key="Icon.Probe">M5,19 L11,13 M11,13 L13,7 L17,11 L11,13 Z</Geometry>
 
