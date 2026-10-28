@@ -119,77 +119,28 @@ namespace CircuitAnalyzer.WPF.Models
             container.Children.Add(rightLead);
             container.Children.Add(rightDot);
 
-            // Anahtar kolu (blade) t < 0 konumunda çizilir
-            if (Mode == SwitchMode.NormallyOpen)
+            // Anahtar kolu t < 0 konumunda çizilir; ok, kolun t = 0 anındaki hareketini gösterir
+            // (sol kontak etrafında dönen bir yay — ders kitaplarındaki gibi).
+            var pivot = new Point(leftContactX, centerY);
+            bool closesAtZero = Mode == SwitchMode.NormallyOpen;
+            var blade = new Line
             {
-                // NO: t < 0 açık — kol yukarı kalkık
-                var blade = new Line
-                {
-                    X1 = leftContactX,
-                    Y1 = centerY,
-                    X2 = rightContactX - 2,
-                    Y2 = centerY - 12,
-                    StrokeThickness = 2,
-                    StrokeStartLineCap = PenLineCap.Round,
-                    StrokeEndLineCap = PenLineCap.Round
-                };
-                blade.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
-                container.Children.Add(blade);
+                X1 = leftContactX,
+                Y1 = centerY,
+                // NO: kol yukarı kalkık (açık); NC: kol sağ kontağın üstüne değiyor (kapalı)
+                X2 = closesAtZero ? rightContactX - 2 : rightContactX,
+                Y2 = closesAtZero ? centerY - 12 : centerY - 3,
+                StrokeThickness = 2,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            };
+            blade.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
+            container.Children.Add(blade);
 
-                // Aşağı doğru kapanma hareketini gösteren kavisli ok (t = 0 anında kapanır)
-                var arrowPath = new Path
-                {
-                    StrokeThickness = 1.2,
-                    StrokeStartLineCap = PenLineCap.Round,
-                    StrokeEndLineCap = PenLineCap.Round
-                };
-                arrowPath.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
-                var geom = new PathGeometry();
-                var fig = new PathFigure { StartPoint = new Point(44, centerY - 14) };
-                fig.Segments.Add(new ArcSegment(new Point(49, centerY - 3), new Size(12, 12), 0, false, SweepDirection.Clockwise, true));
-                fig.Segments.Add(new LineSegment(new Point(45, centerY - 5), true));
-                fig.Segments.Add(new LineSegment(new Point(49, centerY - 3), true));
-                fig.Segments.Add(new LineSegment(new Point(49, centerY - 8), true));
-                geom.Figures.Add(fig);
-                arrowPath.Data = geom;
-                container.Children.Add(arrowPath);
-            }
-            else
-            {
-                // NC: t < 0 kapalı — kol temas halinde
-                var blade = new Line
-                {
-                    X1 = leftContactX,
-                    Y1 = centerY,
-                    X2 = rightContactX,
-                    Y2 = centerY,
-                    StrokeThickness = 2,
-                    StrokeStartLineCap = PenLineCap.Round,
-                    StrokeEndLineCap = PenLineCap.Round
-                };
-                blade.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
-                container.Children.Add(blade);
+            // NO: yukarıdan aşağı (kapanır); NC: aşağıdan yukarı (açılır)
+            AddRotationArrow(container, pivot, 34, closesAtZero ? -22 : -4, closesAtZero ? -4 : -22);
 
-                // Yukarı doğru açılma hareketini gösteren kavisli ok (t = 0 anında açılır)
-                var arrowPath = new Path
-                {
-                    StrokeThickness = 1.2,
-                    StrokeStartLineCap = PenLineCap.Round,
-                    StrokeEndLineCap = PenLineCap.Round
-                };
-                arrowPath.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
-                var geom = new PathGeometry();
-                var fig = new PathFigure { StartPoint = new Point(49, centerY - 3) };
-                fig.Segments.Add(new ArcSegment(new Point(44, centerY - 14), new Size(12, 12), 0, false, SweepDirection.Counterclockwise, true));
-                fig.Segments.Add(new LineSegment(new Point(47, centerY - 12), true));
-                fig.Segments.Add(new LineSegment(new Point(44, centerY - 14), true));
-                fig.Segments.Add(new LineSegment(new Point(43, centerY - 9), true));
-                geom.Figures.Add(fig);
-                arrowPath.Data = geom;
-                container.Children.Add(arrowPath);
-            }
-
-            // "t = 0" metni
+            // "t = 0" metni — sol üstte, kola ve oka değmez
             var t0Text = new TextBlock
             {
                 Text = "t = 0",
@@ -198,8 +149,7 @@ namespace CircuitAnalyzer.WPF.Models
             };
             t0Text.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Circuit.LabelSecondary");
             t0Text.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
-            t0Text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            Canvas.SetLeft(t0Text, (TotalWidth - t0Text.DesiredSize.Width) / 2 - 10);
+            Canvas.SetLeft(t0Text, 0);
             Canvas.SetTop(t0Text, 0);
             container.Children.Add(t0Text);
 
@@ -219,6 +169,46 @@ namespace CircuitAnalyzer.WPF.Models
             AddPinIndicators(container);
 
             return container;
+        }
+
+        /// <summary>
+        /// Kolun bir kontak etrafında dönüşünü gösteren kavisli ok: <paramref name="pivot"/> merkezli,
+        /// <paramref name="radius"/> yarıçaplı yay; açılar derece (0° = sağ, artı = aşağı).
+        /// Ucunda dolu küçük bir üçgen vardır.
+        /// </summary>
+        internal static void AddRotationArrow(Canvas container, Point pivot, double radius, double fromDeg, double toDeg)
+        {
+            static Point At(Point c, double r, double deg) =>
+                new(c.X + r * System.Math.Cos(deg * System.Math.PI / 180), c.Y + r * System.Math.Sin(deg * System.Math.PI / 180));
+
+            bool clockwise = toDeg > fromDeg;
+            Point start = At(pivot, radius, fromDeg);
+            Point end = At(pivot, radius, toDeg);
+
+            var fig = new PathFigure { StartPoint = start };
+            fig.Segments.Add(new ArcSegment(end, new Size(radius, radius), 0, false,
+                clockwise ? SweepDirection.Clockwise : SweepDirection.Counterclockwise, true));
+            var arc = new Path
+            {
+                Data = new PathGeometry(new[] { fig }),
+                StrokeThickness = 1.2,
+                StrokeStartLineCap = PenLineCap.Round
+            };
+            arc.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
+            container.Children.Add(arc);
+
+            // Yayın ucundaki teğet yönünde ok başı
+            double t = toDeg * System.Math.PI / 180;
+            var dir = clockwise ? new Vector(-System.Math.Sin(t), System.Math.Cos(t)) : new Vector(System.Math.Sin(t), -System.Math.Cos(t));
+            var normal = new Vector(-dir.Y, dir.X);
+            Point tip = end + dir * 1.5;
+            Point baseCenter = end - dir * 4;
+            var head = new Polygon
+            {
+                Points = new PointCollection { tip, baseCenter + normal * 2.6, baseCenter - normal * 2.6 }
+            };
+            head.SetResourceReference(Shape.FillProperty, "Brush.Circuit.Stroke");
+            container.Children.Add(head);
         }
 
         public override string ToNetlistEntry(Dictionary<Pin, int> nodeMap)

@@ -569,6 +569,65 @@ namespace CircuitAnalyzer.WPF
         {
             visual.RenderTransformOrigin = new Point(0.5, 0.5);
             visual.RenderTransform = new RotateTransform(angle);
+            KeepTextUpright(visual, angle);
+        }
+
+        /// <summary>
+        /// Eleman döndürülünce içindeki yazılar (ad, değer, "t = 0"…) ters ya da yan kalmasın:
+        /// her yazı kendi merkezi etrafında ters yönde döndürülür, böylece hep düz okunur.
+        /// Dikey duran elemanda (90°/270°) yatay kalan yazı gövdeye doğru genişler; çizgilerin
+        /// üstüne binmesin diye gövdeden uzağa, genişliği ile yüksekliği farkının yarısı kadar itilir.
+        /// </summary>
+        internal static void KeepTextUpright(UIElement visual, double angle)
+        {
+            double a = ((angle % 360) + 360) % 360;
+            if (visual is Panel root)
+            {
+                double centerY = double.IsNaN(root.Height) ? double.NaN : root.Height / 2;
+                foreach (var text in TextBlocksIn(root))
+                    MakeUpright(text, a, centerY);
+            }
+            else if (visual is TextBlock single)
+            {
+                MakeUpright(single, a, double.NaN);
+            }
+        }
+
+        private static IEnumerable<TextBlock> TextBlocksIn(Panel panel)
+        {
+            foreach (UIElement child in panel.Children)
+            {
+                if (child is TextBlock text)
+                    yield return text;
+                else if (child is Panel inner)
+                    foreach (var t in TextBlocksIn(inner))
+                        yield return t;
+            }
+        }
+
+        private static void MakeUpright(TextBlock text, double angle, double elementCenterY)
+        {
+            text.RenderTransformOrigin = new Point(0.5, 0.5);
+            if (angle == 0)
+            {
+                text.RenderTransform = Transform.Identity;
+                return;
+            }
+
+            var group = new TransformGroup();
+            group.Children.Add(new RotateTransform(-angle));
+
+            double top = Canvas.GetTop(text);
+            if ((angle == 90 || angle == 270) && !double.IsNaN(elementCenterY) && !double.IsNaN(top))
+            {
+                text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                Size size = text.DesiredSize;
+                double offset = top + size.Height / 2 - elementCenterY;   // gövde eksenine dik uzaklık
+                double push = Math.Max(0, (size.Width - size.Height) / 2);
+                if (Math.Abs(offset) > 0.5 && push > 0)
+                    group.Children.Add(new TranslateTransform(0, Math.Sign(offset) * push));
+            }
+            text.RenderTransform = group;
         }
 
         // ═══════════════════════════════════════════════════════

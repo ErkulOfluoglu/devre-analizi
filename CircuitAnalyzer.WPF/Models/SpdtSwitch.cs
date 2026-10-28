@@ -155,7 +155,7 @@ namespace CircuitAnalyzer.WPF.Models
             label2.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Circuit.LabelSecondary");
             label2.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
             Canvas.SetLeft(label2, contact2X + 6);
-            Canvas.SetTop(label2, contact2Y - 4);
+            Canvas.SetTop(label2, contact2Y - 11);   // kontağın sağ üstünde: 2. kontağın eğik teline binmesin
             container.Children.Add(label2);
 
             // ── Anahtar kolu: t < 0 anında ortak uç ile 1. kontak bağlıdır ──
@@ -172,25 +172,10 @@ namespace CircuitAnalyzer.WPF.Models
             blade.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
             container.Children.Add(blade);
 
-            // ── 1'den 2'ye geçişi gösteren kavisli ok ──
-            var arrowPath = new Path
-            {
-                StrokeThickness = 1.2,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round
-            };
-            arrowPath.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
-            var arrowGeom = new PathGeometry();
-            var arrowFig = new PathFigure { StartPoint = new Point(44, 13) };
-            arrowFig.Segments.Add(new ArcSegment(new Point(45, 27), new Size(16, 16), 0, false, SweepDirection.Clockwise, true));
-            arrowFig.Segments.Add(new LineSegment(new Point(41, 24), true));
-            arrowFig.Segments.Add(new LineSegment(new Point(45, 27), true));
-            arrowFig.Segments.Add(new LineSegment(new Point(46, 22), true));
-            arrowGeom.Figures.Add(arrowFig);
-            arrowPath.Data = arrowGeom;
-            container.Children.Add(arrowPath);
+            // ── 1'den 2'ye geçişi gösteren kavisli ok: kol ortak uç etrafında döner ──
+            SwitchElement.AddRotationArrow(container, new Point(commonContactX, centerY), 20, -15, 25);
 
-            // ── "t = 0" metni ──
+            // ── "t = 0" metni — sol üstte, kola ve oka değmez ──
             var t0Text = new TextBlock
             {
                 Text = "t = 0",
@@ -199,8 +184,8 @@ namespace CircuitAnalyzer.WPF.Models
             };
             t0Text.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Circuit.LabelSecondary");
             t0Text.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
-            Canvas.SetLeft(t0Text, 20);
-            Canvas.SetTop(t0Text, 2);
+            Canvas.SetLeft(t0Text, 0);
+            Canvas.SetTop(t0Text, 0);
             container.Children.Add(t0Text);
 
             // ── ID etiketi (ör: "S1") ──
@@ -212,7 +197,7 @@ namespace CircuitAnalyzer.WPF.Models
             idLabel.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Circuit.Label");
             idLabel.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
             idLabel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            Canvas.SetLeft(idLabel, 18);
+            Canvas.SetLeft(idLabel, 4);
             Canvas.SetTop(idLabel, centerY + 5);
             container.Children.Add(idLabel);
 
