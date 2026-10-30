@@ -13,7 +13,7 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <!-- Programın sürümü TEK yerden: Hakkında penceresi ve kurulum paketi bunu kullanır.
          Yeni sürüm çıkarken yalnızca burayı değiştirin. -->
-    <Version>1.3.2</Version>
+    <Version>1.4.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
