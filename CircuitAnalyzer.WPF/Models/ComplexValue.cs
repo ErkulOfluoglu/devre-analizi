@@ -117,7 +117,8 @@ namespace CircuitAnalyzer.WPF.Models
             string s = input.Trim()
                 .Replace(" ", "")
                 .Replace("*", "")
-                .Replace("°", "");
+                .Replace("°", "")
+                .Replace('−', '-');   // ToRectangularString ve anlatım Unicode eksi kullanır
 
             // ── Adım 2: Kutupsal format kontrolü (∠ veya < ile) ──
             // Önce kontrol: çünkü "10<30" içindeki < işareti
@@ -253,7 +254,7 @@ namespace CircuitAnalyzer.WPF.Models
             if (Math.Abs(Imaginary) < 1e-10)
                 return TurkishNumber.Format(Real, "G4");
             if (Math.Abs(Real) < 1e-10)
-                return $"j{TurkishNumber.Format(Imaginary, "G4")}";
+                return $"{(Imaginary < 0 ? "−" : "")}j{TurkishNumber.Format(Math.Abs(Imaginary), "G4")}";
 
             string sign = Imaginary >= 0 ? "+" : "−";
             return $"{TurkishNumber.Format(Real, "G4")}{sign}j{TurkishNumber.Format(Math.Abs(Imaginary), "G4")}";

@@ -84,8 +84,8 @@ def _branches(elements: List[ParsedElement], overrides: Dict[str, Tuple[str, flo
     return out
 
 
-def _components(branches, nodes) -> Dict[str, str]:
-    """Akım iletebilen dallarla (R, V) bağlı düğüm kümeleri (union-find temsilcisi)."""
+def _components(branches, nodes, include_current: bool = False) -> Dict[str, str]:
+    """Akım iletebilen dallarla (R, V; istenirse I) bağlı düğüm kümeleri (union-find temsilcisi)."""
     parent = {n: n for n in nodes}
 
     def find(n):
@@ -95,7 +95,7 @@ def _components(branches, nodes) -> Dict[str, str]:
         return n
 
     for _, kind, a, b, _ in branches:
-        if kind in ("R", "V"):
+        if kind in ("R", "V") or (include_current and kind == "I"):
             ra, rb = find(a), find(b)
             if ra != rb:
                 parent[rb] = ra
@@ -349,6 +349,11 @@ def analyze_transient(parsed: ParsedCircuit, is_dc: bool = True) -> TransientAna
         nodes = {n for e in before.elements for n in (e.node_positive, e.node_negative)} | {"0"}
         comp = _components(_branches(others, {}), nodes)
         if comp[pb[0]] != comp[pb[1]]:
+            with_i = _components(_branches(others, {}), nodes, include_current=True)
+            if with_i[pb[0]] == with_i[pb[1]]:
+                raise TransientNotApplicable(
+                    "t < 0 konumunda kondansatör yalnızca akım kaynağı üzerinden besleniyor; akımın "
+                    "başka yolu olmadığından gerilim sürekli artar ve kararlı hâl oluşmaz.")
             uncharged = True
             overrides[sb.id] = ("v", 0.0)
     dc_before = dc_solve(before.elements, overrides)

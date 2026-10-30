@@ -105,6 +105,15 @@ public class TurkishNumberTests
     }
 
     [Theory]
+    [InlineData("−12,5", -12.5)]
+    [InlineData("−3,2m", -3.2e-3)]
+    public void EditorParsing_AcceptsUnicodeMinus(string input, double expected)
+    {
+        Assert.True(TurkishNumber.TryParseSpice(input, out double val));
+        Assert.Equal(expected, val, 9);
+    }
+
+    [Theory]
     [InlineData("1M", 1e6)]
     [InlineData("2,2 MΩ", 2.2e6)]
     [InlineData("1meg", 1e6)]

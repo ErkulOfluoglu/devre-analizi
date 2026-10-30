@@ -324,7 +324,8 @@ def build_transient_explanation(a: TransientAnalysis) -> List[ExplanationSection
                f"({_x(a, xf)} {MINUS} {paren(_x(a, x0))}) · {eng(a.r_th, 'Ω')} = {eng(o0, 'V')}")
     s.math(f"{o_lbl}(t) = {eng(o0, o_unit)} · e^({MINUS}t/τ)   (son değeri 0)")
     if o0 < -1e-15 and is_c:
-        s.note("Akımın eksi çıkması, kondansatör deşarj olurken akımın seçilen yönün tersine "
+        durum = "deşarj olurken" if abs(x0) > abs(xf) else "ters yönde dolarken"
+        s.note(f"Akımın eksi çıkması, kondansatör {durum} akımın seçilen yönün tersine "
                "aktığını gösterir.")
     sections.append(s)
 

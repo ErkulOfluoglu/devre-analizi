@@ -54,7 +54,7 @@ namespace CircuitAnalyzer.WPF.Services
             if (string.IsNullOrWhiteSpace(text))
                 return false;
 
-            string trimmed = text.Trim();
+            string trimmed = text.Trim().Replace('−', '-');
             int dotCount = 0;
             int commaCount = 0;
             for (int i = 0; i < trimmed.Length; i++)
@@ -82,7 +82,7 @@ namespace CircuitAnalyzer.WPF.Services
             if (string.IsNullOrWhiteSpace(text))
                 return false;
 
-            var match = SpiceNumberRegex.Match(text.Trim());
+            var match = SpiceNumberRegex.Match(text.Trim().Replace('−', '-'));
             if (!match.Success)
                 return false;
 
