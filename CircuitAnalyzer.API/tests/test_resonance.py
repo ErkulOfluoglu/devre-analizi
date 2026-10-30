@@ -400,6 +400,15 @@ INAPPLICABLE = {
     "two_sources": (
         "V1 1 0 AC_PHASOR(10, 0)\nI1 0 1 AC_PHASOR(0.01, 0)\nR1 1 0 1k\nL1 1 0 10m\nC1 1 0 1u" + GND,
         "tam olarak bir AC kaynak olmalı"),
+    "tank_extra_element_on_x": (
+        "V1 1 0 AC_PHASOR(10, 0)\nR1 1 2 1k\nL1 2 0 100m\nC1 2 0 10u\nR3 2 0 5k" + GND,
+        "ne tek gözde seri ne de aynı iki düğüm arasında paralel bağlı"),
+    "tank_with_current_source": (
+        "I1 0 1 AC_PHASOR(0.01, 0)\nR1 1 2 1k\nL1 2 0 100m\nC1 2 0 10u" + GND,
+        "kaynağa seri R ile bağlı paralel LC"),
+    "tank_lc_not_on_source_terminal": (
+        "V1 1 0 AC_PHASOR(10, 0)\nR1 1 2 1k\nR2 2 3 1k\nL1 3 4 100m\nC1 3 4 10u\nR3 4 0 1k" + GND,
+        "ne tek gözde seri ne de aynı iki düğüm arasında paralel bağlı"),
     "no_resistor": (
         "V1 1 0 AC_PHASOR(10, 0)\nL1 1 2 10m\nC1 2 0 1u" + GND,
         "devrede direnç yok"),
@@ -577,8 +586,10 @@ def test_response_json_fields():
     data = _ok(SERIES_PHASOR)
     rs = data["resonance"]
     assert set(rs) == {"kind", "f0", "w0", "x", "q", "bw", "f1", "f2", "f1_exact", "f2_exact",
-                       "z0", "i0", "v0", "curve"}
+                       "z0", "i0", "v0", "curve", "via_source_transform"}
     assert set(rs["curve"]) == {"quantity", "unit", "f", "y"}
+    for net in (SERIES, PARALLEL_V, PARALLEL_I):             # öteki biçimlerde false
+        assert _ok(net, frequency=50.0)["resonance"]["via_source_transform"] is False
     assert "resonance" not in data["results"]                  # yalnızca üst düzey alan
     assert data["value_display"] == "PEAK"
 
@@ -602,3 +613,187 @@ def test_assistant_knows_resonance_method_and_numbers():
     from llm.assistant import _METHOD_NAMES
     from models.request import AnalysisType
     assert "Rezonans" in _METHOD_NAMES[AnalysisType.RESONANCE]
+
+
+# ═══════════════════════════════════════════════════════
+#  10. SERİ R + PARALEL LC ("TANK", kaynak dönüşümüyle paralel RLC)
+# ═══════════════════════════════════════════════════════
+#
+# L = 100 mH, C = 10 µF:  ω₀ = 1/√(0,1 · 1e-5) = 1000 rad/s, f₀ = 159,155 Hz, X = ω₀L = 100 Ω
+# R = 1 kΩ:  Q = R/X = 10, BW = f₀/Q = 15,9155 Hz
+# Rezonansta LC kolu açık devre: kaynak akımı 0, V_x = V, I_L = I_C = V/X = Q·V/R
+
+TW0 = 1.0 / math.sqrt(0.1 * 10e-6)
+TF0 = TW0 / (2.0 * math.pi)
+TANK = ("V1 1 0 AC_PHASOR(10, 0) RMS\nR1 1 2 1k\nL1 2 0 100m\nC1 2 0 10u" + GND)
+
+
+def _z_tank(f: float, r: float) -> complex:
+    """Dönüştürülmüş devrenin empedansı R‖Z_L‖Z_C."""
+    w = 2.0 * math.pi * f
+    return 1.0 / complex(1.0 / r, w * 10e-6 - 1.0 / (w * 0.1))
+
+
+def test_tank_rms_hand_values_and_flags():
+    data = _ok(TANK, value_display="RMS")
+    assert data["status"] == "success"
+    assert data["errors"] == [] and data["warnings"] == []
+    rs = data["resonance"]
+    assert rs["kind"] == "parallel" and rs["via_source_transform"] is True
+    assert rs["w0"] == pytest.approx(1000.0, rel=1e-9)
+    assert rs["f0"] == pytest.approx(159.1549431, rel=1e-8)
+    assert rs["x"] == pytest.approx(100.0, rel=1e-9)
+    assert rs["q"] == pytest.approx(10.0, rel=1e-9)
+    assert rs["bw"] == pytest.approx(15.91549431, rel=1e-8)
+    assert rs["z0"] == pytest.approx(1000.0, rel=1e-9)
+    assert rs["i0"] == pytest.approx(0.0, abs=1e-12)              # gerçek kaynak akımı
+    assert rs["v0"] == pytest.approx(10.0, rel=1e-9)              # V_x = V
+    f1e, f2e = _half_power(TF0, TF0 / 10.0)
+    assert rs["f1_exact"] == pytest.approx(f1e, rel=1e-9)
+    assert rs["f2_exact"] == pytest.approx(f2e, rel=1e-9)
+    assert rs["f1"] == pytest.approx(TF0 - TF0 / 20.0, rel=1e-9)
+    assert _titles(data) == [
+        "Devreyi Tanıyalım", "Rezonans Koşulu", "Rezonans Frekansı", "Reaktanslar",
+        "Kaynak Dönüşümü", "Rezonansta Empedans ve Akım", "Kalite Faktörü Q", "Bant Genişliği",
+        "Eleman Akımları", "Kontrol", "Sonuç"]
+
+
+def test_tank_narrative_text():
+    data = _ok(TANK, value_display="RMS")
+    assert "I = V / R = 10 V / 1 kΩ = 10 mA" in _text(data, "Kaynak Dönüşümü")
+    emp = _text(data, "Rezonansta Empedans ve Akım")
+    assert "Kaynak akımı: I = 0" in emp
+    assert "V_x = V" in emp
+    assert "kaynaktan görülen empedans sonsuza gider" in emp
+    assert "|R‖Z_L‖Z_C|" in emp
+    assert "I_L = V_x / X_L = 10 V / 100 Ω = 100 mA" in _text(data, "Eleman Akımları")
+    assert "I_L = I_C = Q · V / R = 10 · 10 mA = 100 mA" in _text(data, "Eleman Akımları")
+    kontrol = _text(data, "Kontrol")
+    assert "akım ≈ 0 ✓" in kontrol and "|V_x| = 10 V = V ✓" in kontrol
+    assert "|I_L| = |I_C| = 100 mA = V/X ✓" in kontrol
+    assert "V/√2 = 7,071 V ✓" in kontrol
+    assert "Z = R" not in kontrol                                   # Z'nin sanal kısmı denetimi yok
+
+
+def test_tank_results_solved_at_f0_on_real_circuit():
+    data = _ok(TANK, value_display="RMS", frequency=50.0)           # istek frekansı kullanılmaz
+    assert data["resonance"]["f0"] == pytest.approx(TF0, rel=1e-8)
+    nv = data["results"]["node_voltages"]
+    assert nv["1"]["value"] == pytest.approx(10.0, rel=1e-6)
+    assert nv["2"]["value"] == pytest.approx(10.0, rel=1e-6)         # V_x = V
+    il = data["results"]["element_currents"]["L1"]["value"]
+    assert il["magnitude"] == pytest.approx(0.1, rel=1e-6)           # V/X = 10/100
+    assert il["phase_degrees"] == pytest.approx(-90.0, abs=1e-3)
+    ic = data["results"]["element_currents"]["C1"]["value"]
+    assert ic["magnitude"] == pytest.approx(0.1, rel=1e-6)
+    assert ic["phase_degrees"] == pytest.approx(90.0, abs=1e-3)
+    assert abs(data["results"]["element_currents"]["R1"]["value"]) < 1e-9
+    assert "Kaynağın frekansı f = 50 Hz;" in _text(data, "Devreyi Tanıyalım")
+
+
+def test_tank_peak_display_scales_by_sqrt2_and_keeps_f0_q_bw():
+    rms = _ok(TANK, value_display="RMS")["resonance"]
+    peak_data = _ok(TANK, value_display="PEAK")
+    peak = peak_data["resonance"]
+    for key in ("f0", "w0", "x", "q", "bw", "f1", "f2", "f1_exact", "f2_exact", "z0"):
+        assert peak[key] == pytest.approx(rms[key], rel=1e-9), key
+    assert peak["v0"] == pytest.approx(10.0 * math.sqrt(2.0), rel=1e-9)
+    assert peak["i0"] == pytest.approx(0.0, abs=1e-12)
+    assert peak["curve"]["y"] == rms["curve"]["y"]                   # |Z| eğrisi tabandan bağımsız
+    assert "I_L = V_x / X_L = 14,14 V / 100 Ω = 141,4 mA" in _text(peak_data, "Eleman Akımları")
+
+
+def test_tank_without_frequency_works():
+    data = _ok(TANK)
+    assert data["status"] == "success"
+    assert data["resonance"]["f0"] == pytest.approx(TF0, rel=1e-8)
+
+
+def test_tank_curve_peak_is_r_and_cuts_half_power_at_exact_frequencies():
+    rs = _ok(TANK, value_display="RMS")["resonance"]
+    cv = rs["curve"]
+    assert cv["quantity"] == "Z" and cv["unit"] == "Ω"
+    f, y = cv["f"], cv["y"]
+    assert len(f) == 400 and all(b > a for a, b in zip(f, f[1:]))
+    bw = TF0 / 10.0
+    assert f[0] == pytest.approx(max(0.1 * TF0, TF0 - 5 * bw), rel=1e-9)
+    assert f[-1] == pytest.approx(TF0 + 5 * bw, rel=1e-9)
+    k0 = f.index(rs["f0"])
+    assert y[k0] == pytest.approx(1000.0, rel=1e-9)                  # tepe = R
+    assert y[k0] == max(y)
+    for k in (0, 80, 250, 399):
+        assert y[k] == pytest.approx(abs(_z_tank(f[k], 1000.0)), rel=1e-8)
+    for fe in (rs["f1_exact"], rs["f2_exact"]):
+        assert abs(_z_tank(fe, 1000.0)) == pytest.approx(1000.0 / math.sqrt(2.0), rel=1e-8)
+
+
+def test_tank_two_series_resistors_are_added():
+    net = ("V1 1 0 AC_PHASOR(10, 0) RMS\nR1 1 2 300\nR2 2 3 200\nL1 3 0 100m\nC1 3 0 10u" + GND)
+    data = _ok(net, value_display="RMS")
+    rs = data["resonance"]
+    assert rs["via_source_transform"] is True
+    assert rs["z0"] == pytest.approx(500.0, rel=1e-9)
+    assert rs["q"] == pytest.approx(5.0, rel=1e-9)                   # R/X = 500/100
+    assert rs["bw"] == pytest.approx(TF0 / 5.0, rel=1e-8)
+    assert rs["v0"] == pytest.approx(10.0, rel=1e-9)
+    assert rs["f0"] == pytest.approx(TF0, rel=1e-8)                  # R f₀'ı değiştirmez
+    assert rs["curve"]["y"][rs["curve"]["f"].index(rs["f0"])] == pytest.approx(500.0, rel=1e-9)
+    assert "R = R1 + R2 = 300 Ω + 200 Ω = 500 Ω" in _text(data, "Rezonans Koşulu")
+    # I_L = V/X = 100 mA = Q·V/R = 5 · 10 / 500
+    assert "I_L = I_C = Q · V / R = 5 · 20 mA = 100 mA" in _text(data, "Eleman Akımları")
+    # fazladan (ikinci) kaynak varsa biçim uygun değildir
+    flipped = ("V1 1 0 AC_PHASOR(10, 0) RMS\nL1 1 0 100m\nC1 1 0 10u\nR1 1 2 500\n"
+               "V2 2 0 AC_PHASOR(0, 0)" + GND)
+    assert _ok(flipped, value_display="RMS")["resonance"] is None    # fazladan kaynak: uygun değil
+
+
+def test_tank_low_q_exact_half_power_and_note():
+    net = "V1 1 0 AC_PHASOR(10, 0) RMS\nR1 1 2 100\nL1 2 0 100m\nC1 2 0 10u" + GND   # Q = 1
+    data = _ok(net, value_display="RMS")
+    rs = data["resonance"]
+    assert rs["via_source_transform"] is True
+    assert rs["q"] == pytest.approx(1.0, rel=1e-9)
+    assert rs["bw"] == pytest.approx(TF0, rel=1e-8)
+    assert rs["f1"] == pytest.approx(0.5 * TF0, rel=1e-8)
+    assert rs["f2"] == pytest.approx(1.5 * TF0, rel=1e-8)
+    golden = math.sqrt(1.25)
+    assert rs["f1_exact"] == pytest.approx((golden - 0.5) * TF0, rel=1e-8)
+    assert rs["f2_exact"] == pytest.approx((golden + 0.5) * TF0, rel=1e-8)
+    assert abs(_z_tank(rs["f1_exact"], 100.0)) == pytest.approx(100.0 / math.sqrt(2.0), rel=1e-8)
+    assert "Q küçük olduğundan kitaptaki f₀ ∓ BW/2 yaklaşıktır; tam değerler" in _text(data, "Bant Genişliği")
+    # Q = 1: I_L = I_C = Q·V/R = 1 · 10/100 = 0,1 A = V/X
+    assert "I_L = I_C = Q · V / R = 1 · 100 mA = 100 mA" in _text(data, "Eleman Akımları")
+
+
+def test_tank_practice_questions():
+    data = _ok(TANK, value_display="RMS")
+    qs = _questions(data)
+    assert list(qs) == ["F0", "Q_FACTOR", "BW", "VX", "F1", "F2"]          # I_MAX ve Z0 sorulmaz
+    assert qs["VX"].unit == "V" and qs["VX"].expected.real == pytest.approx(10.0, rel=1e-9)
+    assert qs["F0"].expected.real == pytest.approx(TF0, rel=1e-8)
+    assert qs["Q_FACTOR"].expected.real == pytest.approx(10.0)
+    assert qs["BW"].expected.real == pytest.approx(TF0 / 10.0, rel=1e-8)
+    assert qs["F1"].expected.real == pytest.approx(TF0 - TF0 / 20.0, rel=1e-8)
+    assert check_answer(qs["VX"], "10 V").status == "correct"
+    assert check_answer(qs["VX"], "10000 mV").status == "correct"
+    assert check_answer(qs["F0"], "159,155 Hz").status == "correct"
+    assert check_answer(qs["BW"], "15.9155").status == "correct"
+    assert check_answer(qs["Q_FACTOR"], "10").status == "correct"
+    over = check_answer(qs["VX"], "100")
+    assert over.status == "wrong" and "Q·V" in over.message
+    half = check_answer(qs["VX"], "7.0711")
+    assert half.status == "wrong" and "V/√2" in half.message
+    zero = check_answer(qs["VX"], "0")
+    assert zero.status == "wrong" and "V_x sıfır değildir" in zero.message
+    # peak gösterimde beklenen V_x = 10·√2
+    peak_qs = _questions(_ok(TANK, value_display="PEAK"))
+    assert peak_qs["VX"].expected.real == pytest.approx(10.0 * math.sqrt(2.0), rel=1e-9)
+
+
+def test_tank_low_q_practice_accepts_exact_f1():
+    net = "V1 1 0 AC_PHASOR(10, 0) RMS\nR1 1 2 100\nL1 2 0 100m\nC1 2 0 10u" + GND
+    qs = _questions(_ok(net, value_display="RMS"))
+    f1_exact = (math.sqrt(1.25) - 0.5) * TF0
+    assert check_answer(qs["F1"], f"{0.5 * TF0} Hz").status == "correct"
+    ex = check_answer(qs["F1"], f"{f1_exact} Hz")
+    assert ex.status == "correct" and "tam yarım güç" in ex.message

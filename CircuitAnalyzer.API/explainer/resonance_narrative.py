@@ -26,6 +26,7 @@ def _same(a: float, b: float) -> bool:
 
 def build_resonance_sections(ctx, a) -> List[_Section]:
     series = a.kind == "series"
+    tank = a.via_source_transform
     sections: List[_Section] = []
 
     # ── Devreyi Tanıyalım ──
@@ -52,6 +53,17 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
             s.math(f"R = {' + '.join(r_ids)} = "
                    f"{' + '.join(eng(e.value, 'Ω') for e in a.resistors)} = {eng(a.r, 'Ω')}")
         s.math("Z = R + j(X_L − X_C)")
+    elif tank:
+        s.text(
+            f"Bu devrede {src_id} gerilim kaynağına seri bağlı {', '.join(r_ids)} direnci ve "
+            f"Düğüm {a.x_node} ile Düğüm {a.b_node} arasında paralel bağlı {l_id} ve {c_id} var "
+            "(seri R + paralel LC)."
+        )
+        if len(r_ids) > 1:
+            s.text("Seri bağlı dirençler toplanır:")
+            s.math(f"R = {' + '.join(r_ids)} = "
+                   f"{' + '.join(eng(e.value, 'Ω') for e in a.resistors)} = {eng(a.r, 'Ω')}")
+        s.math("Y_LC = j(1/X_C − 1/X_L)")
     else:
         s.text(
             f"Bu devre bir paralel RLC devresidir: {r_ids[0]}, {l_id}, {c_id} ve {src_id} kaynağı "
@@ -60,9 +72,11 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
         s.math("Y = 1/R + j(1/X_C − 1/X_L)")
     s.text(
         "Bobinin reaktansı X_L = ωL frekansla artar, kondansatörün reaktansı X_C = 1/(ωC) "
-        "frekansla azalır. İkisinin eşit olduğu frekansta reaktif etkiler birbirini götürür ve "
-        "empedansın sanal kısmı sıfır olur: devre kaynağa yalnızca bir dirençmiş gibi görünür. "
-        "Buna rezonans denir."
+        "frekansla azalır. İkisinin eşit olduğu frekansta reaktif etkiler birbirini götürür; "
+        + ("paralel LC kolunun admitansı sıfır, yani empedansı sonsuz olur: LC kolu açık devre "
+           "gibi davranır. " if tank else
+           "empedansın sanal kısmı sıfır olur: devre kaynağa yalnızca bir dirençmiş gibi görünür. ")
+        + "Buna rezonans denir."
     )
     s.math("X_L = X_C   →   ω₀L = 1/(ω₀C)   →   ω₀² = 1/(LC)")
     sections.append(s)
@@ -87,8 +101,29 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
     s.result(f"X = X_L = X_C = {eng(a.x, 'Ω')}")
     sections.append(s)
 
+    # ── Kaynak Dönüşümü (yalnız seri R + paralel LC) ──
+    if tank:
+        s = _Section("Kaynak Dönüşümü")
+        s.text("Gerilim kaynağı ile ona seri R, kaynak dönüşümüyle bir akım kaynağına ve ona paralel "
+               "aynı R'ye dönüştürülür; LC koluna bakan devre değişmez. Böylece devre paralel RLC "
+               "devresine denk olur ve paralel devrenin formülleri (Q = R/X, BW = f₀/Q) geçerlidir:")
+        s.math(f"I = V / R = {eng(a.amp, 'V')} / {eng(a.r, 'Ω')} = {eng(a.amp / a.r, 'A')}  "
+               f"(paralel R = {eng(a.r, 'Ω')})")
+        sections.append(s)
+
     # ── Rezonansta Empedans ve Akım ──
-    if series:
+    if tank:
+        s = _Section("Rezonansta Empedans ve Akım")
+        s.text("Rezonansta ideal LC kolunun empedansı sonsuzdur (admitansı sıfır): kolun akımı "
+               "bobin ve kondansatör akımlarının toplamıdır ve birbirini götürür. Dönüştürülmüş "
+               "paralel devrede Z₀ = R‖Z_L‖Z_C = R olur; en büyük değerini alır.")
+        s.math(f"Z₀ = R = {eng(a.r, 'Ω')}")
+        s.math("Kaynak akımı: I = 0   (R üzerindeki gerilim V_R = I · R = 0)")
+        s.math(f"V_x = V {MINUS} V_R = V = {eng(a.v0, 'V')}")
+        s.text(f"Yani rezonansta kaynaktan görülen empedans sonsuza gider (kaynak akımı 0); "
+               f"Düğüm {a.x_node}'deki V_x gerilimi kaynak gerilimine eşit olur. Aşağıdaki grafikte "
+               "ise dönüştürülmüş devrenin empedansı |R‖Z_L‖Z_C| gösterilir; tepe değeri R'dir.")
+    elif series:
         s = _Section("Rezonansta Empedans ve Akım")
         s.text("Rezonansta X_L − X_C = 0 olduğundan seri devrenin empedansı yalnızca dirençten "
                "ibarettir; empedans en küçük değerini, akım en büyük değerini alır:")
@@ -127,7 +162,9 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
     s = _Section("Bant Genişliği")
     s.text(
         "Bant genişliği, "
-        + ("akımın I_max değerinin" if series else "empedansın Z₀ değerinin")
+        + ("akımın I_max değerinin" if series else
+           "dönüştürülmüş devrenin empedansının (eşdeğer olarak V_x geriliminin) en büyük değerinin"
+           if tank else "empedansın Z₀ değerinin")
         + " 1/√2 ≈ 0,707 katına düştüğü iki frekansın (yarım güç frekansları f₁ ve f₂) "
           "arasındaki aralıktır."
     )
@@ -158,6 +195,19 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
             s.note("Q > 1 olduğundan bobin ve kondansatör gerilimleri kaynak geriliminden büyüktür "
                    "(aşırı gerilim).")
         s.result(f"V_L = V_C = {eng(a.v0, 'V')}")
+    elif tank:
+        i_x = a.v0 / a.x
+        i_s = a.amp / a.r
+        s = _Section("Eleman Akımları")
+        s.text("Rezonansta V_x = V olduğundan bobin ve kondansatör akımları eşit büyüklükte ve "
+               "ters yöndedir; LC kolunda dolaşır, kaynaktan akım çekilmez:")
+        s.math(f"I_L = V_x / X_L = {eng(a.v0, 'V')} / {eng(a.x, 'Ω')} = {eng(i_x, 'A')}")
+        s.math(f"I_C = V_x / X_C = {eng(a.v0, 'V')} / {eng(a.x, 'Ω')} = {eng(i_x, 'A')}")
+        s.math(f"I_L = I_C = Q · V / R = {num(a.q)} · {eng(i_s, 'A')} = {eng(a.q * i_s, 'A')}")
+        if a.q > 1:
+            s.note("Q > 1 olduğundan bobin ve kondansatör akımları, kaynak dönüşümündeki V/R "
+                   "akımından büyüktür (aşırı akım); bu akım LC kolunda dolaşır.")
+        s.result(f"I_L = I_C = {eng(i_x, 'A')}")
     else:
         i_r = a.v0 / a.r
         i_x = a.v0 / a.x
@@ -177,7 +227,16 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
     # ── Kontrol (lcapy) ──
     chk = a.check
     s = _Section("Kontrol")
-    if chk is not None:
+    if chk is not None and tank:
+        s.check(f"Çözücüyle gerçek devrede f₀ = {eng(a.f0, 'Hz')} frekansında kaynaktan çekilen "
+                "akım ≈ 0 ✓")
+        s.check(f"Çözücüde f₀'daki |V_x| = {eng(chk.vx_f0, 'V')} = V ✓")
+        s.check(f"Çözücüde |I_L| = |I_C| = {eng(chk.elem_f0, 'A')} = V/X ✓")
+        s.check(f"Tam yarım güç frekanslarında f₁ = {eng(a.f1_exact, 'Hz')} ve "
+                f"f₂ = {eng(a.f2_exact, 'Hz')} çözücüde |V_x| = {eng(chk.main_f1, 'V')} ve "
+                f"{eng(chk.main_f2, 'V')}; V/√2 = {eng(a.v0 / math.sqrt(2.0), 'V')} ✓")
+        s.check(f"f₂ {MINUS} f₁ = {eng(a.f2_exact - a.f1_exact, 'Hz')} = BW ✓")
+    elif chk is not None:
         s.check(f"Çözücüyle f₀ = {eng(a.f0, 'Hz')} frekansında kaynaktan görülen empedans "
                 f"Z = {eng(chk.z_f0.real, 'Ω')} (sanal kısım sıfır): Z = R ✓")
         if a.kind == "parallel" and a.source_is_current:
@@ -208,6 +267,9 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
     s.result(f"Q = {num(a.q)}, BW = {eng(a.bw, 'Hz')}, f₁ = {eng(a.f1, 'Hz')}, f₂ = {eng(a.f2, 'Hz')}")
     if series:
         s.result(f"Z₀ = {eng(a.z0, 'Ω')}, I_max = {eng(a.i0, 'A')}, V_L = V_C = {eng(a.v0, 'V')}")
+    elif tank:
+        s.result(f"Z₀ = {eng(a.z0, 'Ω')}, kaynak akımı = 0, V_x = {eng(a.v0, 'V')}, "
+                 f"I_L = I_C = {eng(a.v0 / a.x, 'A')}")
     elif a.source_is_current:
         s.result(f"Z₀ = {eng(a.z0, 'Ω')}, V_max = {eng(a.v0, 'V')}, I_L = I_C = {eng(a.v0 / a.x, 'A')}")
     else:

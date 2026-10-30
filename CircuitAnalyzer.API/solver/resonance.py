@@ -51,10 +51,11 @@ def _na(detail: str):
 @dataclass
 class ResonanceCheck:
     """lcapy denetiminde ölçülen değerler (anlatımın Kontrol bölümü kullanır)."""
-    z_f0: complex = 0j           # f₀'da kaynaktan görülen Z
-    main_f0: float = 0.0         # seri/paralel-gerilim kaynağı: |I|; paralel-akım kaynağı: |V|
-    elem_f0: float = 0.0         # seri: |V_L| ( = |V_C|); paralel: |I_L| ( = |I_C|)
-    main_f1: float = 0.0         # seri: |I|(f₁ tam); paralel: |Z|(f₁ tam)
+    z_f0: complex = 0j           # f₀'da kaynaktan görülen Z (R + paralel LC biçiminde kullanılmaz)
+    vx_f0: float = 0.0           # R + paralel LC: f₀'da |V_x| (LC kolunun gerilimi)
+    main_f0: float = 0.0         # seri/paralel-gerilim kaynağı: |I|; paralel-akım kaynağı: |V|; tank: |I| ≈ 0
+    elem_f0: float = 0.0         # seri: |V_L| ( = |V_C|); paralel ve tank: |I_L| ( = |I_C|)
+    main_f1: float = 0.0         # seri: |I|(f₁ tam); paralel: |Z|(f₁ tam); tank: |V_x|(f₁ tam)
     main_f2: float = 0.0
 
 
@@ -83,6 +84,10 @@ class ResonanceAnalysis:
     i0: float
     v0: float
     source_freq: Optional[float] = None  # kaynağın / isteğin frekansı (bilgi; hesaba girmez)
+    # Seri R + paralel LC ("tank"): kaynak dönüşümüyle paralel RLC'ye denk (kind = "parallel")
+    via_source_transform: bool = False
+    x_node: Optional[str] = None         # R ile LC kolunun birleştiği düğüm
+    b_node: Optional[str] = None         # LC kolunun kaynakla ortak ucu
     curve_quantity: str = "I"
     curve_unit: str = "A"
     curve_f: List[float] = field(default_factory=list)
@@ -122,6 +127,47 @@ def _is_single_loop(elems: List[ParsedElement]) -> bool:
     for e in elems:
         parent[find(e.node_positive)] = find(e.node_negative)
     return len({find(n) for n in deg}) == 1
+
+
+def _tank_nodes(elems, src, resistors, ind, cap):
+    """
+    Seri R + paralel LC biçimi: gerilim kaynağı, kaynağın bir ucundan x düğümüne seri R'ler,
+    x ile kaynağın öteki ucu (b) arasında paralel L ve C; x'e başka eleman bağlı değil.
+    Uygunsa (x, b), değilse None.
+    """
+    if src.element_type in CURRENT_SOURCES:
+        return None
+    if (frozenset((ind.node_positive, ind.node_negative))
+            != frozenset((cap.node_positive, cap.node_negative))):
+        return None
+    pair = (ind.node_positive, ind.node_negative)
+    terminals = (src.node_positive, src.node_negative)
+    common = [n for n in pair if n in terminals]
+    if len(common) != 1:
+        return None
+    b = common[0]
+    x = pair[0] if pair[1] == b else pair[1]
+    a = terminals[1] if terminals[0] == b else terminals[0]
+
+    deg = Counter()
+    for e in elems:
+        deg[e.node_positive] += 1
+        deg[e.node_negative] += 1
+    if deg[x] != 3 or deg[b] != 3 or any(d != 2 for n, d in deg.items() if n not in (x, b)):
+        return None
+
+    remaining = list(resistors)
+    cur = a
+    while remaining:
+        if cur == x:                      # x'e varıldı ama dirençler artıyor
+            return None
+        nxt = [e for e in remaining if cur in (e.node_positive, e.node_negative)]
+        if len(nxt) != 1:
+            return None
+        e = nxt[0]
+        remaining.remove(e)
+        cur = e.node_negative if e.node_positive == cur else e.node_positive
+    return (x, b) if cur == x else None
 
 
 def analyze_resonance(parsed: ParsedCircuit,
@@ -178,6 +224,7 @@ def analyze_resonance(parsed: ParsedCircuit,
         _na("bir elemanın iki ucu aynı düğüme bağlı (kısa devre edilmiş)")
     pairs = {frozenset((e.node_positive, e.node_negative)) for e in elems}
     source_is_current = src.element_type in CURRENT_SOURCES
+    via_transform, x_node, b_node = False, None, None
     if len(pairs) == 1:
         kind = "parallel"
         if len(resistors) != 1:
@@ -188,8 +235,13 @@ def analyze_resonance(parsed: ParsedCircuit,
             _na("seri devrede akım kaynağı akımı kendisi belirler; seri rezonans için "
                 "gerilim kaynağı gerekir")
     else:
-        _na("elemanlar ne tek gözde seri ne de aynı iki düğüm arasında paralel bağlı "
-            "(ör. bobinin iç direnci gibi karma bağlantılar bu yöntemle anlatılmaz)")
+        tank = _tank_nodes(elems, src, resistors, ind, cap)
+        if tank is None:
+            _na("elemanlar ne tek gözde seri ne de aynı iki düğüm arasında paralel bağlı, "
+                "ne de kaynağa seri R ile bağlı paralel LC biçiminde "
+                "(ör. bobinin iç direnci gibi karma bağlantılar bu yöntemle anlatılmaz)")
+        kind, via_transform = "parallel", True
+        x_node, b_node = tank
 
     # ── Hesap ──
     r = sum(e.value for e in resistors)
@@ -202,6 +254,8 @@ def analyze_resonance(parsed: ParsedCircuit,
     root = math.sqrt(f0 * f0 + (bw / 2.0) ** 2)
     if kind == "series":
         i0, v0 = amp / r, q * amp
+    elif via_transform:
+        i0, v0 = 0.0, amp                 # LC kolu açık devre gibi: kaynak akımı 0, V_x = V
     elif source_is_current:
         i0, v0 = amp, amp * r
     else:
@@ -220,6 +274,7 @@ def analyze_resonance(parsed: ParsedCircuit,
         f1=f0 - bw / 2.0, f2=f0 + bw / 2.0,
         f1_exact=root - bw / 2.0, f2_exact=root + bw / 2.0,
         z0=r, i0=i0, v0=v0, source_freq=src_freq,
+        via_source_transform=via_transform, x_node=x_node, b_node=b_node,
     )
     a.curve_quantity, a.curve_unit = ("I", "A") if kind == "series" else ("Z", "Ω")
     a.curve_f, a.curve_y = resonance_curve(a)
@@ -261,6 +316,48 @@ def _close(a: float, b: float) -> bool:
     return abs(a - b) <= _TOL * max(abs(a), abs(b), 1e-300)
 
 
+def _verify_tank(a: ResonanceAnalysis, cct) -> Optional[str]:
+    """
+    Seri R + paralel LC biçimini GERÇEK devrede lcapy ile denetler:
+        f₀'da: kaynak akımı ≈ 0, |V_x| = V, |I_L| = |I_C| = V/X
+        tam f₁ ve f₂'de: |V_x| = V/√2
+    (Kaynaktan görülen Z bu biçimde sonsuza gider; sıfıra bölme yapılmaz.)
+    """
+    try:
+        from solver.circuit_solver import _extract_numeric, lcapy_element_current
+
+        src = a.source
+
+        def volt(n: str, f: float) -> complex:
+            return 0j if n == "0" else complex(_extract_numeric(cct[n].V, False, f))
+
+        def vx(f: float) -> float:
+            return abs(volt(a.x_node, f) - volt(a.b_node, f))
+
+        chk = ResonanceCheck()
+        chk.main_f0 = abs(complex(lcapy_element_current(cct, src, {}, False, a.f0)))
+        if chk.main_f0 > _TOL * a.amp / a.r:
+            return "lcapy denetimi: f₀'da kaynak akımı sıfır çıkmadı."
+        chk.vx_f0 = vx(a.f0)
+        if not _close(chk.vx_f0, a.v0):
+            return "lcapy denetimi: f₀'daki V_x gerilimi kaynak gerilimine eşit çıkmadı."
+        i_l = abs(complex(_extract_numeric(cct[a.inductor.id].I, False, a.f0)))
+        i_c = abs(complex(_extract_numeric(cct[a.capacitor.id].I, False, a.f0)))
+        chk.elem_f0 = i_l
+        if not (_close(i_l, a.v0 / a.x) and _close(i_c, a.v0 / a.x)):
+            return "lcapy denetimi: bobin ve kondansatör akımları V/X ile uyuşmadı."
+        half = a.v0 / math.sqrt(2.0)
+        for attr, f in (("main_f1", a.f1_exact), ("main_f2", a.f2_exact)):
+            val = vx(f)
+            setattr(chk, attr, val)
+            if not _close(val, half):
+                return "lcapy denetimi: tam yarım güç frekanslarında V_x = V/√2 sağlanmadı."
+        a.check = chk
+    except Exception as exc:
+        return f"Sayılar bağımsız çözücüyle doğrulanamadı ({type(exc).__name__})."
+    return None
+
+
 def verify_with_lcapy(a: ResonanceAnalysis, cct) -> Optional[str]:
     """
     Sayıları çözücünün (lcapy) devresiyle denetler; uyuşmazsa Türkçe gerekçe,
@@ -271,6 +368,8 @@ def verify_with_lcapy(a: ResonanceAnalysis, cct) -> Optional[str]:
                seride |V_L| = |V_C| = Q·V, paralelde |I_L| = |I_C| = Q·I_R
         tam f₁ ve f₂'de: seride |I| = I_max/√2, paralelde |Z| = R/√2
     """
+    if a.via_source_transform:
+        return _verify_tank(a, cct)
     try:
         from solver.circuit_solver import _extract_numeric, lcapy_element_current
 

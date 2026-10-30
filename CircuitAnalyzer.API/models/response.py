@@ -592,6 +592,11 @@ class ResonanceSummary(BaseModel):
     i0: float = Field(..., description="Rezonansta kaynak akımı (A), seçili gösterimde")
     v0: float = Field(..., description="Rezonansta L ve C üzerindeki gerilim (V), seçili gösterimde")
     curve: ResonanceCurve = Field(..., description="Rezonans eğrisi")
+    via_source_transform: bool = Field(
+        default=False,
+        description=("True: seri R + paralel LC ('tank') devresi kaynak dönüşümüyle paralel RLC'ye "
+                     "denk alındı (kind = 'parallel'; z0 = R, i0 = kaynağın gerçek akımı = 0, "
+                     "v0 = V_x); eğri dönüştürülmüş devrenin |Z|(f) değeridir"))
 
 
 class AnalysisResults(BaseModel):

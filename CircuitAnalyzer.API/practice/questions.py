@@ -513,7 +513,23 @@ def _resonance_questions(q, parsed: ParsedCircuit, rs, to_cn) -> List[PracticeQu
         is_ac=False,
     ))
 
-    if series:
+    if getattr(rs, "via_source_transform", False):
+        out.append(q(
+            "VX", "V_x", "Rezonansta seri R ile paralel LC kolunun birleştiği düğümdeki gerilim V_x",
+            "V", "main", rs.v0, rs.v0,
+            hint=("Rezonansta ideal LC kolunun empedansı sonsuz olur; kaynaktan akım çekilmez ve "
+                  "seri R üzerinde gerilim düşmez. Bu yüzden V_x kaynak gerilimine eşittir."),
+            sign_hint="Gerilimin büyüklüğü soruluyor; pozitif yazın.",
+            alternatives=[
+                (rs.v0 * rs.q, "Bu Q·V değeri; seri RLC'deki bobin/kondansatör gerilimi gibi düşünmüşsünüz. "
+                               "Burada LC kolu paraleldir ve V_x kaynak gerilimine eşittir."),
+                (rs.v0 / sqrt2, "Bu V/√2; yarım güç frekansındaki değerdir. Rezonansta V_x = V olur."),
+                (0.0, "Rezonansta kaynak akımı sıfırdır, ama V_x sıfır değildir: R üzerinde gerilim "
+                      "düşmediği için V_x = V olur."),
+            ],
+            is_ac=False,
+        ))
+    elif series:
         out.append(q(
             "I_MAX", "I_max", "Rezonansta kaynaktan çekilen akım (en büyük değer)", "A", "main",
             rs.i0, rs.i0,

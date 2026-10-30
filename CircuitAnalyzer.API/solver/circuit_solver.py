@@ -1656,7 +1656,10 @@ def _compute_power(
         return None
 
     balance = abs(supplied - absorbed)
-    scale = max(abs(supplied), abs(absorbed), 1e-12)
+    # Güç ≈ 0 iken (ör: rezonansta kaynak akımı 0, LC kolunda yine de VA dolaşır) kayan nokta
+    # artığı uyarı üretmesin: ölçek, elemanların görünür güçleri toplamını da içerir
+    circulating = sum(ep.apparent_power for ep in elements.values())
+    scale = max(abs(supplied), abs(absorbed), circulating, 1e-12)
     if balance > 1e-6 * scale:
         errors.append(
             f"ℹ Güç dengesi tam sağlanmadı: verilen {num(supplied.real, 6)} VA, "
@@ -1962,6 +1965,7 @@ def _resonance_summary(a) -> ResonanceSummary:
         bw=sig_round(a.bw), f1=sig_round(a.f1), f2=sig_round(a.f2),
         f1_exact=sig_round(a.f1_exact), f2_exact=sig_round(a.f2_exact),
         z0=sig_round(a.z0), i0=sig_round(a.i0), v0=sig_round(a.v0),
+        via_source_transform=a.via_source_transform,
         curve=ResonanceCurve(
             quantity=a.curve_quantity, unit=a.curve_unit,
             f=[sig_round(v) for v in a.curve_f],
