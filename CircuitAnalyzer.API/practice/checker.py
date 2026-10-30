@@ -19,7 +19,7 @@ import cmath
 import math
 from typing import List, Optional
 
-from explainer.formatting import eng, polar, rect
+from explainer.formatting import eng, num, polar, rect
 from models.response import AnswerVerdict, PracticeQuestion
 from practice.answer_parser import AnswerParseError, EXAMPLES, ParsedAnswer, parse_answer
 
@@ -27,14 +27,38 @@ REL_OK = 0.01       # doğru
 REL_CLOSE = 0.05    # çok yakın
 REL_DIAG = 0.03     # hata teşhisinde oranların toleransı
 
-_QUANTITY = {"V": "gerilim", "A": "akım", "Ω": "direnç/empedans", "W": "aktif güç", "s": "süre"}
-_UNIT_NAME = {"V": "volt (V)", "A": "amper (A)", "Ω": "ohm (Ω)", "W": "watt (W)", "s": "saniye (s)"}
+_QUANTITY = {
+    "V": "gerilim",
+    "A": "akım",
+    "Ω": "direnç/empedans",
+    "W": "aktif güç",
+    "VAR": "reaktif güç",
+    "VA": "görünür güç",
+    "F": "kondansatör sığası (kapasitans)",
+    "s": "süre",
+    "": "birimsiz büyüklük (güç katsayısı cos φ)",
+}
+_UNIT_NAME = {
+    "V": "volt (V)",
+    "A": "amper (A)",
+    "Ω": "ohm (Ω)",
+    "W": "watt (W)",
+    "VAR": "volt-amper reaktif (VAR)",
+    "VA": "volt-amper (VA)",
+    "F": "farad (F)",
+    "s": "saniye (s)",
+    "": "birimsiz",
+}
 _PREFIX_EXAMPLE = {
     "A": "4 mA için “4m” ya da “4 mA”",
     "V": "50 mV için “50m” ya da “50 mV”",
     "Ω": "2,2 kΩ için “2,2k” ya da “2,2 kΩ”",
     "W": "3,6 mW için “3,6m” ya da “3,6 mW”",
+    "VAR": "150 mVAR için “150m” ya da “150 mVAR”",
+    "VA": "200 mVA için “200m” ya da “200 mVA”",
+    "F": "10 µF için “10u” ya da “10 µF”",
     "s": "2 ms için “2m” ya da “2 ms”",
+    "": "0,8 için “0,8”",
 }
 
 
@@ -69,8 +93,10 @@ def _angle_diff(a_deg: float, b_deg: float) -> float:
 
 def _understood(p: ParsedAnswer, unit: str, is_ac: bool) -> str:
     z = p.value
-    shown_unit = p.unit or unit
+    shown_unit = p.unit if p.unit is not None else unit
     if p.form == "real" or (not is_ac and abs(z.imag) <= 1e-12 * max(abs(z), 1e-300)):
+        if not shown_unit:
+            return num(z.real)
         return eng(z.real, shown_unit)
     if p.form == "rect":
         return rect(z, shown_unit)
@@ -80,9 +106,18 @@ def _understood(p: ParsedAnswer, unit: str, is_ac: bool) -> str:
 def _unit_problem(p: ParsedAnswer, q: PracticeQuestion) -> Optional[str]:
     if p.unit is None or p.unit == q.unit:
         return None
+    if q.unit == "":
+        return (f"Birim olarak {p.unit} yazdınız; güç katsayısı cos φ = P/S birimsiz bir "
+                "orandır (birim yazılmamalıdır).")
     if q.unit == "W" and p.unit in ("VA", "VAR"):
         return (f"Birim olarak {p.unit} yazdınız; aktif güç P'nin birimi watt (W)'tır "
                 "(VA görünür güç, VAR reaktif güç birimidir).")
+    if q.unit == "VAR" and p.unit in ("W", "VA"):
+        return (f"Birim olarak {p.unit} yazdınız; reaktif güç Q'nun birimi VAR'dır "
+                "(W aktif güç, VA görünür güç birimidir).")
+    if q.unit == "VA" and p.unit in ("W", "VAR"):
+        return (f"Birim olarak {p.unit} yazdınız; görünür güç S'nin birimi VA'dır "
+                "(W aktif güç, VAR reaktif güç birimidir).")
     return (f"Birim olarak {p.unit} yazdınız; burada {_QUANTITY[q.unit]} soruluyor, "
             f"birimi {_UNIT_NAME[q.unit]}.")
 

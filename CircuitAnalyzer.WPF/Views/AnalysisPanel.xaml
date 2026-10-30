@@ -116,6 +116,7 @@
                     <ComboBoxItem Content="Millman"/>
                     <ComboBoxItem Content="Kaynak Dönüşümü"/>
                     <ComboBoxItem Content="Geçici Durum (Anahtar)"/>
+                    <ComboBoxItem Content="Güç ve Güç Katsayısı" ToolTip="Devrenin aktif (P), reaktif (Q) ve görünür (S) gücü, güç faktörü ve kompanzasyon hesabı"/>
                 </ComboBox>
 
                 <!-- Terminaller (Thevenin/Norton için) -->
@@ -152,6 +153,17 @@
                                Style="{DynamicResource Text.Caption}"
                                Margin="0,0,0,2"/>
                     <TextBox x:Name="TxtFrequency"/>
+                </StackPanel>
+
+                <!-- Hedef cos φ (Güç analizi için) -->
+                <StackPanel x:Name="RowPowerFactorTarget"
+                            Margin="0,8,0,0"
+                            Visibility="Collapsed">
+                    <TextBlock x:Name="TxtPowerFactorTargetLabel"
+                               Text="Hedef cos φ (isteğe bağlı)"
+                               Style="{DynamicResource Text.Caption}"
+                               Margin="0,0,0,2"/>
+                    <TextBox x:Name="TxtPowerFactorTarget"/>
                 </StackPanel>
 
                 <!-- Değer Gösterimi (AC için: Etkin / Tepe) -->

@@ -1,0 +1,61 @@
+<UserControl x:Class="CircuitAnalyzer.WPF.Views.PowerTriangleView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:controls="clr-namespace:CircuitAnalyzer.WPF.Controls"
+             mc:Ignorable="d" 
+             d:DesignWidth="360" d:DesignHeight="260">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Başlık ve Özet Satırı -->
+            <RowDefinition Height="Auto"/>
+            <!-- Çizim Canvas -->
+            <RowDefinition Height="Auto"/>
+            <!-- Kompanzasyon Satırı -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Başlık ve Özet -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <controls:Icon Data="{DynamicResource Icon.Pulse}"
+                               Width="16" Height="16"
+                               Foreground="{DynamicResource Brush.Accent}"
+                               Margin="0,0,8,0"
+                               VerticalAlignment="Center"/>
+                <TextBlock Text="Güç Üçgeni"
+                           FontWeight="SemiBold"
+                           FontSize="14"
+                           Foreground="{DynamicResource Brush.Text.Primary}"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock x:Name="TxtSummary"
+                       Style="{DynamicResource Text.Caption}"
+                       Foreground="{DynamicResource Brush.Text.Secondary}"
+                       Margin="0,4,0,0"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Çizim Kartı (Canvas) -->
+        <Border Grid.Row="1"
+                Style="{DynamicResource Card.Inset}"
+                Padding="6"
+                MinHeight="180">
+            <Canvas x:Name="TriangleCanvas"
+                    Height="180"
+                    ClipToBounds="True"
+                    SizeChanged="TriangleCanvas_SizeChanged"/>
+        </Border>
+
+        <!-- Kompanzasyon / Açıklama Satırı -->
+        <TextBlock x:Name="TxtCompensation"
+                   Grid.Row="2"
+                   Style="{DynamicResource Text.Caption}"
+                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                   Margin="0,8,0,0"
+                   TextWrapping="Wrap"
+                   Visibility="Collapsed"/>
+    </Grid>
+</UserControl>

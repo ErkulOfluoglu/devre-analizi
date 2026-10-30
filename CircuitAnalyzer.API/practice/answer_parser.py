@@ -49,6 +49,7 @@ _UNITS = {
     "w": "W", "watt": "W",
     "va": "VA",
     "var": "VAR",
+    "f": "F", "farad": "F",
     "s": "s", "sn": "s", "sec": "s", "saniye": "s",
 }
 

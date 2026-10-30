@@ -226,7 +226,7 @@ namespace CircuitAnalyzer.WPF
                     ? options.Frequency ?? (netlist.PhasorFrequencies.Count == 1 ? netlist.PhasorFrequencies[0] : null)
                     : null,
                 AnalysisType = options!.AnalysisType,
-                TheveninTerminals = options.AnalysisType == AnalysisTypes.Nodal
+                TheveninTerminals = (options.AnalysisType == AnalysisTypes.Nodal || options.AnalysisType == AnalysisTypes.Power || !AnalysisPanel.UsesTerminals(options.AnalysisType))
                     ? null
                     : new TerminalsDto
                     {
@@ -234,6 +234,7 @@ namespace CircuitAnalyzer.WPF
                         NodeNegative = options.TerminalNegative,
                     },
                 ValueDisplay = AnalysisPanel.ValueDisplay,
+                PowerFactorTarget = options.AnalysisType == AnalysisTypes.Power ? options.PowerFactorTarget : null,
             };
 
             int versionAtStart = _circuitVersion;

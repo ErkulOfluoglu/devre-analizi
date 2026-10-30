@@ -12,4 +12,5 @@ public sealed record SolveOptions(
     double? Frequency,
     string? TerminalPositive,
     string TerminalNegative,
-    string ValueDisplay = "RMS");
+    string ValueDisplay = "RMS",
+    double? PowerFactorTarget = null);

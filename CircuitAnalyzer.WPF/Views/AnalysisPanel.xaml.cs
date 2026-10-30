@@ -272,12 +272,17 @@ public partial class AnalysisPanel : UserControl
         {
             CmbAnalysisType.SelectedIndex = 7;
         }
+        else if (string.Equals(analysisType, AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase))
+        {
+            CmbAnalysisType.SelectedIndex = 8;
+        }
         else
         {
             CmbAnalysisType.SelectedIndex = 0;
         }
 
         UpdateTerminalsVisibility();
+        UpdatePowerFactorTargetVisibility();
 
         if (terminalPositive != null && CmbTerminalPositive.ItemsSource is IEnumerable<string> items && items.Contains(terminalPositive))
         {
@@ -304,6 +309,7 @@ public partial class AnalysisPanel : UserControl
             TerminalNegative = GetSelectedTerminal(CmbTerminalNegative),
             Frequency = TxtFrequency?.Text,
             ValueDisplay = ValueDisplay,
+            PowerFactorTarget = TxtPowerFactorTarget?.Text,
         };
     }
 
@@ -323,6 +329,10 @@ public partial class AnalysisPanel : UserControl
         if (settings.Frequency != null && TxtFrequency != null)
         {
             TxtFrequency.Text = settings.Frequency;
+        }
+        if (settings.PowerFactorTarget != null && TxtPowerFactorTarget != null)
+        {
+            TxtPowerFactorTarget.Text = settings.PowerFactorTarget;
         }
         if (!string.IsNullOrEmpty(settings.ValueDisplay))
         {
@@ -377,6 +387,7 @@ public partial class AnalysisPanel : UserControl
     private void CmbAnalysisType_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateTerminalsVisibility();
+        UpdatePowerFactorTargetVisibility();
     }
 
     private void UpdateTerminalsVisibility()
@@ -389,6 +400,18 @@ public partial class AnalysisPanel : UserControl
 
         RowTerminals.Visibility = UsesTerminals(AnalysisTypeFromText(selectedText))
             ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdatePowerFactorTargetVisibility()
+    {
+        if (RowPowerFactorTarget == null) return;
+
+        string selectedText = (CmbAnalysisType.SelectedItem as ComboBoxItem)?.Content as string
+            ?? CmbAnalysisType.SelectedItem as string
+            ?? "";
+
+        bool isPower = string.Equals(AnalysisTypeFromText(selectedText), AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase);
+        RowPowerFactorTarget.Visibility = isPower ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Yöntem listesindeki yazıdan API analiz türünü (AnalysisTypes) bulur.</summary>
@@ -408,6 +431,8 @@ public partial class AnalysisPanel : UserControl
             return AnalysisTypes.SourceTransform;
         if (selectedText.Contains("Geçici", StringComparison.OrdinalIgnoreCase))
             return AnalysisTypes.Transient;
+        if (selectedText.Contains("Güç", StringComparison.OrdinalIgnoreCase))
+            return AnalysisTypes.Power;
         return AnalysisTypes.Nodal;
     }
 
@@ -482,7 +507,22 @@ public partial class AnalysisPanel : UserControl
             }
         }
 
-        options = new SolveOptions(analysisType, freq, pos, neg, ValueDisplay);
+        double? powerFactorTarget = null;
+        if (string.Equals(analysisType, AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase))
+        {
+            string pfText = TxtPowerFactorTarget?.Text?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(pfText))
+            {
+                if (!TurkishNumber.TryParse(pfText, out double pfVal) || double.IsNaN(pfVal) || double.IsInfinity(pfVal) || pfVal <= 0 || pfVal > 1)
+                {
+                    error = "Hedef cos φ 0 ile 1 arasında olmalıdır.";
+                    return false;
+                }
+                powerFactorTarget = pfVal;
+            }
+        }
+
+        options = new SolveOptions(analysisType, freq, pos, neg, ValueDisplay, powerFactorTarget);
         return true;
     }
 
@@ -713,6 +753,24 @@ public partial class AnalysisPanel : UserControl
 
             plotCard.Child = plotView;
             ResultsContainer.Children.Add(plotCard);
+        }
+
+        // Güç Üçgeni Kartı
+        var powerSummary = response.PowerSummary ?? response.Results?.PowerSummary;
+        if (powerSummary != null)
+        {
+            var powerCard = new Border
+            {
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            powerCard.SetResourceReference(StyleProperty, "Card");
+
+            var triangleView = new PowerTriangleView();
+            triangleView.LoadData(powerSummary);
+
+            powerCard.Child = triangleView;
+            ResultsContainer.Children.Add(powerCard);
         }
 
         bool hasExplanation = response.Results?.Explanation != null && response.Results.Explanation.Count > 0;

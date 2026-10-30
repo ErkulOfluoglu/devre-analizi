@@ -32,8 +32,8 @@ from models.response import (
     AnalysisResults, SolutionStep, ComplexNumber,
     ExplanationBlock, ExplanationSection, TransientQuantityResult, TransientResult,
     NodeVoltage, ElementCurrent, ProbeResult, TheveninResult, NortonResult,
-    ElementPower, PowerAnalysis, SeriesParallelReduction, MeshInfo,
-    SourceContribution,
+    ElementPower, PowerAnalysis, PowerCompensation, PowerSummary,
+    SeriesParallelReduction, MeshInfo, SourceContribution,
 )
 from models.request import (
     AnalysisMode, AnalysisType, TheveninTerminals, ProbeTarget
@@ -41,8 +41,8 @@ from models.request import (
 from parser.netlist_parser import (
     ParsedCircuit, ParsedElement, ParsedProbe,
     ElementType, to_lcapy_netlist, lcapy_sense_map,
-    ALL_SOURCES, CURRENT_SOURCES, DEPENDENT_SOURCES, DEPENDENT_CURRENT_OUTPUT,
-    VOLTAGE_SOURCES,
+    ALL_SOURCES, CURRENT_SOURCES, DC_SOURCES, SINE_SOURCES, PHASOR_SOURCES,
+    DEPENDENT_SOURCES, DEPENDENT_CURRENT_OUTPUT, VOLTAGE_SOURCES,
     SWITCH_NOTE, circuit_at_time, has_switches, apply_value_basis,
 )
 from explainer.step_generator import generate_solution_steps
@@ -429,6 +429,7 @@ def solve_circuit(
     target_probes: Optional[List[ProbeTarget]] = None,
     warnings: Optional[List[str]] = None,
     value_display: Optional[Union[str, object]] = None,
+    power_factor_target: Optional[float] = None,
 ) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
     """
     Devreyi çözer (anahtarlı devreler için giriş noktası).
@@ -446,13 +447,15 @@ def solve_circuit(
     if has_switches(parsed) and not parsed.errors:
         results, steps, errors = _solve_core(
             circuit_at_time(parsed, "after"), mode, frequency, analysis_type,
-            thevenin_terminals, target_probes, warnings)
+            thevenin_terminals, target_probes, warnings,
+            power_factor_target=power_factor_target)
         results.explanation.insert(0, ExplanationSection(
             title="Anahtar Konumu",
             blocks=[ExplanationBlock(kind="note", text=SWITCH_NOTE)]))
         return results, steps, errors
     return _solve_core(parsed, mode, frequency, analysis_type,
-                       thevenin_terminals, target_probes, warnings)
+                       thevenin_terminals, target_probes, warnings,
+                       power_factor_target=power_factor_target)
 
 
 def _solve_transient(
@@ -518,7 +521,8 @@ def _solve_core(
     analysis_type: AnalysisType = AnalysisType.NODAL,
     thevenin_terminals: Optional[TheveninTerminals] = None,
     target_probes: Optional[List[ProbeTarget]] = None,
-    warnings: Optional[List[str]] = None
+    warnings: Optional[List[str]] = None,
+    power_factor_target: Optional[float] = None,
 ) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
     """
     Devreyi çözer ve yapılandırılmış sonuç döndürür.
@@ -535,11 +539,12 @@ def _solve_core(
         parsed: Ayrıştırılmış devre
         mode: DC, AC_TIME veya AC_PHASOR
         frequency: AC frekansı (Hz) — AC modlarında zorunlu
-        analysis_type: NODAL, MESH veya THEVENIN
+        analysis_type: NODAL, MESH, THEVENIN, NORTON, SUPERPOSITION, MILLMAN, SOURCE_TRANSFORM, TRANSIENT, POWER
         thevenin_terminals: Thevenin port tanımı (iki düğüm)
         target_probes: Ölçüm probları
         warnings: Verilirse frekans/süperpozisyon uyarıları bu listeye
             eklenir (API yanıtındaki 'warnings'); verilmezse 'errors'e.
+        power_factor_target: POWER yönteminde hedef cos φ₂ (0 < cos φ₂ ≤ 1)
 
     Returns:
         (AnalysisResults, List[SolutionStep], List[str])
@@ -550,6 +555,16 @@ def _solve_core(
     errors: List[str] = []
 
     # ── Ön kontroller ──
+    if power_factor_target is not None:
+        if (isinstance(power_factor_target, bool)
+                or not math.isfinite(power_factor_target)
+                or power_factor_target <= 0.0
+                or power_factor_target > 1.0):
+            errors.append(
+                "⚠ Hedef güç katsayısı (power_factor_target) 0 ile 1 arasında olmalıdır (0 < cos φ ≤ 1)."
+            )
+            return results, steps, errors
+
     if parsed.errors:
         # Ayrıştırıcının reddettiği satırlar (ör: bağımlı kaynağın kontrol
         # elemanı yok) — eksik devreyi çözüp yanlış sonuç vermeyiz
@@ -793,8 +808,23 @@ def _solve_core(
             elif len(contributions) < 2:
                 errors.append("ℹ Süperpozisyon için devrede en az iki bağımsız kaynak "
                               "olmalı; tek kaynakta sonuç tam çözümle aynıdır.")
+            # Çok frekanslı veya karışık DC+AC süperpozisyonda toplam güç her frekans
+            # bileşeninin güçlerinin toplamıdır (dikgen frekanslarda P = Σ P_f).
+            ok_contribs = [c for c in (contributions or []) if not c.error]
+            freq_keys = {c.frequency_key for c in ok_contribs}
+            if ok_contribs and (len(freq_keys) > 1 or any(c.is_dc != is_dc for c in ok_contribs)):
+                sup_power = _compute_superposition_power(parsed, ok_contribs, steps, errors)
+                if sup_power is not None:
+                    results.power = sup_power
         except Exception as e:
             errors.append(f"ℹ Süperpozisyon analizi yapılamadı: {str(e)}")
+
+    # ── Adım 6.65: Güç ve Güç Katsayısı (POWER yöntemi) ──
+    power_inapplicable_reason: Optional[str] = None
+    if analysis_type == AnalysisType.POWER:
+        results.power_summary, power_inapplicable_reason = _solve_power_method(
+            parsed, is_dc, frequency, raw_nodes, raw_currents, results, power_factor_target
+        )
 
     # ── Adım 6.7: Bağımlı kaynaklı Thevenin/Norton için ek sayılar ──
     port_extras = None
@@ -813,7 +843,7 @@ def _solve_core(
         results.explanation = build_explanation(
             parsed, is_dc, frequency, analysis_type, thevenin_terminals,
             raw_nodes, raw_currents, results, mesh_analysis, contributions,
-            port_extras,
+            port_extras, power_inapplicable_reason=power_inapplicable_reason,
         )
     except Exception as e:
         errors.append(f"ℹ Anlatım oluşturulamadı: {str(e)}")
@@ -1668,4 +1698,380 @@ def _compute_power(
         power_factor=pf,
         power_factor_type=pf_type,
         balance_error=round(balance, 12),
+    )
+
+
+def _compute_superposition_power(
+    parsed: ParsedCircuit,
+    ok_contribs: list,
+    steps: List[SolutionStep],
+    errors: List[str],
+) -> Optional[PowerAnalysis]:
+    """
+    Süperpozisyonda farklı frekanslı (ör. DC + AC ya da f₁ ≠ f₂) kaynaklar varken
+    toplam gücü hesaplar.
+
+    Aynı frekanstaki kaynakların gerilim ve akım fazörleri önce kendi frekans
+    grubunda toplanır; farklı frekanslı bileşenler birbirine dikgen (ortogonal)
+    olduğundan ortalama güçler frekans grupları üzerinden toplanır:
+        S_eleman = Σ_f S_eleman(f)
+        • f = 0 (DC):   S(0) = V_dc · I_dc
+        • f > 0 (AC):   S(f) = V(f) · I(f)* (RMS) veya ½ · V_m(f) · I_m(f)* (PEAK)
+    """
+    is_rms = getattr(parsed, "value_basis", "PEAK") == "RMS"
+    by_freq = {}
+    for c in ok_contribs:
+        by_freq.setdefault(c.frequency_key, []).append(c)
+
+    v_by_freq = {}
+    i_by_freq = {}
+    for f_key, grp in by_freq.items():
+        v_map = {"0": 0j}
+        i_map = {}
+        for c in grp:
+            for n, val in c.node_voltages.items():
+                v_map[str(n)] = v_map.get(str(n), 0j) + complex(val)
+            for eid, val in c.element_currents.items():
+                i_map[eid] = i_map.get(eid, 0j) + complex(val)
+        v_by_freq[f_key] = v_map
+        i_by_freq[f_key] = i_map
+
+    elements = {}
+    supplied = 0j
+    absorbed = 0j
+    equations = []
+
+    for elem in parsed.elements:
+        if not any(elem.id in i_by_freq[fk] for fk in by_freq):
+            continue
+        s = 0j
+        for f_key in by_freq:
+            vp = v_by_freq[f_key].get(elem.node_positive, 0j)
+            vn = v_by_freq[f_key].get(elem.node_negative, 0j)
+            i_val = i_by_freq[f_key].get(elem.id, 0j)
+            factor_f = 1.0 if (f_key == 0.0 or is_rms) else 0.5
+            s += factor_f * (vp - vn) * i_val.conjugate()
+
+        tiny = 1e-12 * abs(s)
+        s = complex(
+            0.0 if abs(s.real) < tiny else s.real,
+            0.0 if abs(s.imag) < tiny else s.imag,
+        )
+        p, q, s_mag = s.real, s.imag, abs(s)
+
+        is_source = elem.element_type in _SOURCE_TYPES
+        if is_source:
+            supplied -= s
+        else:
+            absorbed += s
+
+        pf, pf_type = _power_factor(p, q, s_mag, -q if is_source else q)
+        elements[elem.id] = ElementPower(
+            element_id=elem.id,
+            role="source" if is_source else "load",
+            complex_power=make_complex_number(s),
+            active_power=sig_round(p),
+            reactive_power=sig_round(q),
+            apparent_power=sig_round(s_mag),
+            power_factor=pf,
+            power_factor_type=pf_type,
+        )
+        equations.append(
+            f"S_{elem.id} = Σ_f S(f) = {num(s.real)} {'+' if q >= 0 else '-'} "
+            f"j{num(abs(q))} VA  →  P = {num(p)} W, Q = {num(q)} VAR"
+        )
+
+    if not elements:
+        return None
+
+    balance = abs(supplied - absorbed)
+    pf, pf_type = _power_factor(
+        supplied.real, supplied.imag, abs(supplied), supplied.imag
+    )
+    s_ac_expr = "V·I* (etkin)" if is_rms else "½·V·I* (tepe)"
+    convention = (
+        f"Süperpozisyon (çok frekanslı): P = Σ P_f (DC: V·I, AC: {s_ac_expr}; "
+        "farklı frekanslı bileşenlerin güçleri toplanır)"
+    )
+    equations.append(
+        f"Denge: ΣP_verilen = {num(supplied.real)} W = ΣP_çekilen = {num(absorbed.real)} W"
+    )
+
+    for st in steps:
+        if st.title == "Güç Analizi (P, Q, S, cos φ)":
+            st.equations = equations
+            st.result_snapshot = {
+                "S_supplied": make_complex_number(supplied).rectangular_str,
+                "S_absorbed": make_complex_number(absorbed).rectangular_str,
+                "power_factor": pf,
+                "power_factor_type": pf_type,
+            }
+            break
+
+    return PowerAnalysis(
+        convention=convention,
+        elements=elements,
+        total_supplied=make_complex_number(supplied),
+        total_absorbed=make_complex_number(absorbed),
+        power_factor=pf,
+        power_factor_type=pf_type,
+        balance_error=round(balance, 12),
+    )
+
+
+# ═══════════════════════════════════════════════════════
+#  GÜÇ VE GÜÇ KATSAYISI YÖNTEMİ (POWER + KOMPANZASYON)
+# ═══════════════════════════════════════════════════════
+
+def _solve_power_method(
+    parsed: ParsedCircuit,
+    is_dc: bool,
+    frequency: Optional[float],
+    raw_nodes: dict,
+    raw_currents: dict,
+    results: AnalysisResults,
+    power_factor_target: Optional[float],
+) -> Tuple[Optional[PowerSummary], Optional[str]]:
+    """
+    POWER yöntemi için PowerSummary (ve varsa kompanzasyon hesabı + çözücü doğrulaması)
+    üretir. Yöntem bu devrede uygulanamıyorsa (None, Türkçe_sebep) döndürür.
+    """
+    if is_dc:
+        return None, (
+            "Güç ve güç katsayısı (cos φ, güç üçgeni, kompanzasyon) yöntemi yalnızca AC "
+            "devreler için uygulanır; DC devrede reaktif güç yoktur (Q = 0 ve cos φ = 1)."
+        )
+
+    dc_srcs = [e for e in parsed.elements
+               if e.element_type in DC_SOURCES and abs(e.value) > 1e-15]
+    ac_srcs = [e for e in parsed.elements
+               if e.element_type in (SINE_SOURCES + PHASOR_SOURCES)
+               and abs(e.params.get("amplitude", e.value)) > 1e-15]
+    sine_freqs = {
+        round(float(e.params["frequency"]), 9)
+        for e in ac_srcs
+        if e.element_type in SINE_SOURCES and e.params.get("frequency") is not None
+    }
+    if (dc_srcs and ac_srcs) or len(sine_freqs) > 1:
+        return None, (
+            "Devrede farklı frekanslı kaynaklar bulunduğu için tek bir fazör güç üçgeni "
+            "ve cos φ tanımlanamaz (farklı frekanslı kaynaklar için Süperpozisyon yöntemi gerekir)."
+        )
+    if dc_srcs and not ac_srcs:
+        return None, (
+            "Devrede etkin bir AC kaynağı yok (yalnızca DC kaynak var); AC analizde "
+            "DC kaynaklar sıfırlandığından AC güç analizi uygulanamaz."
+        )
+
+    pw = results.power
+    if pw is None:
+        return None, "Güç analizi hesaplanamadı."
+
+    sup = complex(pw.total_supplied.real, pw.total_supplied.imaginary)
+    p = sup.real
+    q = sup.imag
+    s_mag = abs(sup)
+
+    if s_mag < 1e-15:
+        pf_val = 1.0
+        pf_type_en = "unity"
+        phi_deg = 0.0
+    elif abs(q) <= 1e-9 * s_mag:
+        pf_val = 1.0
+        pf_type_en = "unity"
+        phi_deg = 0.0
+    else:
+        pf_val = min(abs(p) / s_mag, 1.0)
+        pf_type_en = "lagging" if q > 0 else "leading"
+        phi_deg = math.degrees(math.atan2(q, p))
+
+    comp_result: Optional[PowerCompensation] = None
+    if power_factor_target is not None:
+        comp_result = _compute_compensation(
+            parsed=parsed,
+            frequency=frequency,
+            raw_nodes=raw_nodes,
+            raw_currents=raw_currents,
+            p=p,
+            q=q,
+            pf_val=pf_val,
+            pf_type_en=pf_type_en,
+            target_pf=power_factor_target,
+        )
+
+    summary = PowerSummary(
+        p=sig_round(p),
+        q=sig_round(q),
+        s=sig_round(s_mag),
+        pf=round(pf_val, 6),
+        pf_type=pf_type_en,
+        phi_deg=round(phi_deg, 4),
+        compensation=comp_result,
+    )
+    return summary, None
+
+
+def _compute_compensation(
+    parsed: ParsedCircuit,
+    frequency: Optional[float],
+    raw_nodes: dict,
+    raw_currents: dict,
+    p: float,
+    q: float,
+    pf_val: float,
+    pf_type_en: str,
+    target_pf: float,
+) -> PowerCompensation:
+    """
+    Hedef cos φ₂ için kompanzasyon kondansatörünü hesaplar ve kondansatörü
+    devreye kaynağa paralel ekleyip lcapy ile yeniden çözerek doğrular.
+    """
+    v_ac_srcs = [
+        e for e in parsed.elements
+        if e.element_type in (ElementType.AC_SOURCE_SINE, ElementType.AC_SOURCE_PHASOR)
+        and abs(e.params.get("amplitude", e.value)) > 1e-15
+    ]
+    i_ac_srcs = [
+        e for e in parsed.elements
+        if e.element_type in (ElementType.CURRENT_AC_SINE, ElementType.CURRENT_AC_PHASOR)
+        and abs(e.params.get("amplitude", e.value)) > 1e-15
+    ]
+
+    if i_ac_srcs and not v_ac_srcs:
+        return PowerCompensation(
+            target_pf=target_pf,
+            applied=False,
+            reason=(
+                "Devrede AC gerilim kaynağı yerine akım kaynağı var; akım kaynağına paralel "
+                "kondansatör bağlamak kaynak gerilimini değiştirdiğinden standart kompanzasyon "
+                "formülü uygulanamaz."
+            ),
+        )
+    if len(v_ac_srcs) != 1 or i_ac_srcs:
+        return PowerCompensation(
+            target_pf=target_pf,
+            applied=False,
+            reason=(
+                "Kompanzasyon hesabı için devrede tam olarak bir bağımsız AC gerilim kaynağı "
+                "bulunmalıdır (birden çok kaynakta tek bir kaynak gerilimi tanımlanamaz)."
+            ),
+        )
+
+    if pf_type_en == "leading":
+        return PowerCompensation(
+            target_pf=target_pf,
+            applied=False,
+            reason=(
+                "Devre ileri (kapasitif) güç katsayılıdır (Q < 0); paralel kondansatör "
+                "eklemek kapasitif reaktif gücü daha da artırır, güç katsayısını düzeltmez."
+            ),
+        )
+    if pf_type_en == "unity" or p <= 1e-15:
+        return PowerCompensation(
+            target_pf=target_pf,
+            applied=False,
+            reason=(
+                "Devre zaten birim güç katsayılıdır (Q = 0, cos φ = 1); kondansatör "
+                "eklemeye gerek yoktur."
+            ),
+        )
+
+    if pf_val >= target_pf - 1e-9:
+        return PowerCompensation(
+            target_pf=target_pf,
+            applied=False,
+            reason=(
+                f"Mevcut güç katsayısı (cos φ = {num(pf_val, 4)}) zaten hedef değere "
+                f"({num(target_pf, 4)}) eşit veya daha büyüktür; kompanzasyona gerek yoktur."
+            ),
+        )
+
+    if frequency is None or frequency <= 0:
+        return PowerCompensation(
+            target_pf=target_pf,
+            applied=False,
+            reason=(
+                "Devre frekansı (f) belirtilmediği için açısal frekans ω = 2πf ve "
+                "kondansatör sığası C = Q_C / (ω·V²) hesaplanamaz."
+            ),
+        )
+
+    v_src = v_ac_srcs[0]
+    vp = complex(raw_nodes.get(v_src.node_positive, 0.0))
+    vn = complex(raw_nodes.get(v_src.node_negative, 0.0))
+    v_shown = abs(vp - vn)
+    if v_shown <= 1e-15:
+        return PowerCompensation(
+            target_pf=target_pf,
+            applied=False,
+            reason="Kaynak gerilimi sıfır olduğundan kompanzasyon hesaplanamaz.",
+        )
+
+    is_rms = getattr(parsed, "value_basis", "PEAK") == "RMS"
+    v_rms = v_shown if is_rms else (v_shown / math.sqrt(2.0))
+    i_before = abs(complex(raw_currents.get(v_src.id, 0.0)))
+
+    tan_phi1 = q / p
+    phi2_rad = math.acos(min(max(target_pf, 0.0), 1.0))
+    tan_phi2 = math.tan(phi2_rad)
+    q_c = p * (tan_phi1 - tan_phi2)
+    omega = 2.0 * math.pi * frequency
+    c_val = q_c / (omega * (v_rms ** 2))
+    i_after_rms = p / (v_rms * target_pf)
+    i_after = i_after_rms if is_rms else (i_after_rms * math.sqrt(2.0))
+
+    # ── Çözücüyle doğrulama: C kaynağa paralel eklenip devre yeniden çözülür ──
+    verified = False
+    try:
+        from lcapy import Circuit
+
+        comp_circuit = copy.deepcopy(parsed)
+        comp_circuit.probes = []
+        c_elem = ParsedElement(
+            id=_fresh_id(parsed, "Ckomp"),
+            element_type=ElementType.CAPACITOR,
+            node_positive=v_src.node_positive,
+            node_negative=v_src.node_negative,
+            value=c_val,
+        )
+        comp_circuit.elements.append(c_elem)
+        cct_comp = Circuit(to_lcapy_netlist(comp_circuit, frequency))
+        sense_comp = lcapy_sense_map(comp_circuit)
+        i_src_new = complex(lcapy_element_current(cct_comp, v_src, sense_comp, False, frequency))
+        vp_new = (0j if v_src.node_positive == "0"
+                  else complex(_extract_numeric(cct_comp[v_src.node_positive].V, False, frequency)))
+        vn_new = (0j if v_src.node_negative == "0"
+                  else complex(_extract_numeric(cct_comp[v_src.node_negative].V, False, frequency)))
+        v_new = vp_new - vn_new
+        factor = 1.0 if is_rms else 0.5
+        s_new = -factor * v_new * i_src_new.conjugate()
+        p_new, q_new, s_new_mag = s_new.real, s_new.imag, abs(s_new)
+        pf_new = min(abs(p_new) / s_new_mag, 1.0) if s_new_mag > 1e-15 else 1.0
+        i_new_mag = abs(i_src_new)
+
+        i_ok = abs(i_new_mag - i_after) <= 1e-4 * max(i_after, 1e-9)
+        pf_ok = abs(pf_new - target_pf) <= 1e-4
+        q_ok = q_new >= -1e-5 * max(abs(q), 1e-9)
+        verified = bool(i_ok and pf_ok and q_ok)
+    except Exception:
+        verified = False
+
+    if not verified:
+        return PowerCompensation(
+            target_pf=target_pf,
+            applied=False,
+            reason=(
+                "Bulunan kompanzasyon kondansatörü devreye eklendiğinde çözücü doğrulaması "
+                "hedef güç katsayısı ve yeni akımla uyuşmadı."
+            ),
+        )
+
+    return PowerCompensation(
+        target_pf=target_pf,
+        q_c=sig_round(q_c),
+        c=sig_round(c_val),
+        i_before=sig_round(i_before),
+        i_after=sig_round(i_after),
+        applied=True,
+        reason=None,
     )

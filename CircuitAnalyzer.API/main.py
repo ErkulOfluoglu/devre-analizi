@@ -205,7 +205,8 @@ async def analyze_circuit(
         analysis_type=request.analysis_type,
         thevenin_terminals=request.thevenin_terminals,
         target_probes=probes if probes else None,
-        warnings=warnings
+        warnings=warnings,
+        power_factor_target=request.power_factor_target,
     )
 
     # Tekil devre: sonuç yok, tek Türkçe açıklamayla "Devre çözülemedi"
@@ -223,7 +224,9 @@ async def analyze_circuit(
         solution_steps=solution_steps,
         errors=errors,
         warnings=warnings,
+
         transient=results.transient,
+        power_summary=results.power_summary,
     )
 
 
@@ -477,6 +480,7 @@ def llm_ask(request: LlmAskRequest):
         parsed=parsed, mode=request.mode, frequency=request.frequency,
         analysis_type=request.analysis_type, thevenin_terminals=request.thevenin_terminals,
         warnings=[],
+        power_factor_target=request.power_factor_target,
     )
     is_dc = request.mode == AnalysisMode.DC
     frequency = request.frequency

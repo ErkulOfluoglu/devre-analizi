@@ -89,6 +89,7 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("terminal_negative")] public string? TerminalNegative { get; set; }
             [JsonPropertyName("frequency")] public string? Frequency { get; set; }
             [JsonPropertyName("value_display")] public string? ValueDisplay { get; set; }
+            [JsonPropertyName("power_factor_target")] public string? PowerFactorTarget { get; set; }
         }
 
         private static readonly JsonSerializerOptions JsonOptions = new()

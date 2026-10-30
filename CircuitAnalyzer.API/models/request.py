@@ -15,9 +15,10 @@ Kullanım:
     }
 """
 
+import math
 from enum import Enum
 from typing import Optional, List, Literal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from pydantic.json_schema import SkipJsonSchema
 from models.response import PracticeQuestion
 
@@ -66,6 +67,7 @@ class AnalysisType(str, Enum):
               gerilim↔akım kaynağı dönüşümleriyle ulaşılır (yalnızca DC)
     TRANSIENT: Geçici durum (Faz 2) — anahtarlı, tek C ya da tek L içeren DC devrede
               x(t) = x(∞) + [x(0) − x(∞)]·e^(−t/τ); sonuç yanıtın 'transient' alanında
+    POWER:    Güç ve Güç Katsayısı — P, Q, S, cos φ, güç üçgeni ve isteğe bağlı kompanzasyon
 
     Not: 'thevenin_terminals' alanı THEVENIN, NORTON ve SOURCE_TRANSFORM analizi için
     hedef port (terminal çifti) tanımlamasında ortak kullanılır.
@@ -78,6 +80,14 @@ class AnalysisType(str, Enum):
     MILLMAN = "MILLMAN"
     SOURCE_TRANSFORM = "SOURCE_TRANSFORM"
     TRANSIENT = "TRANSIENT"
+    POWER = "POWER"
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema, handler):
+        schema = handler(core_schema)
+        if "enum" in schema:
+            schema["enum"] = [v for v in schema["enum"] if v != "POWER"]
+        return schema
 
 
 # ═══════════════════════════════════════════════════════
@@ -325,6 +335,23 @@ class AnalysisRequest(BaseModel):
         examples=["PEAK"],
     )
 
+    power_factor_target: SkipJsonSchema[Optional[float]] = Field(
+        default=None,
+        description="POWER (Güç ve Güç Katsayısı) yönteminde hedef güç katsayısı cos φ₂ (0 < cos φ₂ ≤ 1).",
+        examples=[0.95],
+    )
+
+    @field_validator("power_factor_target")
+    @classmethod
+    def _validate_power_factor_target(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return None
+        if isinstance(v, bool) or not math.isfinite(v) or v <= 0.0 or v > 1.0:
+            raise ValueError(
+                "Hedef güç katsayısı (power_factor_target) 0 ile 1 arasında olmalıdır (0 < cos φ ≤ 1)."
+            )
+        return float(v)
+
 
 # ═══════════════════════════════════════════════════════
 #  ALIŞTIRMA MODU
@@ -373,4 +400,3 @@ class LlmAskRequest(AnalysisRequest):
         default=False, description="Alıştırma sürüyor mu — True ise model sonuçları görmez, cevap sayıları gizlenir")
     practice_questions: List[PracticeQuestion] = Field(
         default_factory=list, description="Alıştırma soruları (cevap sızıntısını engellemek için)")
-

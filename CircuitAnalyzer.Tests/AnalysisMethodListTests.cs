@@ -39,12 +39,13 @@ public class AnalysisMethodListTests
     [InlineData(5, "Millman", AnalysisTypes.Millman, false)]
     [InlineData(6, "Kaynak Dönüşümü", AnalysisTypes.SourceTransform, true)]
     [InlineData(7, "Geçici Durum (Anahtar)", AnalysisTypes.Transient, false)]
+    [InlineData(8, "Güç ve Güç Katsayısı", AnalysisTypes.Power, false)]
     public void ComboItem_MapsToApiTypeAndTerminalsRow(int index, string label, string apiType, bool showsTerminals)
     {
         RunOnSta(() =>
         {
             var panel = new AnalysisPanel();
-            Assert.Equal(8, panel.CmbAnalysisType.Items.Count);
+            Assert.Equal(9, panel.CmbAnalysisType.Items.Count);
             Assert.Equal(label, (panel.CmbAnalysisType.Items[index] as ComboBoxItem)?.Content as string);
 
             panel.CmbAnalysisType.SelectedIndex = index;
@@ -61,6 +62,7 @@ public class AnalysisMethodListTests
         Assert.Equal("MILLMAN", AnalysisTypes.Millman);
         Assert.Equal("SOURCE_TRANSFORM", AnalysisTypes.SourceTransform);
         Assert.Equal("TRANSIENT", AnalysisTypes.Transient);
+        Assert.Equal("POWER", AnalysisTypes.Power);
     }
 
     [Fact]

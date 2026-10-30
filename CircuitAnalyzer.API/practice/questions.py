@@ -8,11 +8,13 @@ Seçilen yönteme göre öğrenciye sorulacak büyüklükler:
     THEVENIN       asıl: Vth, Rth (Zth)                 ek: Pmax
     NORTON         asıl: In, Rn (Zn)
     SUPERPOSITION  asıl: her kaynağın katkısı ve toplam (bilinmeyen düğümlerde)
+    POWER          asıl: toplam P, Q, S, cos φ (ve kompanzasyon varsa Q_C, C)
 
 Doğru değerler çözücünün sonuçlarından alınır (anlatımla aynı sayılar).
 İpuçları cevabı vermez; yalnızca yöntemi hatırlatır.
 """
 
+import math
 from typing import Callable, Dict, List, Optional
 
 from explainer.formatting import node_v, num
@@ -210,6 +212,9 @@ def build_questions(
     # ── Yönteme göre sorular ──
     questions: List[PracticeQuestion] = []
 
+    if analysis_type == AnalysisType.POWER and results.power_summary is not None:
+        return _power_method_questions(q, parsed, results.power_summary)
+
     if analysis_type == AnalysisType.SUPERPOSITION and contributions:
         return _superposition_questions(q, contributions, unknown_nodes, v_scale, has_dep)
 
@@ -332,6 +337,130 @@ def build_questions(
         questions += current_questions("main")
     questions += power_questions("extra")
     return questions
+
+
+def _power_method_questions(q, parsed: ParsedCircuit, ps) -> List[PracticeQuestion]:
+    """POWER yönteminde alıştırma soruları: P, Q, S, cos φ ve varsa Q_C, C."""
+    is_rms = getattr(parsed, "value_basis", "PEAK") == "RMS"
+    s_scale = max(abs(ps.s), abs(ps.p), abs(ps.q), 1.0)
+    out: List[PracticeQuestion] = []
+
+    p_alts = [(ps.s, "Bu görünür güç S (birimi VA). Aktif güç P = S·cos φ ya da dirençlerdeki güçlerin toplamıdır.")]
+    if abs(ps.q) > 1e-15:
+        p_alts.append((abs(ps.q), "Bu reaktif güç |Q| (birimi VAR). Aktif güç P soruluyor."))
+    if is_rms:
+        p_alts.append((0.5 * ps.p, "Fazörler etkin (RMS) değer olduğundan P = V·I·cos φ = |I|²·R (½ çarpanı tepe değerler içindir)."))
+        p_alts.append((2.0 * ps.p, "Etkin değerlerle P = |I|²·R (2 çarpanı yoktur)."))
+        p_hint = "Aktif güç P = V·I·cos φ ya da dirençlerde harcanan güçlerin toplamı P = Σ(|I|²·R)."
+    else:
+        p_alts.append((2.0 * ps.p, "Fazörler tepe değer olduğundan P = ½·Vm·Im·cos φ; ½ çarpanını unutmuş olabilirsiniz."))
+        p_alts.append((0.5 * ps.p, "½ çarpanını iki kez uygulamış olabilirsiniz; P = ½·Vm·Im·cos φ."))
+        p_hint = "Fazörler tepe değer olduğundan aktif güç P = ½·Vm·Im·cos φ = Σ(½·|Im|²·R)."
+
+    out.append(q(
+        "P_TOTAL", "P", "Kaynakların verdiği toplam aktif güç",
+        "W", "main", ps.p, s_scale,
+        hint=p_hint,
+        sign_hint="Dirençlerde harcanan (kaynakların verdiği) aktif güç pozitiftir.",
+        alternatives=p_alts, is_ac=False,
+    ))
+
+    q_alts = [
+        (ps.s, "Bu görünür güç S (birimi VA). Reaktif güç Q = S·sin φ soruluyor."),
+        (ps.p, "Bu aktif güç P (birimi W). Reaktif güç Q soruluyor."),
+    ]
+    if is_rms:
+        q_alts.append((0.5 * ps.q, "Fazörler etkin (RMS) değer olduğundan Q = V·I·sin φ = |I|²·X (½ çarpanı tepe değerler içindir)."))
+        q_alts.append((2.0 * ps.q, "Etkin değerlerle Q = |I|²·X (2 çarpanı yoktur)."))
+        q_hint = "Toplam reaktif güç Q = V·I·sin φ = Σ Q_L − Σ |Q_C| (bobinde Q > 0, kondansatörde Q < 0)."
+    else:
+        q_alts.append((2.0 * ps.q, "Fazörler tepe değer olduğundan Q = ½·Vm·Im·sin φ; ½ çarpanını unutmuş olabilirsiniz."))
+        q_alts.append((0.5 * ps.q, "½ çarpanını iki kez uygulamış olabilirsiniz; Q = ½·Vm·Im·sin φ."))
+        q_hint = "Fazörler tepe değer olduğundan toplam reaktif güç Q = ½·Vm·Im·sin φ (bobinde Q > 0, kondansatörde Q < 0)."
+
+    out.append(q(
+        "Q_TOTAL", "Q", "Kaynakların verdiği toplam reaktif güç",
+        "VAR", "main", ps.q, s_scale,
+        hint=q_hint,
+        sign_hint="İşaret ters: endüktif (geri) devrede Q > 0, kapasitif (ileri) devrede Q < 0 alınır.",
+        alternatives=q_alts, is_ac=False,
+    ))
+
+    s_alts = [(ps.p, "Bu aktif güç P (birimi W). Görünür güç S = √(P² + Q²) soruluyor.")]
+    if abs(ps.q) > 1e-15:
+        s_alts.append((abs(ps.q), "Bu reaktif güç |Q| (birimi VAR). Görünür güç S = √(P² + Q²) soruluyor."))
+    if is_rms:
+        s_alts.append((0.5 * ps.s, "Fazörler etkin (RMS) değer olduğundan S = V·I = √(P² + Q²) (½ çarpanı tepe değerler içindir)."))
+        s_alts.append((2.0 * ps.s, "Etkin değerlerle S = V·I (2 çarpanı yoktur)."))
+        s_hint = "Görünür güç S = √(P² + Q²) (tek kaynaklı devrede etkin değerlerle S = V·I)."
+    else:
+        s_alts.append((2.0 * ps.s, "Fazörler tepe değer olduğundan S = ½·Vm·Im = √(P² + Q²); ½ çarpanını unutmuş olabilirsiniz."))
+        s_alts.append((0.5 * ps.s, "½ çarpanını iki kez uygulamış olabilirsiniz; S = ½·Vm·Im."))
+        s_hint = "Görünür güç S = √(P² + Q²) (tek kaynaklı devrede tepe değerlerle S = ½·Vm·Im)."
+
+    out.append(q(
+        "S_TOTAL", "S", "Kaynakların verdiği toplam görünür güç",
+        "VA", "main", ps.s, s_scale,
+        hint=s_hint,
+        sign_hint="Görünür güç S = √(P² + Q²) büyüklüktür ve her zaman pozitiftir.",
+        alternatives=s_alts, is_ac=False,
+    ))
+
+    pf_alts = []
+    if ps.s > 1e-15 and abs(ps.q) > 1e-15:
+        pf_alts.append((abs(ps.q) / ps.s, "Bu sin φ = |Q|/S değeri; güç katsayısı cos φ = P/S soruluyor."))
+    if abs(ps.p) > 1e-15 and abs(ps.q) > 1e-15:
+        pf_alts.append((abs(ps.q / ps.p), "Bu tan φ = |Q|/P değeri; güç katsayısı cos φ = P/S soruluyor."))
+    if abs(ps.phi_deg) > 1.0:
+        pf_alts.append((abs(ps.phi_deg), "Bu faz açısı φ (derece); güç katsayısı cos φ = P/S (birimsiz oran) soruluyor."))
+
+    out.append(q(
+        "COS_PHI", "cos φ", "Devrenin güç katsayısı (cos φ = P/S, birimsiz)",
+        "", "main", ps.pf, 1.0,
+        hint="Güç katsayısı cos φ = P / S (aktif gücün görünür güce oranı, 0 ile 1 arasında birimsizdir).",
+        sign_hint="Güç katsayısı cos φ = P / S pozitiftir.",
+        alternatives=pf_alts, is_ac=False,
+    ))
+
+    if ps.compensation is not None and ps.compensation.applied:
+        comp = ps.compensation
+        qc_alts = [
+            (ps.q, "Bu devrenin mevcut reaktif gücü Q. Kompanzasyon için Q_C = P·(tan φ₁ − tan φ₂) hesaplanmalıdır."),
+        ]
+        if is_rms:
+            qc_alts.append((0.5 * comp.q_c, "P zaten etkin güçtür; Q_C = P·(tan φ₁ − tan φ₂) formülünde ½ çarpanı yoktur."))
+        else:
+            qc_alts.append((2.0 * comp.q_c, "Tepe değerlerle P hesaplanırken ½ çarpanı unutulmuş olabilir; Q_C = P·(tan φ₁ − tan φ₂)."))
+
+        out.append(q(
+            "Q_C", "Q_C", f"Güç katsayısını cos φ₂ = {num(comp.target_pf, 4)} yapmak için gerekli kapasitif reaktif güç",
+            "VAR", "main", comp.q_c, max(abs(comp.q_c), abs(ps.q), 1.0),
+            hint=f"Hedef cos φ₂ = {num(comp.target_pf, 4)} için φ₂ = arccos(cos φ₂) açısını bulun; Q_C = P·(tan φ₁ − tan φ₂).",
+            sign_hint="Kondansatörün karşılayacağı reaktif güç büyüklüğü Q_C pozitif yazılır: Q_C = P·(tan φ₁ − tan φ₂).",
+            alternatives=qc_alts, is_ac=False,
+        ))
+
+        c_alts = [
+            (comp.c * 2.0 * math.pi, "Paydada ω = 2πf yerine doğrudan f kullanmış olabilirsiniz: C = Q_C / (2π·f·V²)."),
+        ]
+        if is_rms:
+            c_alts.append((2.0 * comp.c, "Gerilim zaten etkin (RMS) değerdir; V'yi tekrar √2'ye bölmeyin: C = Q_C / (ω·V²)."))
+            c_alts.append((0.5 * comp.c, "Gerilim zaten etkin (RMS) değerdir; C = Q_C / (ω·V²)."))
+            c_hint = "Kaynağa paralel bağlanacak kondansatör sığası: C = Q_C / (ω·V²), ω = 2πf ve V kaynağın etkin gerilimidir."
+        else:
+            c_alts.append((0.5 * comp.c, "Paydada etkin gerilim V = Vm/√2 yerine tepe gerilim Vm kullanmış olabilirsiniz: C = Q_C / (ω·V²)."))
+            c_alts.append((2.0 * comp.c, "C = Q_C / (ω·V²) formülünde V = Vm/√2 etkin gerilimdir."))
+            c_hint = "Önce etkin gerilimi bulun (V = Vm/√2); ardından kondansatör sığası C = Q_C / (ω·V²), ω = 2πf."
+
+        out.append(q(
+            "C_COMP", "C", f"Kaynağa paralel bağlanacak kompanzasyon kondansatörünün sığası (hedef cos φ₂ = {num(comp.target_pf, 4)})",
+            "F", "main", comp.c, max(abs(comp.c), 1e-12),
+            hint=c_hint,
+            sign_hint="Kondansatör sığası C pozitiftir.",
+            alternatives=c_alts, is_ac=False,
+        ))
+
+    return out
 
 
 def _superposition_questions(q, contributions, unknown_nodes, v_scale,

@@ -232,6 +232,7 @@ def build_explanation(
     mesh_analysis=None,
     superposition=None,
     port_extras: Optional[PortExtras] = None,
+    power_inapplicable_reason: Optional[str] = None,
 ) -> List[ExplanationSection]:
     """
     Çözümün Türkçe anlatımını üretir. Çözüm başarısızsa boş liste döner.
@@ -275,6 +276,34 @@ def build_explanation(
                                dn.solve_section, _dependent_check, _currents)
     else:
         method_builders = (_known_nodes, _kcl, _solve, _currents)
+
+    if analysis_type == AnalysisType.POWER:
+        if results.power_summary is not None:
+            sections: List[_Section] = []
+            for builder in (
+                _intro,
+                _impedances,
+                *method_builders,
+                _power,
+                _power_triangle,
+                _compensation_section,
+                _power_check,
+                _power_summary_section,
+            ):
+                sections.extend(builder(ctx))
+            return [s.build() for s in sections if s.blocks]
+        else:
+            why = (power_inapplicable_reason
+                   or "Güç ve güç katsayısı yöntemi yalnızca tek frekanslı AC devrelerde uygulanabilir.")
+            fallback = _Section("Güç ve Güç Katsayısı")
+            fallback.note(
+                f"Bu devrede Güç ve Güç Katsayısı yöntemi uygulanamadı: {why} "
+                "“Düğüm Gerilimleri” yöntemini seçebilirsiniz; aynı sonuçları şimdi o "
+                "yöntemle anlatıyoruz."
+            )
+            analysis_type = ctx.analysis_type = AnalysisType.NODAL
+            method_builders = (lambda c: [fallback],) + method_builders
+
     if analysis_type in (AnalysisType.MILLMAN, AnalysisType.SOURCE_TRANSFORM):
         # Döngüsel içe aktarmayı önlemek için yerel import
         from explainer.millman import build_millman
@@ -509,6 +538,17 @@ def _intro(ctx: _Ctx) -> List[_Section]:
             "Süperpozisyon yöntemiyle çözeceğiz: her kaynağın etkisini, diğer "
             "kaynaklar sıfırlanmışken ayrı ayrı bulup sonuçları toplayacağız."
         )
+    elif ctx.analysis_type == AnalysisType.POWER:
+        ps = ctx.results.power_summary
+        comp_txt = (
+            f" ve güç katsayısını cos φ₂ = {num(ps.compensation.target_pf, 4)} hedefine "
+            "getirecek kompanzasyon kondansatörünü (C) belirlemek"
+            if ps is not None and ps.compensation is not None else ""
+        )
+        s.text(
+            "Amaç: Önce düğüm gerilimlerini ve eleman akımlarını bularak devrenin aktif (P), "
+            f"reaktif (Q) ve görünür (S) güçlerini, güç üçgenini ve güç katsayısını (cos φ) hesaplamak{comp_txt}."
+        )
     elif ctx.has_dependent and not (ctx.analysis_type == AnalysisType.MESH
                                     and ctx.mesh is not None):
         if ctx.dep_system is not None:
@@ -694,7 +734,7 @@ def _kcl(ctx: _Ctx) -> List[_Section]:
         else:
             title = "Süperdüğüm {" + ", ".join(members) + "}"
             inner = [elem for elem, _ in ctx.constraints
-                     if elem.node_positive in members and elem.node_negative in members]
+                      if elem.node_positive in members and elem.node_negative in members]
             if inner and all(elem.element_type == ElementType.INDUCTOR for elem in inner):
                 s.text(
                     f"{', '.join(elem.id for elem in inner)} DC'de kısa devredir; Düğüm "
@@ -1429,10 +1469,10 @@ def _power(ctx: _Ctx) -> List[_Section]:
             if ctx.is_rms:
                 if t == ElementType.RESISTOR:
                     s.math(f"P_{name} = |I|²·R = ({eng(i_mag, 'A')})² · {eng(e.value, 'Ω')} = {eng(ep.active_power, 'W')}")
-                elif t == ElementType.INDUCTOR:
+                elif t == ElementType.INDUCTOR and z is not None:
                     s.math(f"Q_{name} = |I|²·X_L = ({eng(i_mag, 'A')})² · {eng(z.imag, 'Ω')} = "
                            f"{eng(ep.reactive_power, 'VAR')} (bobin reaktif güç çeker, P = 0)")
-                elif t == ElementType.CAPACITOR:
+                elif t == ElementType.CAPACITOR and z is not None:
                     s.math(f"Q_{name} = −|I|²·|X_C| = −({eng(i_mag, 'A')})² · {eng(abs(z.imag), 'Ω')} = "
                            f"{eng(ep.reactive_power, 'VAR')} (kondansatör reaktif güç üretir, P = 0)")
                 else:
@@ -1440,10 +1480,10 @@ def _power(ctx: _Ctx) -> List[_Section]:
             else:
                 if t == ElementType.RESISTOR:
                     s.math(f"P_{name} = ½·|I|²·R = ½ · ({eng(i_mag, 'A')})² · {eng(e.value, 'Ω')} = {eng(ep.active_power, 'W')}")
-                elif t == ElementType.INDUCTOR:
+                elif t == ElementType.INDUCTOR and z is not None:
                     s.math(f"Q_{name} = ½·|I|²·X_L = ½ · ({eng(i_mag, 'A')})² · {eng(z.imag, 'Ω')} = "
                            f"{eng(ep.reactive_power, 'VAR')} (bobin reaktif güç çeker, P = 0)")
-                elif t == ElementType.CAPACITOR:
+                elif t == ElementType.CAPACITOR and z is not None:
                     s.math(f"Q_{name} = −½·|I|²·|X_C| = −½ · ({eng(i_mag, 'A')})² · {eng(abs(z.imag), 'Ω')} = "
                            f"{eng(ep.reactive_power, 'VAR')} (kondansatör reaktif güç üretir, P = 0)")
                 else:
@@ -1498,6 +1538,144 @@ def _power(ctx: _Ctx) -> List[_Section]:
                     "birim": "birim — devre saf dirençli gibi davranıyor"}.get(pw.power_factor_type or "", "")
             s.math(f"cos φ = P/|S| = {eng(sup.real, 'W')} / {eng(abs(sup), 'VA')} = "
                    f"{pw.power_factor:.3f}".replace(".", ",") + (f" ({kind})" if kind else ""))
+    return [s]
+
+
+# ═══════════════════════════════════════════════════════
+#  8b. GÜÇ VE GÜÇ KATSAYISI YÖNTEMİ BÖLÜMLERİ (POWER)
+# ═══════════════════════════════════════════════════════
+
+_PF_TYPE_LABELS = {
+    "lagging": "geri (endüktif)",
+    "leading": "ileri (kapasitif)",
+    "unity": "birim (rezistif)",
+}
+
+
+def _power_triangle(ctx: _Ctx) -> List[_Section]:
+    ps = ctx.results.power_summary
+    if ps is None:
+        return []
+    s = _Section("Güç Üçgeni")
+    type_tr = _PF_TYPE_LABELS.get(ps.pf_type, ps.pf_type)
+    s.text("Kaynakların devreye verdiği toplam aktif güç P (yatay dik kenar), reaktif güç Q "
+           "(düşey dik kenar) ve görünür güç S (hipotenüs) bir dik üçgen oluşturur:")
+    s.math(f"P = {eng(ps.p, 'W')},  Q = {eng(ps.q, 'VAR')},  S = P + jQ = {rect(complex(ps.p, ps.q), 'VA')}")
+    s.math(f"S = √(P² + Q²) = √(({num(ps.p)})² + ({num(ps.q)})²) = {eng(ps.s, 'VA')}")
+    s.math(f"φ = arctan(Q / P) = arctan({num(ps.q)} / {num(ps.p)}) = {num(ps.phi_deg)}°")
+    s.math(f"cos φ = P / S = {eng(ps.p, 'W')} / {eng(ps.s, 'VA')} = {num(ps.pf, 4)} ({type_tr})")
+
+    ac_srcs = [
+        e for e in ctx.sources()
+        if e.element_type not in DC_SOURCES and abs(e.params.get("amplitude", e.value)) > 1e-15
+    ]
+    if ctx.is_rms and len(ac_srcs) == 1 and not ctx.has_dependent:
+        src = ac_srcs[0]
+        v_mag = abs(ctx.node_value(src.node_positive) - ctx.node_value(src.node_negative))
+        i_mag = abs(ctx.i.get(src.id, 0.0))
+        sin_phi = math.sin(math.radians(ps.phi_deg))
+        s.text(f"Etkin (RMS) gösterimde {src.id} kaynağının V = {eng(v_mag, 'V')} ve "
+               f"I = {eng(i_mag, 'A')} değerleriyle:")
+        s.math(f"S = V·I = {eng(v_mag, 'V')} · {eng(i_mag, 'A')} = {eng(ps.s, 'VA')}")
+        s.math(f"P = V·I·cos φ = {eng(v_mag, 'V')} · {eng(i_mag, 'A')} · {num(ps.pf, 4)} = {eng(ps.p, 'W')}")
+        s.math(f"Q = V·I·sin φ = {eng(v_mag, 'V')} · {eng(i_mag, 'A')} · {num(sin_phi, 4)} = {eng(ps.q, 'VAR')}")
+
+    s.result(f"P = {eng(ps.p, 'W')}, Q = {eng(ps.q, 'VAR')}, S = {eng(ps.s, 'VA')}, "
+             f"cos φ = {num(ps.pf, 4)} ({type_tr})")
+    return [s]
+
+
+def _compensation_section(ctx: _Ctx) -> List[_Section]:
+    ps = ctx.results.power_summary
+    if ps is None or ps.compensation is None:
+        return []
+    comp = ps.compensation
+    s = _Section("Kompanzasyon")
+    if not comp.applied:
+        s.note(comp.reason or "Bu devrede kompanzasyon uygulanamadı.")
+        return [s]
+
+    v_srcs = [
+        e for e in ctx.sources()
+        if e.element_type in (ElementType.AC_SOURCE_SINE, ElementType.AC_SOURCE_PHASOR)
+        and abs(e.params.get("amplitude", e.value)) > 1e-15
+    ]
+    v_src = v_srcs[0]
+    v_shown = abs(ctx.node_value(v_src.node_positive) - ctx.node_value(v_src.node_negative))
+    v_rms = v_shown if ctx.is_rms else (v_shown / math.sqrt(2.0))
+    tan_phi1 = ps.q / ps.p
+    phi2_rad = math.acos(min(max(comp.target_pf, 0.0), 1.0))
+    phi2_deg = math.degrees(phi2_rad)
+    tan_phi2 = math.tan(phi2_rad)
+    i_after_rms = ps.p / (v_rms * comp.target_pf)
+
+    s.text(f"Güç katsayısını cos φ₁ = {num(ps.pf, 4)} değerinden hedef cos φ₂ = {num(comp.target_pf, 4)} "
+           f"değerine yükseltmek için {v_src.id} kaynağına paralel bir C kondansatörü bağlanır.")
+    if not ctx.is_rms:
+        s.text("Kompanzasyon formülünde kaynağın etkin (RMS) gerilimi V kullanılır; önce tepe "
+               "gerilimden etkin gerilimi bulalım:")
+        s.math(f"V = Vm/√2 = {eng(v_shown, 'V')} / √2 = {eng(v_rms, 'V')}")
+
+    s.math(f"φ₁ = {num(ps.phi_deg)}° → tan φ₁ = {num(tan_phi1, 4)},  "
+           f"φ₂ = arccos({num(comp.target_pf, 4)}) = {num(phi2_deg)}° → tan φ₂ = {num(tan_phi2, 4)}")
+    s.math(f"Q_C = P·(tan φ₁ {MINUS} tan φ₂) = {eng(ps.p, 'W')} · "
+           f"({num(tan_phi1, 4)} {MINUS} {num(tan_phi2, 4)}) = {eng(comp.q_c, 'VAR')}")
+    s.math(f"C = Q_C / (ω·V²) = {eng(comp.q_c, 'VAR')} / "
+           f"({num(ctx.omega)} rad/s · ({num(v_rms)} V)²) = {eng(comp.c, 'F')}  (kaynağa paralel)")
+    s.math(f"I' = P / (V·cos φ₂) = {eng(ps.p, 'W')} / "
+           f"({eng(v_rms, 'V')} · {num(comp.target_pf, 4)}) = {eng(i_after_rms, 'A')}")
+    if not ctx.is_rms:
+        s.math(f"Im' = √2·I' = √2 · {eng(i_after_rms, 'A')} = {eng(comp.i_after, 'A')} (tepe)")
+        s.result(f"Q_C = {eng(comp.q_c, 'VAR')}, C = {eng(comp.c, 'F')}, "
+                 f"yeni kaynak akımı Im' = {eng(comp.i_after, 'A')} (önceki: {eng(comp.i_before, 'A')})")
+    else:
+        s.result(f"Q_C = {eng(comp.q_c, 'VAR')}, C = {eng(comp.c, 'F')}, "
+                 f"yeni kaynak akımı I' = {eng(comp.i_after, 'A')} (önceki: {eng(comp.i_before, 'A')})")
+
+    s.text("Açıklama: Kaynağa paralel bağlanan kondansatör reaktif gücün Q_C kısmını yerel "
+           "olarak karşılar; böylece aktif güç P değişmez, yalnız reaktif güç kondansatörden "
+           "karşılanır ve hat akımı azalır.")
+    return [s]
+
+
+def _power_check(ctx: _Ctx) -> List[_Section]:
+    s = _Section("Kontrol")
+    pw = ctx.results.power
+    ps = ctx.results.power_summary
+    if pw is not None:
+        sup = complex(pw.total_supplied.real, pw.total_supplied.imaginary)
+        absb = complex(pw.total_absorbed.real, pw.total_absorbed.imaginary)
+        if _close(sup, absb, 1e-6):
+            s.check(f"Güç dengesi: kaynakların verdiği S = {rect(sup, 'VA')} = "
+                    f"elemanların çektiği S = {rect(absb, 'VA')} ✓")
+    if ps is not None and ps.compensation is not None:
+        comp = ps.compensation
+        if comp.applied:
+            i_sym = "I'" if ctx.is_rms else "Im'"
+            s.check(
+                f"Kompanzasyon doğrulaması: C = {eng(comp.c, 'F')} kondansatörü kaynağa paralel "
+                f"eklenip devre çözücüyle yeniden çözüldüğünde cos φ₂ = {num(comp.target_pf, 4)} ve "
+                f"yeni kaynak akımı {i_sym} = {eng(comp.i_after, 'A')} "
+                f"(önceki: {eng(comp.i_before, 'A')}) doğrulandı ✓"
+            )
+        elif comp.reason:
+            s.note(comp.reason)
+    return [s] if s.blocks else []
+
+
+def _power_summary_section(ctx: _Ctx) -> List[_Section]:
+    ps = ctx.results.power_summary
+    if ps is None:
+        return []
+    s = _Section("Sonuç")
+    type_tr = _PF_TYPE_LABELS.get(ps.pf_type, ps.pf_type)
+    s.result(f"P = {eng(ps.p, 'W')}, Q = {eng(ps.q, 'VAR')}, S = {eng(ps.s, 'VA')}")
+    s.result(f"cos φ = {num(ps.pf, 4)} ({type_tr}, φ = {num(ps.phi_deg)}°)")
+    if ps.compensation is not None and ps.compensation.applied:
+        comp = ps.compensation
+        i_sym = "I'" if ctx.is_rms else "Im'"
+        s.result(f"Q_C = {eng(comp.q_c, 'VAR')}, C = {eng(comp.c, 'F')}, "
+                 f"yeni akım {i_sym} = {eng(comp.i_after, 'A')}")
     return [s]
 
 

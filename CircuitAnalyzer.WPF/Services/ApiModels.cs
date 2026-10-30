@@ -26,6 +26,7 @@ namespace CircuitAnalyzer.WPF.Services
         public const string Millman = "MILLMAN";
         public const string SourceTransform = "SOURCE_TRANSFORM";
         public const string Transient = "TRANSIENT";
+        public const string Power = "POWER";
     }
 
     public sealed class TerminalsDto
@@ -42,6 +43,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("analysis_type")] public string AnalysisType { get; set; } = AnalysisTypes.Nodal;
         [JsonPropertyName("thevenin_terminals")] public TerminalsDto? TheveninTerminals { get; set; }
         [JsonPropertyName("value_display")] public string ValueDisplay { get; set; } = "PEAK";
+        [JsonPropertyName("power_factor_target")] public double? PowerFactorTarget { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -238,6 +240,7 @@ namespace CircuitAnalyzer.WPF.Services
         /// <summary>Alıştırma modu soruları (öğrenci önce kendisi çözer).</summary>
         [JsonPropertyName("practice")] public List<PracticeQuestionDto> Practice { get; set; } = new();
         [JsonPropertyName("transient")] public TransientAnalysisDto? Transient { get; set; }
+        [JsonPropertyName("power_summary")] public PowerSummaryDto? PowerSummary { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -408,6 +411,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("analysis_type")] public string AnalysisType { get; set; } = AnalysisTypes.Nodal;
         [JsonPropertyName("thevenin_terminals")] public TerminalsDto? TheveninTerminals { get; set; }
         [JsonPropertyName("value_display")] public string ValueDisplay { get; set; } = "PEAK";
+        [JsonPropertyName("power_factor_target")] public double? PowerFactorTarget { get; set; }
         [JsonPropertyName("question")] public string Question { get; set; } = "";
         /// <summary>Boşsa sunucu seçer (önerilen ya da ilk kurulu model).</summary>
         [JsonPropertyName("model")] public string? Model { get; set; }
@@ -426,6 +430,7 @@ namespace CircuitAnalyzer.WPF.Services
             AnalysisType = analysis.AnalysisType,
             TheveninTerminals = analysis.TheveninTerminals,
             ValueDisplay = analysis.ValueDisplay,
+            PowerFactorTarget = analysis.PowerFactorTarget,
             Question = question,
         };
     }
@@ -471,6 +476,28 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("quantities")] public List<TransientQuantityDto> Quantities { get; set; } = new();
     }
 
+    public sealed class PowerCompensationDto
+    {
+        [JsonPropertyName("target_pf")] public double TargetPf { get; set; }
+        [JsonPropertyName("q_c")] public double? Qc { get; set; }
+        [JsonPropertyName("c")] public double? C { get; set; }
+        [JsonPropertyName("i_before")] public double? IBefore { get; set; }
+        [JsonPropertyName("i_after")] public double? IAfter { get; set; }
+        [JsonPropertyName("applied")] public bool Applied { get; set; }
+        [JsonPropertyName("reason")] public string? Reason { get; set; }
+    }
+
+    public sealed class PowerSummaryDto
+    {
+        [JsonPropertyName("p")] public double P { get; set; }
+        [JsonPropertyName("q")] public double Q { get; set; }
+        [JsonPropertyName("s")] public double S { get; set; }
+        [JsonPropertyName("pf")] public double Pf { get; set; }
+        [JsonPropertyName("pf_type")] public string PfType { get; set; } = "unity";
+        [JsonPropertyName("phi_deg")] public double PhiDeg { get; set; }
+        [JsonPropertyName("compensation")] public PowerCompensationDto? Compensation { get; set; }
+    }
+
     public sealed class AnalysisResponseDto
     {
         /// <summary>"success" veya "warning".</summary>
@@ -483,6 +510,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("errors")] public List<string> Errors { get; set; } = new();
         [JsonPropertyName("warnings")] public List<string> Warnings { get; set; } = new();
         [JsonPropertyName("transient")] public TransientAnalysisDto? Transient { get; set; }
+        [JsonPropertyName("power_summary")] public PowerSummaryDto? PowerSummary { get; set; }
     }
 
     public sealed class HealthDto

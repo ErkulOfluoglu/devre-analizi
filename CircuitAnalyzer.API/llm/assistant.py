@@ -38,6 +38,7 @@ _METHOD_NAMES = {
     AnalysisType.MILLMAN: "Millman teoremi",
     AnalysisType.SOURCE_TRANSFORM: "Kaynak dönüşümü (Thevenin/Norton eşdeğerine ulaşma)",
     AnalysisType.TRANSIENT: "Geçici durum (anahtarlı RC / RL devresi, zaman sabitesi τ)",
+    AnalysisType.POWER: "Güç ve güç katsayısı (P, Q, S, cos φ ve kompanzasyon)",
 }
 
 _RULES = """Sen meslek yüksekokulu elektronik öğrencilerine devre analizi anlatan sabırlı bir öğretmensin.
@@ -283,6 +284,15 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
             if ep.power_factor is not None:
                 values.append(ep.power_factor)
         values += [cn(results.power.total_supplied), cn(results.power.total_absorbed)]
+    ps = getattr(results, "power_summary", None)
+    if ps is not None:
+        values += [ps.p, ps.q, ps.s, ps.pf, ps.phi_deg]
+        if ps.compensation is not None:
+            values.append(ps.compensation.target_pf)
+            for v in (ps.compensation.q_c, ps.compensation.c,
+                      ps.compensation.i_before, ps.compensation.i_after):
+                if v is not None:
+                    values.append(v)
     return known_from(values, texts)
 
 

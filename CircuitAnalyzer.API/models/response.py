@@ -411,7 +411,7 @@ class PracticeQuestion(BaseModel):
     id: str = Field(..., description="Soru kimliği (ör: V2, I_R1, MESH1, VTH, RTH)")
     label: str = Field(..., description="Gösterim sembolü (ör: V₂, I_R1, I₁, Vth)")
     description: str = Field(..., description="Türkçe soru metni")
-    unit: Literal["V", "A", "Ω", "W", "s"] = Field(
+    unit: Literal["V", "A", "Ω", "W", "VAR", "VA", "F", "s", ""] = Field(
         ..., description="Beklenen birim (s: saniye — geçici durum sorularında zaman sabitesi / süre)")
     group: Literal["main", "extra"] = Field(
         ..., description="main: yöntemin asıl bilinmeyenleri; extra: ek sorular")
@@ -532,6 +532,34 @@ class TransientResult(BaseModel):
         default_factory=list, description="Zamana bağlı büyüklükler (V sonra I)")
 
 
+class PowerCompensation(BaseModel):
+    """
+    Güç katsayısı düzeltmesi (kompanzasyon) sonucu.
+    """
+    target_pf: float = Field(..., description="Hedef güç katsayısı cos φ₂ (0 < cos φ₂ ≤ 1)")
+    q_c: Optional[float] = Field(default=None, description="Gerekli kapasitif reaktif güç Q_C (VAR)")
+    c: Optional[float] = Field(default=None, description="Kaynağa paralel eklenecek kondansatör sığası C (F)")
+    i_before: Optional[float] = Field(default=None, description="Kompanzasyondan önceki kaynak akımı büyüklüğü (A)")
+    i_after: Optional[float] = Field(default=None, description="Kompanzasyondan sonraki kaynak akımı büyüklüğü (A)")
+    applied: bool = Field(..., description="Kompanzasyon hesabı uygulanıp doğrulandı mı")
+    reason: Optional[str] = Field(default=None, description="Uygulanamadıysa Türkçe açıklaması")
+
+
+class PowerSummary(BaseModel):
+    """
+    Güç ve Güç Katsayısı (POWER) yöntemi özeti.
+    """
+    p: float = Field(..., description="Kaynakların verdiği toplam aktif güç P (W)")
+    q: float = Field(..., description="Kaynakların verdiği toplam reaktif güç Q (VAR)")
+    s: float = Field(..., description="Kaynakların verdiği toplam görünür güç S (VA)")
+    pf: float = Field(..., description="Güç katsayısı cos φ = P/S")
+    pf_type: Literal["lagging", "leading", "unity"] = Field(
+        ..., description="Güç katsayısı tipi: lagging (geri/endüktif), leading (ileri/kapasitif), unity (birim)")
+    phi_deg: float = Field(..., description="Empedans/güç açısı φ (derece)")
+    compensation: Optional[PowerCompensation] = Field(
+        default=None, description="Hedef cos φ verildiyse kompanzasyon hesabı, verilmediyse null")
+
+
 class AnalysisResults(BaseModel):
     """Tüm analiz sonuçlarını birleştiren konteyner."""
     node_voltages: Dict[str, NodeVoltage] = Field(
@@ -572,6 +600,9 @@ class AnalysisResults(BaseModel):
     transient: Optional[TransientResult] = Field(
         default=None, exclude=True,
         description="İç kullanım: çözücü sonucu buraya yazar; API yanıtına AnalysisResponse.transient olarak taşınır")
+    power_summary: Optional[PowerSummary] = Field(
+        default=None, exclude=True,
+        description="İç kullanım: POWER yöntemi sonucu; API yanıtına AnalysisResponse.power_summary olarak taşınır")
 
 
 # ═══════════════════════════════════════════════════════
@@ -613,6 +644,11 @@ class AnalysisResponse(BaseModel):
         description=(
             "Geçici durum (TRANSIENT) sonucu: zaman sabitesi ve zamana bağlı büyüklükler. "
             "Yalnızca TRANSIENT başarılıysa dolu, aksi hâlde null"))
+    power_summary: SkipJsonSchema[Optional[PowerSummary]] = Field(
+        default=None,
+        description=(
+            "Güç ve Güç Katsayısı (POWER) yöntemi özeti ve kompanzasyon sonucu. "
+            "Yalnızca POWER başarılıysa dolu, aksi hâlde null"))
     warnings: List[str] = Field(
         default_factory=list,
         description=(
