@@ -49,8 +49,10 @@ https://github.com/user-attachments/assets/8298aa93-6456-4b34-bcca-171816584310
 | **Millman** | Paralel kollu devrelerde iki düğüm arası gerilim, tek formülle | [Wiki](../../wiki/Millman) |
 | **Kaynak dönüşümü** | Gerilim ⇄ akım kaynağı dönüşümleriyle sadeleştirme, gerekirse Δ–Y | [Wiki](../../wiki/Kaynak-Dönüşümü) |
 | **Geçici durum (anahtar)** | Kondansatör/bobin şarj–deşarjı: τ, x(t) formülü, τ tablosu, enerji ve zaman grafiği | [Wiki](../../wiki/Geçici-Durum) |
+| **Güç ve güç katsayısı** | P, Q, S, cos φ, güç üçgeni ve kompanzasyon kondansatörü | [Wiki](../../wiki/Güç-ve-Güç-Katsayısı) |
+| **Rezonans** | f₀, Q, bant genişliği, kesim frekansları ve frekans eğrisi (seri, paralel, seri R + paralel LC) | [Wiki](../../wiki/Rezonans) |
 
-DC ve AC (fazör) devrelerin hepsinde çalışır. Köprü gibi seri/paralele indirgenemeyen devrelerde **Δ–Y (üçgen–yıldız) dönüşümü** kendiliğinden devreye girer.
+DC ve AC (fazör) devrelerin hepsinde çalışır; AC değerleri [etkin ya da tepe](../../wiki/Etkin-ve-Tepe-Değer) olarak girip gösterebilirsiniz. Köprü gibi seri/paralele indirgenemeyen devrelerde **Δ–Y (üçgen–yıldız) dönüşümü** kendiliğinden devreye girer.
 
 ## Öne çıkanlar
 
@@ -60,8 +62,8 @@ DC ve AC (fazör) devrelerin hepsinde çalışır. Köprü gibi seri/paralele in
     <td width="50%"><img src="docs/ekran/07-delta-y.png" alt="Wheatstone köprüsü: Thevenin eşdeğeri ve Δ–Y dönüşümü"><br><sub><b>Δ–Y dönüşümü</b> — Wheatstone köprüsünün Thevenin eşdeğeri, adım adım.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/ekran/08-millman.png" alt="Koyu temada Millman teoremi anlatımı"><br><sub><b>Millman ve koyu tema</b> — paralel kaynaklı devrede tek formülle çözüm.</sub></td>
-    <td width="50%"><img src="docs/ekran/09-kaynak-donusumu.png" alt="Kaynak dönüşümüyle merdiven devrenin sadeleştirilmesi"><br><sub><b>Kaynak dönüşümü</b> — merdiven devre adım adım tek kaynak ve tek dirence iner.</sub></td>
+    <td width="50%"><img src="docs/ekran/10-guc.png" alt="Güç üçgeni ve kompanzasyon"><br><sub><b>Güç üçgeni ve kompanzasyon</b> — hedef cos φ için gereken kondansatör, devre yeniden çözülerek doğrulanır.</sub></td>
+    <td width="50%"><img src="docs/ekran/11-rezonans.png" alt="Koyu temada rezonans eğrisi"><br><sub><b>Rezonans ve koyu tema</b> — f₀, Q, bant genişliği ve frekans eğrisi.</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/ekran/04-yapay-zeka.png" alt="İsteğe bağlı yapay zekâ kurulumu"><br><sub><b>İsteğe bağlı yapay zekâ</b> — "Bu akım neden negatif?" diye sorun; sizin bilgisayarınızda çalışır.</sub></td>
