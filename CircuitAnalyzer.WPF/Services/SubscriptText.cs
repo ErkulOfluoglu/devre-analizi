@@ -10,7 +10,7 @@ namespace CircuitAnalyzer.WPF.Services
     internal static class SubscriptText
     {
         private static readonly Regex Pattern = new(
-            @"(?<![\p{L}\p{N}_])(\p{L})_([\p{L}\p{N}₀-₉]+)",
+            @"(?<![\p{L}\p{N}_])(\p{L})(?:_([\p{L}\p{N}₀-₉]+)|([₀-₉]+))",
             RegexOptions.Compiled);
 
         public static string Plain(string text)
@@ -18,7 +18,8 @@ namespace CircuitAnalyzer.WPF.Services
             if (string.IsNullOrEmpty(text))
                 return text ?? "";
 
-            return Pattern.Replace(text, "$1$2");
+            return Pattern.Replace(text, m => m.Groups[1].Value + ToPlainDigits(
+                m.Groups[2].Success ? m.Groups[2].Value : m.Groups[3].Value));
         }
 
         public static IReadOnlyList<Inline> ToInlines(string text, double baseFontSize)
@@ -32,7 +33,9 @@ namespace CircuitAnalyzer.WPF.Services
                 return new Inline[] { new Run(text) };
             }
 
-            double subFontSize = baseFontSize > 0 ? baseFontSize * 0.75 : baseFontSize;
+            // Çok satırlı bloklar (Sarrus) karakter genişliğiyle hizalıdır: orada boyut küçülmez
+            bool aligned = text.Contains('\n');
+            double subFontSize = baseFontSize > 0 && !aligned ? baseFontSize * 0.75 : baseFontSize;
             var inlines = new List<Inline>();
             int lastIndex = 0;
 
@@ -44,7 +47,8 @@ namespace CircuitAnalyzer.WPF.Services
                     inlines.Add(new Run(text.Substring(lastIndex, plainEnd - lastIndex)));
                 }
 
-                string sub = m.Groups[2].Value;
+                // Hazır Unicode alt simge rakamları bu yazı tiplerinde çok küçük kalır: normal rakamla yazılır
+                string sub = ToPlainDigits(m.Groups[2].Success ? m.Groups[2].Value : m.Groups[3].Value);
                 inlines.Add(new Run(sub)
                 {
                     BaselineAlignment = BaselineAlignment.Subscript,
@@ -60,6 +64,17 @@ namespace CircuitAnalyzer.WPF.Services
             }
 
             return inlines;
+        }
+
+        private static string ToPlainDigits(string text)
+        {
+            var chars = text.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (chars[i] >= '₀' && chars[i] <= '₉')
+                    chars[i] = (char)('0' + (chars[i] - '₀'));
+            }
+            return new string(chars);
         }
 
         public static void Apply(TextBlock tb)

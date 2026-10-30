@@ -269,4 +269,41 @@ public class SubscriptTextTests
             Assert.Empty(tbEmpty.Inlines);
         });
     }
+
+    [Theory]
+    [InlineData("E₁", "E", "1")]
+    [InlineData("φ₂", "φ", "2")]
+    [InlineData("Δ₁₂", "Δ", "12")]
+    [InlineData("V_C₁", "V", "C1")]
+    public void UnicodeSubscriptDigits_BecomeRealSubscripts(string input, string baseText, string sub)
+    {
+        RunOnSta(() =>
+        {
+            var inlines = SubscriptText.ToInlines(input, 16);
+            Assert.Equal(2, inlines.Count);
+            Assert.Equal(baseText, ((Run)inlines[0]).Text);
+            var subRun = (Run)inlines[1];
+            Assert.Equal(sub, subRun.Text);
+            Assert.Equal(BaselineAlignment.Subscript, subRun.BaselineAlignment);
+            Assert.Equal(12, subRun.FontSize, 3);
+        });
+    }
+
+    [Fact]
+    public void MultilineAlignedBlock_KeepsSubscriptWidth()
+    {
+        RunOnSta(() =>
+        {
+            var inlines = SubscriptText.ToInlines("Δ₁ = | 1 2 |\n     | 3 4 |", 14);
+            var subRun = (Run)inlines[1];
+            Assert.Equal("1", subRun.Text);
+            Assert.Equal(14, subRun.FontSize, 3);
+        });
+    }
+
+    [Fact]
+    public void Plain_UsesOrdinaryDigits()
+    {
+        Assert.Equal("V1 ve VC1", SubscriptText.Plain("V₁ ve V_C1"));
+    }
 }
