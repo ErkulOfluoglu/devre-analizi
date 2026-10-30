@@ -332,6 +332,7 @@ public partial class AssistantView : UserControl
             TextWrapping = TextWrapping.Wrap
         };
         tb.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+        SubscriptText.Apply(tb);
         border.Child = tb;
         wrapper.Children.Add(border);
 
@@ -349,6 +350,7 @@ public partial class AssistantView : UserControl
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap
             };
+            SubscriptText.Apply(tbNote);
             noteBorder.Child = tbNote;
             wrapper.Children.Add(noteBorder);
         }

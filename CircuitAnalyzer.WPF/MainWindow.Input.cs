@@ -59,7 +59,7 @@ namespace CircuitAnalyzer.WPF
                 ("Ctrl+tekerlek", "Yakınlaştır / uzaklaştır"),
                 ("Ctrl+ +  /  Ctrl+ −", "Yakınlaştır / uzaklaştır"),
                 ("Ctrl+0", "%100 boyut"),
-                ("Boşluk+sürükle", "Çizim alanını kaydır (orta tuşla da olur)"),
+                ("Sağ tuş+sürükle", "Çizim alanını kaydır (orta tuş ve Boşluk+sürükle de olur)"),
             }),
         };
 

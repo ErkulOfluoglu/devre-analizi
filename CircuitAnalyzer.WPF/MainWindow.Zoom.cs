@@ -20,6 +20,10 @@ namespace CircuitAnalyzer.WPF
         private Point _panStartMouse;
         private double _panStartH;
         private double _panStartV;
+        // Sağ tuş: basılı sürüklenirse kaydırır, sürüklenmezse sağ tık menüsü açılır
+        private bool _rightPanPending;
+        private bool _suppressContextMenu;
+        private const double RightPanThreshold = 4;
 
         // ═══════════════════════════════════════════════════════
         //  YAKINLAŞTIRMA (ZOOM) VE KAYDIRMA (PAN)
@@ -225,6 +229,45 @@ namespace CircuitAnalyzer.WPF
                 _panStartV = CanvasScrollViewer.VerticalOffset;
                 Mouse.Capture(CanvasScrollViewer);
                 Mouse.OverrideCursor = isMiddle ? Cursors.ScrollAll : Cursors.Hand;
+                e.Handled = true;
+            }
+            else if (e.ChangedButton == MouseButton.Right)
+            {
+                _rightPanPending = true;
+                _suppressContextMenu = false;
+                _panStartMouse = e.GetPosition(CanvasScrollViewer);
+                _panStartH = CanvasScrollViewer.HorizontalOffset;
+                _panStartV = CanvasScrollViewer.VerticalOffset;
+            }
+        }
+
+        private void CanvasScrollViewer_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_rightPanPending)
+                return;
+
+            if (e.RightButton != MouseButtonState.Pressed)
+            {
+                _rightPanPending = false;
+                return;
+            }
+
+            Vector moved = e.GetPosition(CanvasScrollViewer) - _panStartMouse;
+            if (moved.Length < RightPanThreshold)
+                return;
+
+            _rightPanPending = false;
+            _suppressContextMenu = true;
+            _isPanning = true;
+            Mouse.Capture(CanvasScrollViewer);
+            Mouse.OverrideCursor = Cursors.ScrollAll;
+        }
+
+        private void CanvasScrollViewer_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            if (_suppressContextMenu)
+            {
+                _suppressContextMenu = false;
                 e.Handled = true;
             }
         }

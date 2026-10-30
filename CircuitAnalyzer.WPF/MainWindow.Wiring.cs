@@ -32,6 +32,7 @@ namespace CircuitAnalyzer.WPF
         private readonly List<Point> _currentWaypoints = new();
         private readonly Stack<int> _waypointCommitCounts = new();
         private bool _liveLegVerticalFirst = false;
+        private bool _liveLegFlippedByUser = false;
         private Point _lastMouseCanvasPos;
         internal const string DrawingWireStatusText =
             "Tel çiziliyor — boş yere tıkla: köşe · R: yön çevir · Backspace: köşeyi geri al · Esc: vazgeç";
@@ -154,6 +155,23 @@ namespace CircuitAnalyzer.WPF
             _currentWaypoints.Clear();
             _waypointCommitCounts.Clear();
             _liveLegVerticalFirst = false;
+            _liveLegFlippedByUser = false;
+        }
+
+        /// <summary>
+        /// Canlı kolu uç yönlerine göre "dıştan dönecek" biçimde ayarlar.
+        /// Kullanıcı R ile yön seçtiyse o kol için dokunmaz.
+        /// </summary>
+        private void AutoOrientLiveLeg(Point end, Pin? endPin)
+        {
+            if (_liveLegFlippedByUser || _wireStartPin == null)
+                return;
+
+            bool fromPin = _currentWaypoints.Count == 0;
+            Point anchor = fromPin ? _wireStartPin.AbsolutePosition : _currentWaypoints[^1];
+            _liveLegVerticalFirst = WireGeometry.PreferVerticalFirst(
+                anchor, fromPin ? _wireStartPin.OutwardDirection : null,
+                end, endPin?.OutwardDirection, _liveLegVerticalFirst);
         }
 
         /// <summary>Bir teli verilen noktada bağlantı noktası ile bölerek yeni tel çizimini başlatır.</summary>
@@ -226,6 +244,7 @@ namespace CircuitAnalyzer.WPF
                 _waypointCommitCounts.Push(1);
             }
 
+            _liveLegFlippedByUser = false;
             UpdateWirePreview(_lastMouseCanvasPos);
             TxtStatus.Text = DrawingWireStatusText;
         }
@@ -240,6 +259,7 @@ namespace CircuitAnalyzer.WPF
                 return;
 
             _liveLegVerticalFirst = !_liveLegVerticalFirst;
+            _liveLegFlippedByUser = true;
             UpdateWirePreview(_lastMouseCanvasPos);
             TxtStatus.Text = DrawingWireStatusText;
         }
@@ -376,6 +396,7 @@ namespace CircuitAnalyzer.WPF
             while (waypoints.Count > 0 && WireGeometry.PointsCoincide(waypoints[^1], endPin.AbsolutePosition))
                 waypoints.RemoveAt(waypoints.Count - 1);
 
+            AutoOrientLiveLeg(endPin.AbsolutePosition, endPin);
             var wire = new Wire(startPin, endPin, waypoints, _liveLegVerticalFirst);
             _wires.Add(wire);
 
@@ -628,6 +649,7 @@ namespace CircuitAnalyzer.WPF
             Pin? nearEnd = FindNearestPin(mousePos);
             Point end = nearEnd != null ? nearEnd.AbsolutePosition : (wireSnap ?? GridHelper.Snap(mousePos));
 
+            AutoOrientLiveLeg(end, nearEnd);
             _wirePreview = Wire.CreatePreviewLine(start, _currentWaypoints, end, _liveLegVerticalFirst);
             CircuitCanvas.Children.Add(_wirePreview);
         }

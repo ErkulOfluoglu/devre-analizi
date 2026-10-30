@@ -468,6 +468,8 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("before")] public double Before { get; set; }
         [JsonPropertyName("start")] public double Start { get; set; }
         [JsonPropertyName("final")] public double Final { get; set; }
+
+        [JsonIgnore] public string DisplayLabel => SubscriptText.Plain(Label);
     }
 
     public sealed class TransientAnalysisDto

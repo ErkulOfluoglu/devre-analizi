@@ -927,6 +927,7 @@ public partial class AnalysisPanel : UserControl
             Margin = new Thickness(0, 0, 0, 8)
         };
         titleText.SetResourceReference(StyleProperty, "Text.Section");
+        SubscriptText.Apply(titleText);
         sectionPanel.Children.Add(titleText);
 
         var divider = new Border
@@ -972,6 +973,7 @@ public partial class AnalysisPanel : UserControl
                     Text = block.Text
                 };
                 tb.SetResourceReference(StyleProperty, "Text.Mono");
+                SubscriptText.Apply(tb);
                 mathBorder.Child = tb;
                 return mathBorder;
             }
@@ -989,6 +991,7 @@ public partial class AnalysisPanel : UserControl
                     Text = block.Text,
                     TextWrapping = TextWrapping.Wrap
                 };
+                SubscriptText.Apply(tb);
                 resultBorder.Child = tb;
                 return resultBorder;
             }
@@ -1017,6 +1020,7 @@ public partial class AnalysisPanel : UserControl
                     Text = noteText
                 };
                 tb.SetResourceReference(StyleProperty, "Text.Caption");
+                SubscriptText.Apply(tb);
                 Grid.SetColumn(tb, 1);
                 grid.Children.Add(tb);
                 return grid;
@@ -1048,6 +1052,7 @@ public partial class AnalysisPanel : UserControl
                     FontSize = 13
                 };
                 tb.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Success");
+                SubscriptText.Apply(tb);
                 Grid.SetColumn(tb, 1);
                 grid.Children.Add(tb);
                 return grid;
@@ -1062,6 +1067,7 @@ public partial class AnalysisPanel : UserControl
                     Margin = new Thickness(0, 0, 0, 10)
                 };
                 tb.SetResourceReference(StyleProperty, "Text.Body");
+                SubscriptText.Apply(tb);
                 return tb;
             }
         }
@@ -1079,6 +1085,7 @@ public partial class AnalysisPanel : UserControl
             Text = label
         };
         lbl.SetResourceReference(StyleProperty, "Text.Caption");
+        SubscriptText.Apply(lbl);
         sp.Children.Add(lbl);
 
         var val = new TextBlock
@@ -1089,6 +1096,7 @@ public partial class AnalysisPanel : UserControl
             Margin = new Thickness(0, 2, 0, 0)
         };
         val.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+        SubscriptText.Apply(val);
         sp.Children.Add(val);
 
         if (!string.IsNullOrWhiteSpace(secondaryValue))
@@ -1099,6 +1107,7 @@ public partial class AnalysisPanel : UserControl
                 Margin = new Thickness(0, 2, 0, 0)
             };
             sec.SetResourceReference(StyleProperty, "Text.Caption");
+            SubscriptText.Apply(sec);
             sp.Children.Add(sec);
         }
 

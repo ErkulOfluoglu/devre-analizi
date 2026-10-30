@@ -77,15 +77,16 @@ namespace CircuitAnalyzer.WPF.Views
             _tMaxSeconds = 5.0 * tau;
 
             TxtTauInfo.Text = $"τ = {TurkishNumber.Format(tau * _timeScale, "G4")} {_timeUnit}  |  R_th = {EngFormat.Format(data.Rth, "Ω")}";
+            SubscriptText.Apply(TxtTauInfo);
 
             // Seçiciler
             if (data.Quantities.Count > 2)
             {
                 RowSelectors.Visibility = Visibility.Visible;
                 CmbTopQuantity.ItemsSource = data.Quantities;
-                CmbTopQuantity.DisplayMemberPath = "Label";
+                CmbTopQuantity.DisplayMemberPath = "DisplayLabel";
                 CmbBottomQuantity.ItemsSource = data.Quantities;
-                CmbBottomQuantity.DisplayMemberPath = "Label";
+                CmbBottomQuantity.DisplayMemberPath = "DisplayLabel";
 
                 CmbTopQuantity.SelectedIndex = 0;
                 CmbBottomQuantity.SelectedIndex = 1;
@@ -219,7 +220,7 @@ namespace CircuitAnalyzer.WPF.Views
             }
 
             // Eksen etiketleri
-            plot.Title($"{q.Label} ({q.Unit})");
+            plot.Title($"{SubscriptText.Plain(q.Label)} ({q.Unit})");
             plot.XLabel($"Zaman ({_timeUnit})");
             plot.YLabel(q.Unit);
 
@@ -324,6 +325,7 @@ namespace CircuitAnalyzer.WPF.Views
             wpfPlot.Refresh();
 
             txtHover.Text = $"t = {TurkishNumber.Format(tScaled, "G4")} {_timeUnit}, {q.Label} = {TurkishNumber.Format(val, "G4")} {q.Unit}";
+            SubscriptText.Apply(txtHover);
         }
 
         private void BtnEnlarge_Click(object sender, RoutedEventArgs e)

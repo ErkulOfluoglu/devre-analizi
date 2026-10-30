@@ -71,6 +71,7 @@ namespace CircuitAnalyzer.WPF.Views
             }
 
             TxtSummaryInfo.Text = $"f₀ = {EngFormat.Format(data.F0, "Hz")} | Q = {TurkishNumber.Format(data.Q, "G4")} | BW = {EngFormat.Format(data.Bw, "Hz")}";
+            SubscriptText.Apply(TxtSummaryInfo);
 
             RenderPlot();
         }

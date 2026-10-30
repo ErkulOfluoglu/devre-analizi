@@ -223,8 +223,14 @@ namespace CircuitAnalyzer.WPF.Services
                             LineHeight = 22
                         };
 
-                        pQuestion.Inlines.Add(new Bold(new Run($"[{q.Label}]  ")) { Foreground = brushAccent });
-                        pQuestion.Inlines.Add(new Run($"{q.Description} [{q.Unit}]\n") { Foreground = brushBody });
+                        var boldLabel = new Bold { Foreground = brushAccent };
+                        boldLabel.Inlines.AddRange(SubscriptText.ToInlines($"[{q.Label}]  ", 12.5));
+                        pQuestion.Inlines.Add(boldLabel);
+
+                        var spanDesc = new Span { Foreground = brushBody };
+                        spanDesc.Inlines.AddRange(SubscriptText.ToInlines($"{q.Description} [{q.Unit}]\n", 12.5));
+                        pQuestion.Inlines.Add(spanDesc);
+
                         pQuestion.Inlines.Add(new Run("Cevap: ________________________________________________\n")
                         {
                             FontFamily = new FontFamily("Cascadia Mono, Consolas"),
@@ -234,11 +240,13 @@ namespace CircuitAnalyzer.WPF.Services
 
                         if (!string.IsNullOrWhiteSpace(q.Hint))
                         {
-                            pQuestion.Inlines.Add(new Italic(new Run($"İpucu: {q.Hint}"))
+                            var italicHint = new Italic
                             {
                                 FontSize = 11.5,
                                 Foreground = brushSecondary
-                            });
+                            };
+                            italicHint.Inlines.AddRange(SubscriptText.ToInlines($"İpucu: {q.Hint}", 11.5));
+                            pQuestion.Inlines.Add(italicHint);
                         }
 
                         doc.Blocks.Add(pQuestion);
@@ -254,13 +262,14 @@ namespace CircuitAnalyzer.WPF.Services
                 {
                     foreach (var section in input.Response.Results.Explanation)
                     {
-                        var pSecTitle = new Paragraph(new Run(section.Title))
+                        var pSecTitle = new Paragraph
                         {
                             FontSize = 15,
                             FontWeight = FontWeights.SemiBold,
                             Foreground = brushPrimary,
                             Margin = new Thickness(0, 14, 0, 4)
                         };
+                        pSecTitle.Inlines.AddRange(SubscriptText.ToInlines(section.Title, 15));
                         doc.Blocks.Add(pSecTitle);
 
                         var secDivider = new Border
@@ -291,13 +300,15 @@ namespace CircuitAnalyzer.WPF.Services
                                             Padding = new Thickness(10, 8, 10, 8),
                                             Margin = new Thickness(0, 2, 0, 6)
                                         };
-                                        mathBorder.Child = new TextBlock
+                                        var tbMath = new TextBlock
                                         {
                                             Text = block.Text,
                                             FontFamily = new FontFamily("Cascadia Mono, Consolas"),
                                             FontSize = 12,
                                             Foreground = brushPrimary
                                         };
+                                        SubscriptText.Apply(tbMath);
+                                        mathBorder.Child = tbMath;
                                         doc.Blocks.Add(new BlockUIContainer(mathBorder));
                                         break;
                                     }
@@ -312,49 +323,54 @@ namespace CircuitAnalyzer.WPF.Services
                                             Padding = new Thickness(10, 6, 10, 6),
                                             Margin = new Thickness(0, 2, 0, 6)
                                         };
-                                        resBorder.Child = new TextBlock
+                                        var tbResult = new TextBlock
                                         {
                                             Text = block.Text,
                                             FontWeight = FontWeights.Bold,
                                             FontSize = 12.5,
                                             Foreground = brushAccentSoftText
                                         };
+                                        SubscriptText.Apply(tbResult);
+                                        resBorder.Child = tbResult;
                                         doc.Blocks.Add(new BlockUIContainer(resBorder));
                                         break;
                                     }
                                     case "note":
                                     {
-                                        var pNote = new Paragraph(new Run(block.Text))
+                                        var pNote = new Paragraph
                                         {
                                             FontStyle = FontStyles.Italic,
                                             Foreground = brushSecondary,
                                             FontSize = 12,
                                             Margin = new Thickness(0, 2, 0, 6)
                                         };
+                                        pNote.Inlines.AddRange(SubscriptText.ToInlines(block.Text, 12));
                                         doc.Blocks.Add(pNote);
                                         break;
                                     }
                                     case "check":
                                     {
-                                        var pCheck = new Paragraph(new Run(block.Text))
+                                        var pCheck = new Paragraph
                                         {
                                             Foreground = brushSuccess,
                                             FontWeight = FontWeights.SemiBold,
                                             FontSize = 12.5,
                                             Margin = new Thickness(0, 2, 0, 6)
                                         };
+                                        pCheck.Inlines.AddRange(SubscriptText.ToInlines(block.Text, 12.5));
                                         doc.Blocks.Add(pCheck);
                                         break;
                                     }
                                     default:
                                     {
-                                        var pText = new Paragraph(new Run(block.Text))
+                                        var pText = new Paragraph
                                         {
                                             Foreground = brushBody,
                                             FontSize = 12.5,
                                             LineHeight = 18,
                                             Margin = new Thickness(0, 2, 0, 6)
                                         };
+                                        pText.Inlines.AddRange(SubscriptText.ToInlines(block.Text, 12.5));
                                         doc.Blocks.Add(pText);
                                         break;
                                     }
@@ -546,7 +562,9 @@ namespace CircuitAnalyzer.WPF.Services
             var row = new TableRow();
             foreach (string v in values)
             {
-                var cell = new TableCell(new Paragraph(new Run(v)) { Margin = new Thickness(0) })
+                var p = new Paragraph { Margin = new Thickness(0) };
+                p.Inlines.AddRange(SubscriptText.ToInlines(v, doc.FontSize > 0 ? doc.FontSize : 12.5));
+                var cell = new TableCell(p)
                 {
                     Padding = new Thickness(6, 4, 6, 4),
                     BorderThickness = new Thickness(0, 0, 0, 1),

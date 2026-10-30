@@ -365,6 +365,8 @@
                                   Focusable="False"
                                   PreviewMouseWheel="CanvasScrollViewer_PreviewMouseWheel"
                                   PreviewMouseDown="CanvasScrollViewer_PreviewMouseDown"
+                                  PreviewMouseMove="CanvasScrollViewer_PreviewMouseMove"
+                                  ContextMenuOpening="CanvasScrollViewer_ContextMenuOpening"
                                   MouseMove="CanvasScrollViewer_MouseMove"
                                   MouseUp="CanvasScrollViewer_MouseUp">
                         <Canvas x:Name="CircuitCanvas"

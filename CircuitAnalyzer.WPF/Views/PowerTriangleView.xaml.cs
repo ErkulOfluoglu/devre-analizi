@@ -48,11 +48,13 @@ namespace CircuitAnalyzer.WPF.Views
             {
                 TxtCompensation.Visibility = Visibility.Visible;
                 TxtCompensation.Text = $"Q_C = {EngFormat.Format(data.Compensation.Qc ?? 0, "VAR")}, C = {EngFormat.Format(data.Compensation.C ?? 0, "F")}, akım {EngFormat.Format(data.Compensation.IBefore ?? 0, "A")} → {EngFormat.Format(data.Compensation.IAfter ?? 0, "A")}";
+                SubscriptText.Apply(TxtCompensation);
             }
             else
             {
                 TxtCompensation.Visibility = Visibility.Visible;
                 TxtCompensation.Text = data.Compensation.Reason ?? "";
+                SubscriptText.Apply(TxtCompensation);
             }
 
             Redraw();

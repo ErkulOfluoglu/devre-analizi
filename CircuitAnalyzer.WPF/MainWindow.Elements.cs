@@ -282,7 +282,7 @@ namespace CircuitAnalyzer.WPF
             }
 
             visual.MouseLeftButtonDown += Element_MouseLeftButtonDown;
-            visual.MouseRightButtonDown += Element_MouseRightButtonDown;
+            visual.MouseRightButtonUp += Element_MouseRightButtonUp;
 
             if (visual is FrameworkElement fe)
             {
@@ -410,7 +410,8 @@ namespace CircuitAnalyzer.WPF
 
             _canvasContextMenu = menu;
             CircuitCanvas.ContextMenu = menu;
-            CircuitCanvas.PreviewMouseRightButtonDown += (_, e) =>
+            // Tuş bırakılınca: sağ tuşla sürükleyip kaydırırken (fare yakalı) tel seçilmez, menü değişmez
+            CircuitCanvas.PreviewMouseRightButtonUp += (_, e) =>
             {
                 if (IsDescendantOfAnyElementVisual(e.OriginalSource as DependencyObject))
                     return;
@@ -501,7 +502,7 @@ namespace CircuitAnalyzer.WPF
                 _canvasSelectAllMenuItem.IsEnabled = _elements.Count > 0 || _wires.Count > 0;
         }
 
-        private void Element_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        private void Element_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
             if (sender is UIElement visual && _visualToElement.TryGetValue(visual, out var element))
             {
@@ -674,7 +675,7 @@ namespace CircuitAnalyzer.WPF
             }
 
             newVisual.MouseLeftButtonDown += Element_MouseLeftButtonDown;
-            newVisual.MouseRightButtonDown += Element_MouseRightButtonDown;
+            newVisual.MouseRightButtonUp += Element_MouseRightButtonUp;
             if (newVisual is FrameworkElement fe)
             {
                 fe.ContextMenu = CreateElementContextMenu(element, newVisual);

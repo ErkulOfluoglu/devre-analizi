@@ -85,5 +85,24 @@ namespace CircuitAnalyzer.WPF.Models
                     Owner.Position.Y + rotatedY);
             }
         }
+
+        /// <summary>
+        /// Ucun elemandan dışarı baktığı yön (±X ya da ±Y birim vektör), döndürme dahil.
+        /// Elemanın merkezindeki uçlarda (bağlantı noktası) ve sahipsiz uçta null.
+        /// </summary>
+        public Vector? OutwardDirection
+        {
+            get
+            {
+                if (Owner == null) return null;
+
+                Vector v = AbsolutePosition - (Owner.Position + new Vector(Owner.VisualWidth / 2.0, Owner.VisualHeight / 2.0));
+                if (Math.Abs(v.X) < 0.5 && Math.Abs(v.Y) < 0.5) return null;
+
+                return Math.Abs(v.X) >= Math.Abs(v.Y)
+                    ? new Vector(Math.Sign(v.X), 0)
+                    : new Vector(0, Math.Sign(v.Y));
+            }
+        }
     }
 }

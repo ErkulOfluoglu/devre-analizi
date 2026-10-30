@@ -139,7 +139,7 @@ namespace CircuitAnalyzer.Tests
                 // Soru etiketleri bulunmalı
                 foreach (var q in resp.Results.Practice)
                 {
-                    Assert.Contains(q.Label, text);
+                    Assert.Contains(CircuitAnalyzer.WPF.Services.SubscriptText.Plain(q.Label), text);
                 }
 
                 // Soru başlığı bulunmalı

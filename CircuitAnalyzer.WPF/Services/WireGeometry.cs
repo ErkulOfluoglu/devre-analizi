@@ -90,6 +90,36 @@ namespace CircuitAnalyzer.WPF.Services
                 wire.LastLegVerticalFirst);
         }
 
+        /// <summary>
+        /// L-şekilli kolun yönünü seçer: tel uçtan dışarı doğru çıkıp karşı uca dışarıdan
+        /// girecek biçimde "dıştan" dönsün, elemanın içinden geçmesin. Eşitlikte ya da düz
+        /// kolda <paramref name="fallback"/> kalır.
+        /// </summary>
+        public static bool PreferVerticalFirst(Point start, Vector? startOutward, Point end, Vector? endOutward, bool fallback)
+        {
+            double dx = end.X - start.X;
+            double dy = end.Y - start.Y;
+            if (Math.Abs(dx) <= CoordinateEpsilon || Math.Abs(dy) <= CoordinateEpsilon)
+                return fallback;
+
+            var horizontal = new Vector(Math.Sign(dx), 0);
+            var vertical = new Vector(0, Math.Sign(dy));
+
+            int horizontalFirst = LegScore(horizontal, vertical, startOutward, endOutward);
+            int verticalFirst = LegScore(vertical, horizontal, startOutward, endOutward);
+            return verticalFirst == horizontalFirst ? fallback : verticalFirst > horizontalFirst;
+        }
+
+        private static int LegScore(Vector firstLeg, Vector lastLeg, Vector? startOutward, Vector? endOutward)
+        {
+            int score = 0;
+            if (startOutward is { } s)
+                score += firstLeg == s ? 1 : firstLeg == -s ? -1 : 0;
+            if (endOutward is { } e)
+                score += lastLeg == -e ? 1 : lastLeg == e ? -1 : 0;
+            return score;
+        }
+
         private static IReadOnlyList<Point> RouteSingleLeg(Point start, Point end, bool verticalFirst)
         {
             double dx = Math.Abs(start.X - end.X);

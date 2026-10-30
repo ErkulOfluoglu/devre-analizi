@@ -225,6 +225,7 @@ public partial class PracticeView : UserControl
                     if (!string.IsNullOrEmpty(verdict.Message))
                     {
                         row.FeedbackText.Text = TurkishNumber.NormalizeForDisplay(verdict.Message);
+                        SubscriptText.Apply(row.FeedbackText);
                         row.FeedbackText.SetResourceReference(TextBlock.ForegroundProperty, colorToken);
                         row.FeedbackText.Visibility = Visibility.Visible;
                     }
@@ -236,6 +237,7 @@ public partial class PracticeView : UserControl
                     if (!string.IsNullOrEmpty(verdict.UnderstoodAs))
                     {
                         row.UnderstoodText.Text = $"Okunan: {TurkishNumber.NormalizeForDisplay(verdict.UnderstoodAs)}";
+                        SubscriptText.Apply(row.UnderstoodText);
                         row.UnderstoodText.Visibility = Visibility.Visible;
                     }
                     else
@@ -334,6 +336,7 @@ public partial class PracticeView : UserControl
             FontSize = 14
         };
         txtLabel.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Accent.SoftText");
+        SubscriptText.Apply(txtLabel);
         headerPanel.Children.Add(txtLabel);
 
         var txtDesc = new TextBlock
@@ -341,6 +344,7 @@ public partial class PracticeView : UserControl
             Text = q.Description
         };
         txtDesc.SetResourceReference(StyleProperty, "Text.Body");
+        SubscriptText.Apply(txtDesc);
         headerPanel.Children.Add(txtDesc);
         stack.Children.Add(headerPanel);
 
