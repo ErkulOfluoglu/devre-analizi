@@ -41,7 +41,23 @@ namespace CircuitAnalyzer.WPF.Views
                 IsEnlarged = true
             };
             plotView.LoadData(data);
-            PlotHost.Child = plotView;
+            ShowContent(plotView, "Zaman Grafiği (Geçici Durum)", animate);
+        }
+
+        public void Show(ResonanceDto data, bool animate = true)
+        {
+            var plotView = new ResonanceCurveView
+            {
+                IsEnlarged = true
+            };
+            plotView.LoadData(data);
+            ShowContent(plotView, "Rezonans Eğrisi", animate);
+        }
+
+        private void ShowContent(UIElement content, string title, bool animate)
+        {
+            TxtOverlayTitle.Text = title;
+            PlotHost.Child = content;
 
             Visibility = Visibility.Visible;
             UpdateCardMaxHeight();

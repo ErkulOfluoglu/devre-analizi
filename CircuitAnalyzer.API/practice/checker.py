@@ -36,7 +36,8 @@ _QUANTITY = {
     "VA": "görünür güç",
     "F": "kondansatör sığası (kapasitans)",
     "s": "süre",
-    "": "birimsiz büyüklük (güç katsayısı cos φ)",
+    "Hz": "frekans",
+    "": "birimsiz büyüklük (güç katsayısı cos φ, kalite faktörü Q)",
 }
 _UNIT_NAME = {
     "V": "volt (V)",
@@ -47,6 +48,7 @@ _UNIT_NAME = {
     "VA": "volt-amper (VA)",
     "F": "farad (F)",
     "s": "saniye (s)",
+    "Hz": "hertz (Hz)",
     "": "birimsiz",
 }
 _PREFIX_EXAMPLE = {
@@ -58,6 +60,7 @@ _PREFIX_EXAMPLE = {
     "VA": "200 mVA için “200m” ya da “200 mVA”",
     "F": "10 µF için “10u” ya da “10 µF”",
     "s": "2 ms için “2m” ya da “2 ms”",
+    "Hz": "2,5 kHz için “2,5k” ya da “2,5 kHz” (M = mega, m = mili)",
     "": "0,8 için “0,8”",
 }
 
@@ -107,8 +110,14 @@ def _unit_problem(p: ParsedAnswer, q: PracticeQuestion) -> Optional[str]:
     if p.unit is None or p.unit == q.unit:
         return None
     if q.unit == "":
+        if q.id == "Q_FACTOR":
+            return (f"Birim olarak {p.unit} yazdınız; kalite faktörü Q birimsiz bir "
+                    "orandır (birim yazılmamalıdır).")
         return (f"Birim olarak {p.unit} yazdınız; güç katsayısı cos φ = P/S birimsiz bir "
                 "orandır (birim yazılmamalıdır).")
+    if q.unit == "Hz" and p.unit in ("s",):
+        return (f"Birim olarak {p.unit} yazdınız; burada frekans soruluyor, birimi hertz (Hz) "
+                "(1 Hz = 1/s).")
     if q.unit == "W" and p.unit in ("VA", "VAR"):
         return (f"Birim olarak {p.unit} yazdınız; aktif güç P'nin birimi watt (W)'tır "
                 "(VA görünür güç, VAR reaktif güç birimidir).")
@@ -200,6 +209,14 @@ def check_answer(q: PracticeQuestion, answer: str) -> AnswerVerdict:
         if unit_msg:
             return _verdict(q, "partial", "Sayı doğru ama birim yanlış. " + unit_msg, understood)
         return _verdict(q, "correct", "Doğru! ✓", understood)
+
+    # Kabul edilen eşdeğer doğru biçim (ör. f₁ için tam yarım güç değeri)
+    for alt in q.alternatives:
+        if alt.accepted and _rel_err(
+                ans, complex(alt.value.real, alt.value.imaginary), floor) <= REL_OK:
+            if unit_msg:
+                return _verdict(q, "partial", "Sayı doğru ama birim yanlış. " + unit_msg, understood)
+            return _verdict(q, "correct", "Doğru! ✓ " + alt.message, understood)
 
     # AC sorusunda yalnız büyüklük yazılmışsa
     if q.is_ac and p.form == "real" and abs(abs(ans) - abs(exp)) <= REL_OK * max(abs(exp), floor):

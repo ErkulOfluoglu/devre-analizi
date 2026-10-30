@@ -33,6 +33,7 @@ from models.response import (
     ExplanationBlock, ExplanationSection, TransientQuantityResult, TransientResult,
     NodeVoltage, ElementCurrent, ProbeResult, TheveninResult, NortonResult,
     ElementPower, PowerAnalysis, PowerCompensation, PowerSummary,
+    ResonanceCurve, ResonanceSummary,
     SeriesParallelReduction, MeshInfo, SourceContribution,
 )
 from models.request import (
@@ -50,6 +51,7 @@ from explainer.topology import generate_topology_step
 from explainer.narrative import PortExtras, build_explanation, port_is_dead
 from solver.frequency_check import check_source_frequencies
 from solver.mesh import analyze_meshes
+from solver.resonance import ResonanceNotApplicable, analyze_resonance, verify_with_lcapy
 from solver.superposition import solve_contributions
 from practice.questions import build_questions
 from practice.transient_questions import build_transient_questions
@@ -539,7 +541,7 @@ def _solve_core(
         parsed: Ayrıştırılmış devre
         mode: DC, AC_TIME veya AC_PHASOR
         frequency: AC frekansı (Hz) — AC modlarında zorunlu
-        analysis_type: NODAL, MESH, THEVENIN, NORTON, SUPERPOSITION, MILLMAN, SOURCE_TRANSFORM, TRANSIENT, POWER
+        analysis_type: NODAL, MESH, THEVENIN, NORTON, SUPERPOSITION, MILLMAN, SOURCE_TRANSFORM, TRANSIENT, POWER, RESONANCE
         thevenin_terminals: Thevenin port tanımı (iki düğüm)
         target_probes: Ölçüm probları
         warnings: Verilirse frekans/süperpozisyon uyarıları bu listeye
@@ -600,18 +602,42 @@ def _solve_core(
                          "node_count": parsed.node_count}
     ))
 
+    # ── Adım 1.4: Rezonans uygunluğu (RESONANCE yöntemi) ──
+    # Uygunsa devre kaynağın değil, kendi L ve C'sinden bulunan f₀ frekansında çözülür.
+    resonance_analysis = None
+    resonance_inapplicable_reason: Optional[str] = None
+    if analysis_type == AnalysisType.RESONANCE:
+        if mode == AnalysisMode.DC:
+            resonance_inapplicable_reason = (
+                "Rezonans yöntemi yalnızca AC devreler için uygulanır; DC devrede bobin kısa devre, "
+                "kondansatör açık devre sayıldığından rezonans oluşmaz."
+            )
+        else:
+            try:
+                resonance_analysis = analyze_resonance(parsed, frequency)
+            except ResonanceNotApplicable as e:
+                resonance_inapplicable_reason = str(e)
+            except Exception as e:      # beklenmeyen hata: yanlış sonuç yerine dürüst yedek
+                resonance_inapplicable_reason = (
+                    "Rezonans hesaplanırken beklenmeyen bir hata oluştu "
+                    f"({type(e).__name__}).")
+
     # ── Adım 1.5: Kaynak frekansı denetimi (süperpozisyon uyarısı) ──
-    freq_check = check_source_frequencies(
-        parsed, mode, frequency,
-        superposition=(analysis_type == AnalysisType.SUPERPOSITION))
-    frequency = freq_check.frequency
-    (warnings if warnings is not None else errors).extend(freq_check.warnings)
-    for fs in freq_check.steps:
-        fs.step_number = len(steps) + 1
-        steps.append(fs)
-    if freq_check.errors:
-        errors.extend(freq_check.errors)
-        return results, steps, errors
+    if resonance_analysis is not None:
+        # Kaynağın (ve isteğin) frekansı rezonans hesabına girmez; f₀ analiz frekansıdır
+        frequency = resonance_analysis.f0
+    else:
+        freq_check = check_source_frequencies(
+            parsed, mode, frequency,
+            superposition=(analysis_type == AnalysisType.SUPERPOSITION))
+        frequency = freq_check.frequency
+        (warnings if warnings is not None else errors).extend(freq_check.warnings)
+        for fs in freq_check.steps:
+            fs.step_number = len(steps) + 1
+            steps.append(fs)
+        if freq_check.errors:
+            errors.extend(freq_check.errors)
+            return results, steps, errors
 
     # ── Adım 2: lcapy devre oluşturma ──
     try:
@@ -826,6 +852,16 @@ def _solve_core(
             parsed, is_dc, frequency, raw_nodes, raw_currents, results, power_factor_target
         )
 
+    # ── Adım 6.66: Rezonans (RESONANCE yöntemi) — sayılar lcapy ile denetlenir ──
+    if resonance_analysis is not None:
+        why = verify_with_lcapy(resonance_analysis, cct)
+        if why is None:
+            results.resonance = _resonance_summary(resonance_analysis)
+        else:
+            resonance_inapplicable_reason = (
+                f"{why} Devre f₀ = {num(resonance_analysis.f0)} Hz frekansında çözüldü.")
+            resonance_analysis = None
+
     # ── Adım 6.7: Bağımlı kaynaklı Thevenin/Norton için ek sayılar ──
     port_extras = None
     if (has_dependent and thevenin_terminals is not None
@@ -844,6 +880,8 @@ def _solve_core(
             parsed, is_dc, frequency, analysis_type, thevenin_terminals,
             raw_nodes, raw_currents, results, mesh_analysis, contributions,
             port_extras, power_inapplicable_reason=power_inapplicable_reason,
+            resonance_analysis=resonance_analysis,
+            resonance_inapplicable_reason=resonance_inapplicable_reason,
         )
     except Exception as e:
         errors.append(f"ℹ Anlatım oluşturulamadı: {str(e)}")
@@ -1909,6 +1947,22 @@ def _solve_power_method(
         compensation=comp_result,
     )
     return summary, None
+
+
+def _resonance_summary(a) -> ResonanceSummary:
+    """Doğrulanmış rezonans analizi → API yanıtındaki `resonance` alanı."""
+    return ResonanceSummary(
+        kind=a.kind,
+        f0=sig_round(a.f0), w0=sig_round(a.w0), x=sig_round(a.x), q=sig_round(a.q),
+        bw=sig_round(a.bw), f1=sig_round(a.f1), f2=sig_round(a.f2),
+        f1_exact=sig_round(a.f1_exact), f2_exact=sig_round(a.f2_exact),
+        z0=sig_round(a.z0), i0=sig_round(a.i0), v0=sig_round(a.v0),
+        curve=ResonanceCurve(
+            quantity=a.curve_quantity, unit=a.curve_unit,
+            f=[sig_round(v) for v in a.curve_f],
+            y=[sig_round(v) for v in a.curve_y],
+        ),
+    )
 
 
 def _compute_compensation(

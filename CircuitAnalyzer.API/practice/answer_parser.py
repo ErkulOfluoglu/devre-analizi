@@ -30,7 +30,7 @@ class AnswerParseError(ValueError):
 class ParsedAnswer:
     value: complex
     form: str                            # "real" | "polar" | "rect"
-    unit: Optional[str] = None           # "V", "A", "Ω", "W", "s", "VA", "VAR" (yazıldıysa)
+    unit: Optional[str] = None           # "V", "A", "Ω", "W", "s", "VA", "VAR", "F", "Hz" (yazıldıysa)
     angle_input: Optional[float] = None  # kutupsal: yazılan açı sayısı (dönüşümsüz)
     angle_unit: str = "deg"              # "deg" | "rad"
 
@@ -51,6 +51,7 @@ _UNITS = {
     "var": "VAR",
     "f": "F", "farad": "F",
     "s": "s", "sn": "s", "sec": "s", "saniye": "s",
+    "hz": "Hz", "hertz": "Hz",
 }
 
 _NUM = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"

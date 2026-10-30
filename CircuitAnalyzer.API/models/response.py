@@ -399,6 +399,10 @@ class PracticeAlternative(BaseModel):
     """Yaygın bir hatanın vereceği değer ve öğrenciye söylenecek açıklama."""
     value: ComplexNumber = Field(..., description="Hatalı yolun verdiği değer")
     message: str = Field(..., description="Bu değer girilirse gösterilecek Türkçe açıklama")
+    accepted: bool = Field(
+        default=False,
+        description=("True ise hata değil, kabul edilen eşdeğer bir doğru biçimdir "
+                     "(ör. rezonansta f₁ için tam yarım güç değeri); girilirse 'doğru' sayılır"))
 
 
 class PracticeQuestion(BaseModel):
@@ -411,8 +415,9 @@ class PracticeQuestion(BaseModel):
     id: str = Field(..., description="Soru kimliği (ör: V2, I_R1, MESH1, VTH, RTH)")
     label: str = Field(..., description="Gösterim sembolü (ör: V₂, I_R1, I₁, Vth)")
     description: str = Field(..., description="Türkçe soru metni")
-    unit: Literal["V", "A", "Ω", "W", "VAR", "VA", "F", "s", ""] = Field(
-        ..., description="Beklenen birim (s: saniye — geçici durum sorularında zaman sabitesi / süre)")
+    unit: Literal["V", "A", "Ω", "W", "VAR", "VA", "F", "s", "Hz", ""] = Field(
+        ..., description=("Beklenen birim (s: saniye — geçici durum sorularında zaman sabitesi / süre; "
+                          "Hz: rezonans sorularında frekans)"))
     group: Literal["main", "extra"] = Field(
         ..., description="main: yöntemin asıl bilinmeyenleri; extra: ek sorular")
     is_ac: bool = Field(..., description="True → cevap fazör (karmaşık) olmalı")
@@ -560,6 +565,35 @@ class PowerSummary(BaseModel):
         default=None, description="Hedef cos φ verildiyse kompanzasyon hesabı, verilmediyse null")
 
 
+class ResonanceCurve(BaseModel):
+    """Rezonans eğrisi: seride |I|(f), paralelde |Z|(f) (analitik, 400 nokta)."""
+    quantity: Literal["I", "Z"] = Field(..., description="Eğrinin büyüklüğü: seride I, paralelde Z")
+    unit: Literal["A", "Ω"] = Field(..., description="y ekseninin birimi")
+    f: List[float] = Field(..., description="Frekanslar (Hz), artan sırada; f₀ tam bir noktadır")
+    y: List[float] = Field(..., description="Her frekanstaki |I| (A) ya da |Z| (Ω), seçili gösterimde")
+
+
+class ResonanceSummary(BaseModel):
+    """
+    Rezonans (RESONANCE) yöntemi özeti — seri ya da paralel RLC.
+    Kaynağın frekansı kullanılmaz; f₀ devrenin L ve C'sinden bulunur.
+    """
+    kind: Literal["series", "parallel"] = Field(..., description="Devre biçimi: seri ya da paralel RLC")
+    f0: float = Field(..., description="Rezonans frekansı f₀ = 1/(2π√(LC)) (Hz)")
+    w0: float = Field(..., description="Açısal rezonans frekansı ω₀ = 1/√(LC) (rad/s)")
+    x: float = Field(..., description="Rezonanstaki reaktans X = ω₀L = 1/(ω₀C) (Ω)")
+    q: float = Field(..., description="Kalite faktörü Q (seri: X/R, paralel: R/X)")
+    bw: float = Field(..., description="Bant genişliği BW = f₀/Q (Hz)")
+    f1: float = Field(..., description="Alt kesim frekansı, kitap biçimi f₀ − BW/2 (Hz, yaklaşık)")
+    f2: float = Field(..., description="Üst kesim frekansı, kitap biçimi f₀ + BW/2 (Hz, yaklaşık)")
+    f1_exact: float = Field(..., description="Tam alt yarım güç frekansı (Hz)")
+    f2_exact: float = Field(..., description="Tam üst yarım güç frekansı (Hz); f2_exact − f1_exact = BW")
+    z0: float = Field(..., description="Rezonanstaki empedans Z₀ = R (Ω)")
+    i0: float = Field(..., description="Rezonansta kaynak akımı (A), seçili gösterimde")
+    v0: float = Field(..., description="Rezonansta L ve C üzerindeki gerilim (V), seçili gösterimde")
+    curve: ResonanceCurve = Field(..., description="Rezonans eğrisi")
+
+
 class AnalysisResults(BaseModel):
     """Tüm analiz sonuçlarını birleştiren konteyner."""
     node_voltages: Dict[str, NodeVoltage] = Field(
@@ -603,6 +637,9 @@ class AnalysisResults(BaseModel):
     power_summary: Optional[PowerSummary] = Field(
         default=None, exclude=True,
         description="İç kullanım: POWER yöntemi sonucu; API yanıtına AnalysisResponse.power_summary olarak taşınır")
+    resonance: Optional[ResonanceSummary] = Field(
+        default=None, exclude=True,
+        description="İç kullanım: RESONANCE yöntemi sonucu; API yanıtına AnalysisResponse.resonance olarak taşınır")
 
 
 # ═══════════════════════════════════════════════════════
@@ -649,6 +686,11 @@ class AnalysisResponse(BaseModel):
         description=(
             "Güç ve Güç Katsayısı (POWER) yöntemi özeti ve kompanzasyon sonucu. "
             "Yalnızca POWER başarılıysa dolu, aksi hâlde null"))
+    resonance: SkipJsonSchema[Optional[ResonanceSummary]] = Field(
+        default=None,
+        description=(
+            "Rezonans (RESONANCE) yöntemi özeti: f₀, Q, bant genişliği ve rezonans eğrisi. "
+            "Yalnızca RESONANCE başarılıysa dolu, aksi hâlde null"))
     warnings: List[str] = Field(
         default_factory=list,
         description=(

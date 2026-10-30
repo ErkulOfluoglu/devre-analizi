@@ -227,6 +227,7 @@ async def analyze_circuit(
 
         transient=results.transient,
         power_summary=results.power_summary,
+        resonance=results.resonance,
     )
 
 
@@ -488,6 +489,9 @@ def llm_ask(request: LlmAskRequest):
         # Frekans boşsa çözücü kaynak frekansını kullanır; anlatımdaki ω ile aynı olsun
         frequency = next((e.params["frequency"] for e in parsed.elements
                           if e.params.get("frequency")), None)
+    if results.resonance is not None:
+        # Rezonansta devre f₀'da çözülür; asistan da anlatımdaki frekansı görsün
+        frequency = results.resonance.f0
 
     # Geçici durum çözüldüyse asistan anahtarlı devreyi görür; diğer durumlarda devre t > 0
     # konumuyla çözülmüştür, asistan da aynı devreyi görsün

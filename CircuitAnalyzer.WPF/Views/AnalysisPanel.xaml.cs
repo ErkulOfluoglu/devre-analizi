@@ -18,6 +18,7 @@ public partial class AnalysisPanel : UserControl
     public event EventHandler? SolveRequested;
     public event EventHandler? ValueDisplayChanged;
     public event EventHandler<TransientAnalysisDto>? EnlargePlotRequested;
+    public event EventHandler<ResonanceDto>? EnlargeResonanceRequested;
 
     private BackendState _backendState = BackendState.Starting;
     private bool _isBusy;
@@ -276,6 +277,10 @@ public partial class AnalysisPanel : UserControl
         {
             CmbAnalysisType.SelectedIndex = 8;
         }
+        else if (string.Equals(analysisType, AnalysisTypes.Resonance, StringComparison.OrdinalIgnoreCase))
+        {
+            CmbAnalysisType.SelectedIndex = 9;
+        }
         else
         {
             CmbAnalysisType.SelectedIndex = 0;
@@ -433,6 +438,8 @@ public partial class AnalysisPanel : UserControl
             return AnalysisTypes.Transient;
         if (selectedText.Contains("Güç", StringComparison.OrdinalIgnoreCase))
             return AnalysisTypes.Power;
+        if (selectedText.Contains("Rezonans", StringComparison.OrdinalIgnoreCase))
+            return AnalysisTypes.Resonance;
         return AnalysisTypes.Nodal;
     }
 
@@ -771,6 +778,28 @@ public partial class AnalysisPanel : UserControl
 
             powerCard.Child = triangleView;
             ResultsContainer.Children.Add(powerCard);
+        }
+
+        // Rezonans Eğrisi Kartı
+        var resonanceData = response.Resonance ?? response.Results?.Resonance;
+        if (resonanceData != null)
+        {
+            var resCard = new Border
+            {
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            resCard.SetResourceReference(StyleProperty, "Card");
+
+            var resView = new ResonanceCurveView();
+            resView.LoadData(resonanceData);
+            resView.EnlargeClicked += (_, _) =>
+            {
+                EnlargeResonanceRequested?.Invoke(this, resonanceData);
+            };
+
+            resCard.Child = resView;
+            ResultsContainer.Children.Add(resCard);
         }
 
         bool hasExplanation = response.Results?.Explanation != null && response.Results.Explanation.Count > 0;

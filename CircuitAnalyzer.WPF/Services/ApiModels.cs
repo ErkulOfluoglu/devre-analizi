@@ -27,6 +27,7 @@ namespace CircuitAnalyzer.WPF.Services
         public const string SourceTransform = "SOURCE_TRANSFORM";
         public const string Transient = "TRANSIENT";
         public const string Power = "POWER";
+        public const string Resonance = "RESONANCE";
     }
 
     public sealed class TerminalsDto
@@ -241,6 +242,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("practice")] public List<PracticeQuestionDto> Practice { get; set; } = new();
         [JsonPropertyName("transient")] public TransientAnalysisDto? Transient { get; set; }
         [JsonPropertyName("power_summary")] public PowerSummaryDto? PowerSummary { get; set; }
+        [JsonPropertyName("resonance")] public ResonanceDto? Resonance { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -251,6 +253,7 @@ namespace CircuitAnalyzer.WPF.Services
     {
         [JsonPropertyName("value")] public ComplexNumberDto Value { get; set; } = new();
         [JsonPropertyName("message")] public string Message { get; set; } = "";
+        [JsonPropertyName("accepted")] public bool Accepted { get; set; }
     }
 
     /// <summary>
@@ -498,6 +501,33 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("compensation")] public PowerCompensationDto? Compensation { get; set; }
     }
 
+    public sealed class ResonanceCurveDto
+    {
+        [JsonPropertyName("quantity")] public string Quantity { get; set; } = "";
+        [JsonPropertyName("unit")] public string Unit { get; set; } = "";
+        [JsonPropertyName("f")] public List<double> F { get; set; } = new();
+        [JsonPropertyName("y")] public List<double> Y { get; set; } = new();
+    }
+
+    public sealed class ResonanceDto
+    {
+        /// <summary>"series" veya "parallel".</summary>
+        [JsonPropertyName("kind")] public string Kind { get; set; } = "series";
+        [JsonPropertyName("f0")] public double F0 { get; set; }
+        [JsonPropertyName("w0")] public double W0 { get; set; }
+        [JsonPropertyName("x")] public double X { get; set; }
+        [JsonPropertyName("q")] public double Q { get; set; }
+        [JsonPropertyName("bw")] public double Bw { get; set; }
+        [JsonPropertyName("f1")] public double F1 { get; set; }
+        [JsonPropertyName("f2")] public double F2 { get; set; }
+        [JsonPropertyName("f1_exact")] public double F1Exact { get; set; }
+        [JsonPropertyName("f2_exact")] public double F2Exact { get; set; }
+        [JsonPropertyName("z0")] public double Z0 { get; set; }
+        [JsonPropertyName("i0")] public double I0 { get; set; }
+        [JsonPropertyName("v0")] public double V0 { get; set; }
+        [JsonPropertyName("curve")] public ResonanceCurveDto? Curve { get; set; }
+    }
+
     public sealed class AnalysisResponseDto
     {
         /// <summary>"success" veya "warning".</summary>
@@ -511,6 +541,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("warnings")] public List<string> Warnings { get; set; } = new();
         [JsonPropertyName("transient")] public TransientAnalysisDto? Transient { get; set; }
         [JsonPropertyName("power_summary")] public PowerSummaryDto? PowerSummary { get; set; }
+        [JsonPropertyName("resonance")] public ResonanceDto? Resonance { get; set; }
     }
 
     public sealed class HealthDto

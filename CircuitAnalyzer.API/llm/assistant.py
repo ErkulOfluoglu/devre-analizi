@@ -39,6 +39,7 @@ _METHOD_NAMES = {
     AnalysisType.SOURCE_TRANSFORM: "Kaynak dönüşümü (Thevenin/Norton eşdeğerine ulaşma)",
     AnalysisType.TRANSIENT: "Geçici durum (anahtarlı RC / RL devresi, zaman sabitesi τ)",
     AnalysisType.POWER: "Güç ve güç katsayısı (P, Q, S, cos φ ve kompanzasyon)",
+    AnalysisType.RESONANCE: "Rezonans (seri/paralel RLC: f₀, kalite faktörü Q, bant genişliği)",
 }
 
 _RULES = """Sen meslek yüksekokulu elektronik öğrencilerine devre analizi anlatan sabırlı bir öğretmensin.
@@ -293,6 +294,10 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
                       ps.compensation.i_before, ps.compensation.i_after):
                 if v is not None:
                     values.append(v)
+    rs = getattr(results, "resonance", None)
+    if rs is not None:
+        values += [rs.f0, rs.w0, rs.x, rs.q, rs.bw, rs.f1, rs.f2, rs.f1_exact, rs.f2_exact,
+                   rs.z0, rs.i0, rs.v0]
     return known_from(values, texts)
 
 

@@ -47,6 +47,7 @@ namespace CircuitAnalyzer.WPF
                 if (_hasResults) await SolveAsync();
             };
             AnalysisPanel.EnlargePlotRequested += (_, data) => PlotOverlay.Show(data);
+            AnalysisPanel.EnlargeResonanceRequested += (_, data) => PlotOverlay.Show(data);
             Closed += (_, _) => _backend.Dispose();
 
             AnalysisPanel.AnswerChecker = async req =>

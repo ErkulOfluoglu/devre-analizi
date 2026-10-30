@@ -233,6 +233,8 @@ def build_explanation(
     superposition=None,
     port_extras: Optional[PortExtras] = None,
     power_inapplicable_reason: Optional[str] = None,
+    resonance_analysis=None,
+    resonance_inapplicable_reason: Optional[str] = None,
 ) -> List[ExplanationSection]:
     """
     Çözümün Türkçe anlatımını üretir. Çözüm başarısızsa boş liste döner.
@@ -303,6 +305,22 @@ def build_explanation(
             )
             analysis_type = ctx.analysis_type = AnalysisType.NODAL
             method_builders = (lambda c: [fallback],) + method_builders
+
+    if analysis_type == AnalysisType.RESONANCE:
+        if resonance_analysis is not None and results.resonance is not None:
+            # Döngüsel içe aktarmayı önlemek için yerel import
+            from explainer.resonance_narrative import build_resonance_sections
+            return [s.build() for s in build_resonance_sections(ctx, resonance_analysis) if s.blocks]
+        why = (resonance_inapplicable_reason
+               or "Rezonans yöntemi yalnızca seri ve paralel RLC devreleri için anlatılır.")
+        fallback = _Section("Rezonans")
+        fallback.note(
+            f"Bu devrede Rezonans yöntemi uygulanamadı: {why} "
+            "“Düğüm Gerilimleri” yöntemini seçebilirsiniz; aynı sonuçları şimdi o "
+            "yöntemle anlatıyoruz."
+        )
+        analysis_type = ctx.analysis_type = AnalysisType.NODAL
+        method_builders = (lambda c: [fallback],) + method_builders
 
     if analysis_type in (AnalysisType.MILLMAN, AnalysisType.SOURCE_TRANSFORM):
         # Döngüsel içe aktarmayı önlemek için yerel import
@@ -548,6 +566,16 @@ def _intro(ctx: _Ctx) -> List[_Section]:
         s.text(
             "Amaç: Önce düğüm gerilimlerini ve eleman akımlarını bularak devrenin aktif (P), "
             f"reaktif (Q) ve görünür (S) güçlerini, güç üçgenini ve güç katsayısını (cos φ) hesaplamak{comp_txt}."
+        )
+    elif ctx.analysis_type == AnalysisType.RESONANCE:
+        s.text(
+            "Amaç: seri ya da paralel RLC devresinin rezonans frekansını (f₀), kalite faktörünü (Q) "
+            "ve bant genişliğini (BW) bulmak; rezonansta empedansı, akımı ve bobin ile "
+            "kondansatörün gerilim/akımını hesaplamak."
+        )
+        s.text(
+            "Rezonans yönteminde kaynağın frekansı kullanılmaz: rezonans frekansı devrenin kendi "
+            "L ve C değerlerinden bulunur ve devre bu f₀ frekansında çözülür."
         )
     elif ctx.has_dependent and not (ctx.analysis_type == AnalysisType.MESH
                                     and ctx.mesh is not None):

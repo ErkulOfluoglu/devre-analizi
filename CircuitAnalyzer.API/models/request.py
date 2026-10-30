@@ -68,6 +68,8 @@ class AnalysisType(str, Enum):
     TRANSIENT: Geçici durum (Faz 2) — anahtarlı, tek C ya da tek L içeren DC devrede
               x(t) = x(∞) + [x(0) − x(∞)]·e^(−t/τ); sonuç yanıtın 'transient' alanında
     POWER:    Güç ve Güç Katsayısı — P, Q, S, cos φ, güç üçgeni ve isteğe bağlı kompanzasyon
+    RESONANCE: Rezonans — seri ya da paralel RLC devresinde f₀, Q, bant genişliği;
+              kaynağın frekansı kullanılmaz, devre f₀'da çözülür; sonuç 'resonance' alanında
 
     Not: 'thevenin_terminals' alanı THEVENIN, NORTON ve SOURCE_TRANSFORM analizi için
     hedef port (terminal çifti) tanımlamasında ortak kullanılır.
@@ -81,12 +83,13 @@ class AnalysisType(str, Enum):
     SOURCE_TRANSFORM = "SOURCE_TRANSFORM"
     TRANSIENT = "TRANSIENT"
     POWER = "POWER"
+    RESONANCE = "RESONANCE"
 
     @classmethod
     def __get_pydantic_json_schema__(cls, core_schema, handler):
         schema = handler(core_schema)
         if "enum" in schema:
-            schema["enum"] = [v for v in schema["enum"] if v != "POWER"]
+            schema["enum"] = [v for v in schema["enum"] if v not in ("POWER", "RESONANCE")]
         return schema
 
 

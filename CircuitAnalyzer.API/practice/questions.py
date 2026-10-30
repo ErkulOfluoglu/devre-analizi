@@ -9,6 +9,7 @@ Seçilen yönteme göre öğrenciye sorulacak büyüklükler:
     NORTON         asıl: In, Rn (Zn)
     SUPERPOSITION  asıl: her kaynağın katkısı ve toplam (bilinmeyen düğümlerde)
     POWER          asıl: toplam P, Q, S, cos φ (ve kompanzasyon varsa Q_C, C)
+    RESONANCE      asıl: f₀, Q, BW, rezonanstaki akım (seri) / empedans (paralel)   ek: f₁, f₂
 
 Doğru değerler çözücünün sonuçlarından alınır (anlatımla aynı sayılar).
 İpuçları cevabı vermez; yalnızca yöntemi hatırlatır.
@@ -214,6 +215,9 @@ def build_questions(
 
     if analysis_type == AnalysisType.POWER and results.power_summary is not None:
         return _power_method_questions(q, parsed, results.power_summary)
+
+    if analysis_type == AnalysisType.RESONANCE and results.resonance is not None:
+        return _resonance_questions(q, parsed, results.resonance, to_cn)
 
     if analysis_type == AnalysisType.SUPERPOSITION and contributions:
         return _superposition_questions(q, contributions, unknown_nodes, v_scale, has_dep)
@@ -460,6 +464,107 @@ def _power_method_questions(q, parsed: ParsedCircuit, ps) -> List[PracticeQuesti
             alternatives=c_alts, is_ac=False,
         ))
 
+    return out
+
+
+def _resonance_questions(q, parsed: ParsedCircuit, rs, to_cn) -> List[PracticeQuestion]:
+    """
+    RESONANCE yönteminde alıştırma soruları: f₀, Q, BW, rezonanstaki akım (seri) ya da
+    empedans (paralel) ve f₁, f₂. f₁/f₂ için beklenen kitap biçimi (f₀ ∓ BW/2) olup tam
+    yarım güç değeri de doğru kabul edilir (PracticeAlternative.accepted).
+    """
+    series = rs.kind == "series"
+    two_pi = 2.0 * math.pi
+    sqrt2 = math.sqrt(2.0)
+    out: List[PracticeQuestion] = []
+
+    out.append(q(
+        "F0", "f₀", "Rezonans frekansı f₀", "Hz", "main", rs.f0, rs.f0,
+        hint=("Rezonansta X_L = X_C olur: ω₀ = 1/√(L·C) ve f₀ = ω₀/(2π). "
+              "L'yi henri (H), C'yi farad (F) cinsinden yazmayı unutmayın."),
+        sign_hint="Frekans pozitiftir.",
+        alternatives=[
+            (rs.w0, "Bu açısal frekans ω₀ (rad/s). Frekans f₀ = ω₀/(2π) soruluyor (birimi Hz)."),
+        ],
+        is_ac=False,
+    ))
+
+    q_hint = ("Seri RLC'de Q = X/R (X = ω₀L = 1/(ω₀C)); paralel RLC'de Q = R/X. "
+              "Q birimsizdir.")
+    out.append(q(
+        "Q_FACTOR", "Q", "Kalite faktörü Q (birimsiz)", "", "main", rs.q, max(rs.q, 1.0),
+        hint=q_hint,
+        sign_hint="Kalite faktörü pozitiftir.",
+        alternatives=[
+            (1.0 / rs.q, "Oranı ters almış olabilirsiniz: seride Q = X/R, paralelde Q = R/X."),
+            (rs.x, "Bu reaktans X (Ω). Kalite faktörü Q = X/R (seri) ya da R/X (paralel) birimsiz bir orandır."),
+        ],
+        is_ac=False,
+    ))
+
+    out.append(q(
+        "BW", "BW", "Bant genişliği BW", "Hz", "main", rs.bw, rs.f0,
+        hint="Bant genişliği BW = f₀ / Q (Hz).",
+        sign_hint="Bant genişliği pozitiftir.",
+        alternatives=[
+            (rs.bw / 2.0, "Bu BW/2; bant genişliği f₂ − f₁ = f₀/Q'nun tamamıdır."),
+            (rs.bw * two_pi, "Bu değer rad/s cinsinden; bant genişliği Hz olarak BW = f₀/Q soruluyor."),
+        ],
+        is_ac=False,
+    ))
+
+    if series:
+        out.append(q(
+            "I_MAX", "I_max", "Rezonansta kaynaktan çekilen akım (en büyük değer)", "A", "main",
+            rs.i0, rs.i0,
+            hint=("Rezonansta X_L − X_C = 0 olduğundan seri devrenin empedansı toplam dirençtir "
+                  "(Z₀ = R); I_max = V / R."),
+            sign_hint="Akımın büyüklüğü soruluyor; pozitif yazın.",
+            alternatives=[
+                (rs.i0 * sqrt2, "Tepe ile etkin değer karışmış olabilir (√2 kat fark); "
+                                "programda seçili gösterimi kullanın."),
+                (rs.i0 / sqrt2, "Tepe ile etkin değer karışmış olabilir (√2 kat fark); "
+                                "programda seçili gösterimi kullanın."),
+            ],
+            is_ac=False,
+        ))
+    else:
+        out.append(q(
+            "Z0", "Z₀", "Rezonansta devrenin kaynağa göre empedansı", "Ω", "main", rs.z0, rs.z0,
+            hint=("Rezonansta bobin ve kondansatör kollarının etkisi birbirini götürür; paralel "
+                  "devrenin empedansı yalnızca dirençtir (Z₀ = R)."),
+            sign_hint="Direnç pozitiftir.",
+            alternatives=[
+                (rs.x, "Bu reaktans X. Rezonansta empedans yalnızca R'dir (Z₀ = R)."),
+            ],
+            is_ac=False,
+        ))
+
+    # f₁, f₂: beklenen kitap biçimi; tam yarım güç değeri de kabul edilir
+    for qid, label, desc, book, exact, sign in (
+        ("F1", "f₁", "Alt kesim (yarım güç) frekansı f₁ = f₀ − BW/2", rs.f1, rs.f1_exact, "−"),
+        ("F2", "f₂", "Üst kesim (yarım güç) frekansı f₂ = f₀ + BW/2", rs.f2, rs.f2_exact, "+"),
+    ):
+        question = q(
+            qid, label, desc, "Hz", "extra", book, rs.f0,
+            hint=(f"Önce BW = f₀/Q'yu bulun; sonra {label} = f₀ {sign} BW/2. Q küçükse tam "
+                  "yarım güç değeri de kabul edilir."),
+            sign_hint="Frekans pozitiftir.",
+            alternatives=[
+                (rs.bw, f"Bu bant genişliği BW. {label} = f₀ {sign} BW/2 soruluyor."),
+                (rs.f0 + (1 if sign == "+" else -1) * rs.bw,
+                 f"BW/2 yerine BW'yi eklemiş/çıkarmış olabilirsiniz: {label} = f₀ {sign} BW/2."),
+            ],
+            is_ac=False,
+        )
+        if abs(exact - book) > 0.005 * abs(book):
+            question.alternatives.append(PracticeAlternative(
+                value=to_cn(exact),
+                message=("Bu tam yarım güç frekansı; kitaptaki yaklaşık biçim "
+                         f"{label} = f₀ {sign} BW/2 de doğrudur."),
+                accepted=True,
+            ))
+        out.append(question)
     return out
 
 
