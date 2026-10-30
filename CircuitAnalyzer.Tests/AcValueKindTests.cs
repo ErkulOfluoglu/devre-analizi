@@ -429,4 +429,24 @@ public class AcValueKindTests
             }
         });
     }
+
+    [Fact]
+    public void PhasorFrequencies_ReportDistinctSourceFrequencies()
+    {
+        RunOnSta(() =>
+        {
+            var c = new TestCircuits();
+            var v1 = c.Add(new AcVoltageSource { InputMode = AcInputMode.Phasor, Amplitude = 10, Frequency = 60 }, "V1");
+            var r1 = c.Add(new Resistor { Value = 100 }, "R1");
+            var gnd = c.Add(new GroundElement(), "GND1");
+            c.Wire(v1.Pins[0], r1.Pins[0]);
+            c.Wire(r1.Pins[1], gnd.Pins[0]);
+            c.Wire(v1.Pins[1], gnd.Pins[0]);
+
+            Assert.Equal(new[] { 60.0 }, NetlistBuilder.Build(c.Elements, c.Wires).PhasorFrequencies);
+
+            v1.InputMode = AcInputMode.Physical;
+            Assert.Empty(NetlistBuilder.Build(c.Elements, c.Wires).PhasorFrequencies);
+        });
+    }
 }

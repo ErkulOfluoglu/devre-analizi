@@ -29,8 +29,11 @@ namespace CircuitAnalyzer.WPF.Services
         /// <summary>Devrede AC kaynak var mı (analiz modu seçimi için).</summary>
         public bool HasAcSource { get; init; }
 
-        /// <summary>Fazör modunda girilmiş AC kaynak var mı (frekans gerektirir).</summary>
+        /// <summary>Fazör modunda girilmiş AC kaynak var mı.</summary>
         public bool HasPhasorSource { get; init; }
+
+        /// <summary>Fazör kaynakların frekansları (farklı değerler). Netlist satırı frekans taşımaz; istekle gider.</summary>
+        public IReadOnlyList<double> PhasorFrequencies { get; init; } = Array.Empty<double>();
     }
 
     /// <summary>
@@ -275,6 +278,9 @@ namespace CircuitAnalyzer.WPF.Services
                 HasGround = hasGround,
                 HasAcSource = acSources.Count > 0 || acCurrentSources.Count > 0,
                 HasPhasorSource = acSources.Any(s => s.InputMode == AcInputMode.Phasor) || acCurrentSources.Any(s => s.InputMode == AcInputMode.Phasor),
+                PhasorFrequencies = acSources.Where(s => s.InputMode == AcInputMode.Phasor).Select(s => s.Frequency)
+                    .Concat(acCurrentSources.Where(s => s.InputMode == AcInputMode.Phasor).Select(s => s.Frequency))
+                    .Distinct().ToList(),
             };
         }
     }

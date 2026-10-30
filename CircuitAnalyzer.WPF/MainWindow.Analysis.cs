@@ -171,7 +171,7 @@ namespace CircuitAnalyzer.WPF
         private void RefreshCircuitInfo()
         {
             var netlist = NetlistBuilder.Build(_elements, _wires);
-            AnalysisPanel.SetCircuitInfo(netlist.HasAcSource, netlist.HasPhasorSource);
+            AnalysisPanel.SetCircuitInfo(netlist.HasAcSource, needsFrequency: false);
             // Tek pinlik düğüm = bağlanmamış uç; terminal olarak sunulmaz
             AnalysisPanel.SetAvailableNodes(netlist.NodePins
                 .Where(kv => kv.Key == 0 || kv.Value.Count >= 2)
@@ -209,11 +209,22 @@ namespace CircuitAnalyzer.WPF
             }
 
             var netlist = NetlistBuilder.Build(_elements, _wires);
+            if (options!.Frequency == null && netlist.PhasorFrequencies.Count > 1)
+            {
+                AnalysisPanel.ShowError("Frekanslar farklı",
+                    "Fazör kaynakların frekansları farklı. Fazör çözümü tek bir frekansta yapılır: " +
+                    "sağdaki Frekans kutusuna ortak frekansı yazın ya da farklı frekanslı kaynakları " +
+                    "Fiziksel moda alıp Süperpozisyon yöntemini seçin.");
+                return;
+            }
+
             var request = new AnalysisRequestDto
             {
                 Netlist = netlist.Text,
                 Mode = netlist.HasAcSource ? AnalysisModes.AcPhasor : AnalysisModes.Dc,
-                Frequency = netlist.HasAcSource ? options!.Frequency : null,
+                Frequency = netlist.HasAcSource
+                    ? options.Frequency ?? (netlist.PhasorFrequencies.Count == 1 ? netlist.PhasorFrequencies[0] : null)
+                    : null,
                 AnalysisType = options!.AnalysisType,
                 TheveninTerminals = options.AnalysisType == AnalysisTypes.Nodal
                     ? null

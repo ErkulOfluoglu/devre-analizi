@@ -259,6 +259,8 @@ namespace CircuitAnalyzer.WPF
                     ac.Amplitude = cv.Magnitude;
                     ac.Phase = cv.AngleDegrees;
                 }
+                if (_valueBoxes.Count >= 1 && TurkishNumber.TryParse(_valueBoxes[0].Text, out double f))
+                    ac.Frequency = f;
             }
         }
 
@@ -302,6 +304,9 @@ namespace CircuitAnalyzer.WPF
                         ac.Amplitude = cv.Magnitude;
                         ac.Phase = cv.AngleDegrees;
                     });
+
+                AddFieldTo(_dynamicPanel, "Frekans (Hz)", ac.Frequency,
+                    v => ac.Frequency = v);
 
                 AddHintTextTo(_dynamicPanel,
                     "Örnek: 10∠30, 12<45, 7,07+j7,07");
@@ -376,6 +381,8 @@ namespace CircuitAnalyzer.WPF
                     ac.Amplitude = cv.Magnitude;
                     ac.Phase = cv.AngleDegrees;
                 }
+                if (_valueBoxes.Count >= 1 && TurkishNumber.TryParse(_valueBoxes[0].Text, out double f))
+                    ac.Frequency = f;
             }
         }
 
@@ -415,11 +422,14 @@ namespace CircuitAnalyzer.WPF
                         ac.Phase = cv.AngleDegrees;
                     });
 
+                AddFieldTo(_dynamicPanel, "Frekans (Hz)", ac.Frequency,
+                    v => ac.Frequency = v);
+
                 AddHintTextTo(_dynamicPanel,
                     "Örnek: 10∠30, 0,01<45, 0,007+j0,007");
             }
 
-            if (_valueBoxes.Count > 0)
+            if (_complexInputBox == null && _valueBoxes.Count > 0)
             {
                 _valueBoxes[0].Focus();
                 _valueBoxes[0].SelectAll();
@@ -704,9 +714,15 @@ namespace CircuitAnalyzer.WPF
             if (ComplexValue.TryParse(input, out var cv))
             {
                 _previewText.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Success");
+                string unit = _element switch
+                {
+                    AcVoltageSource => "V",
+                    AcCurrentSource => "A",
+                    _ => "Ω",
+                };
                 _previewText.Text =
-                    $"Dikdörtgensel: {cv.ToRectangularString()} Ω\n" +
-                    $"Kutupsal: {cv.ToPolarString()} Ω";
+                    $"Dikdörtgensel: {cv.ToRectangularString()} {unit}\n" +
+                    $"Kutupsal: {cv.ToPolarString()} {unit}";
             }
             else
             {
@@ -828,7 +844,8 @@ namespace CircuitAnalyzer.WPF
 
                 // Faz açısı dışındaki değerler pozitif olmalı (CurrentSource hariç: negatif serbest, sıfır yasak)
                 bool isPhaseField = i == _valueBoxes.Count - 1 &&
-                    (_element is AcVoltageSource || _element is AcCurrentSource);
+                    ((_element is AcVoltageSource vac && vac.InputMode == AcInputMode.Physical) ||
+                     (_element is AcCurrentSource iac && iac.InputMode == AcInputMode.Physical));
 
                 if (_element is CurrentSource)
                 {
