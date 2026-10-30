@@ -861,6 +861,11 @@ def _solve_core(
             resonance_inapplicable_reason = (
                 f"{why} Devre f₀ = {num(resonance_analysis.f0)} Hz frekansında çözüldü.")
             resonance_analysis = None
+    # Sebep anlatımın içinde kalmasın: panelin üstünde de görünsün
+    if resonance_inapplicable_reason:
+        errors.append(f"ℹ Rezonans yöntemi uygulanamadı: {resonance_inapplicable_reason}")
+    if power_inapplicable_reason:
+        errors.append(f"ℹ Güç ve Güç Katsayısı yöntemi uygulanamadı: {power_inapplicable_reason}")
 
     # ── Adım 6.7: Bağımlı kaynaklı Thevenin/Norton için ek sayılar ──
     port_extras = None
