@@ -154,6 +154,33 @@
                     <TextBox x:Name="TxtFrequency"/>
                 </StackPanel>
 
+                <!-- Değer Gösterimi (AC için: Etkin / Tepe) -->
+                <StackPanel x:Name="RowValueDisplay"
+                            Margin="0,8,0,0"
+                            Visibility="Collapsed">
+                    <TextBlock Text="Sonuçlar"
+                               Style="{DynamicResource Text.Caption}"
+                               Margin="0,0,0,4"/>
+                    <Border Style="{DynamicResource Segment.Track}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <ToggleButton x:Name="BtnDisplayRms"
+                                          Grid.Column="0"
+                                          Content="Etkin"
+                                          Style="{DynamicResource Segment.Item}"
+                                          Click="BtnDisplayRms_Click"/>
+                            <ToggleButton x:Name="BtnDisplayPeak"
+                                          Grid.Column="1"
+                                          Content="Tepe"
+                                          Style="{DynamicResource Segment.Item}"
+                                          Click="BtnDisplayPeak_Click"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
                 <!-- Alıştırma modu switch -->
                 <CheckBox x:Name="ChkPracticeMode"
                           Style="{DynamicResource CheckBox.Switch}"

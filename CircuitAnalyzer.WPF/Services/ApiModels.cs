@@ -41,6 +41,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("frequency")] public double? Frequency { get; set; }
         [JsonPropertyName("analysis_type")] public string AnalysisType { get; set; } = AnalysisTypes.Nodal;
         [JsonPropertyName("thevenin_terminals")] public TerminalsDto? TheveninTerminals { get; set; }
+        [JsonPropertyName("value_display")] public string ValueDisplay { get; set; } = "PEAK";
     }
 
     // ═══════════════════════════════════════════════════════
@@ -406,6 +407,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("frequency")] public double? Frequency { get; set; }
         [JsonPropertyName("analysis_type")] public string AnalysisType { get; set; } = AnalysisTypes.Nodal;
         [JsonPropertyName("thevenin_terminals")] public TerminalsDto? TheveninTerminals { get; set; }
+        [JsonPropertyName("value_display")] public string ValueDisplay { get; set; } = "PEAK";
         [JsonPropertyName("question")] public string Question { get; set; } = "";
         /// <summary>Boşsa sunucu seçer (önerilen ya da ilk kurulu model).</summary>
         [JsonPropertyName("model")] public string? Model { get; set; }
@@ -423,6 +425,7 @@ namespace CircuitAnalyzer.WPF.Services
             Frequency = analysis.Frequency,
             AnalysisType = analysis.AnalysisType,
             TheveninTerminals = analysis.TheveninTerminals,
+            ValueDisplay = analysis.ValueDisplay,
             Question = question,
         };
     }

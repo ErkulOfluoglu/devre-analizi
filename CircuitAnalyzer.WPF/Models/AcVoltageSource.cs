@@ -23,6 +23,17 @@ namespace CircuitAnalyzer.WPF.Models
     }
 
     /// <summary>
+    /// AC kaynak değer türü:
+    /// Peak: Tepe değer (varsayılan)
+    /// Rms: Etkin değer
+    /// </summary>
+    public enum AcValueKind
+    {
+        Peak,
+        Rms
+    }
+
+    /// <summary>
     /// AC Gerilim Kaynağı (AC Voltage Source) devre elemanı.
     /// IEC 60617 standardına uygun daire + sinüs dalgası sembolü.
     /// 
@@ -94,6 +105,13 @@ namespace CircuitAnalyzer.WPF.Models
         /// Python backend'e ayrı JSON parametresi olarak gönderilir.
         /// </summary>
         public AcInputMode InputMode { get; set; } = AcInputMode.Physical;
+
+        /// <summary>
+        /// Değer türü: Peak (varsayılan) veya Rms.
+        /// Rms ise Netlist satırı sonuna " RMS" eklenir.
+        /// Değer etiketinde Peak ise "Um " ön eki gösterilir.
+        /// </summary>
+        public AcValueKind ValueKind { get; set; } = AcValueKind.Peak;
 
         public AcVoltageSource()
         {
@@ -270,27 +288,29 @@ namespace CircuitAnalyzer.WPF.Models
             int nodePlus = nodeMap[Pins[0]];
             int nodeMinus = nodeMap[Pins[1]];
 
+            string rmsSuffix = ValueKind == AcValueKind.Rms ? " RMS" : "";
+
             // Fiziksel mod → SPICE SINE formatı
             // Fazör mod → özel AC_PHASOR formatı (frekans JSON ile ayrıca gönderilir)
             if (InputMode == AcInputMode.Phasor)
             {
                 string mag = Amplitude.ToString(CultureInfo.InvariantCulture);
                 string ph = Phase.ToString(CultureInfo.InvariantCulture);
-                return $"{Id} {nodePlus} {nodeMinus} AC_PHASOR({mag}, {ph})";
+                return $"{Id} {nodePlus} {nodeMinus} AC_PHASOR({mag}, {ph}){rmsSuffix}";
             }
 
             string amp = Amplitude.ToString(CultureInfo.InvariantCulture);
             string freq = Frequency.ToString(CultureInfo.InvariantCulture);
             string phase = Phase.ToString(CultureInfo.InvariantCulture);
 
-            return $"{Id} {nodePlus} {nodeMinus} SINE(0 {amp} {freq} 0 0 {phase})";
+            return $"{Id} {nodePlus} {nodeMinus} SINE(0 {amp} {freq} 0 0 {phase}){rmsSuffix}";
         }
 
         /// <summary>
         /// Değerleri okunabilir formatta gösterir.
-        /// Örnek: "10V 50Hz ∠30°"
+        /// Örnek: "10V 50Hz ∠30°" (Rms) veya "Um 10V 50Hz ∠30°" (Peak)
         /// </summary>
-        private string FormatValue()
+        internal string FormatValue()
         {
             string ampStr;
             if (Amplitude >= 1000)
@@ -300,10 +320,12 @@ namespace CircuitAnalyzer.WPF.Models
             else
                 ampStr = $"{TurkishNumber.Format(Amplitude * 1000, "G3")}mV";
 
-            // Fazör modunda: "10V∠30°" (frekans gösterilmez)
+            string prefix = ValueKind == AcValueKind.Peak ? "Um " : "";
+
+            // Fazör modunda: "10V∠30°" veya "Um 10V∠30°"
             if (InputMode == AcInputMode.Phasor)
             {
-                return $"{ampStr}∠{TurkishNumber.Format(Phase, "G3")}°";
+                return $"{prefix}{ampStr}∠{TurkishNumber.Format(Phase, "G3")}°";
             }
 
             // Fiziksel modda: "10V 50Hz ∠30°"
@@ -316,9 +338,9 @@ namespace CircuitAnalyzer.WPF.Models
                 freqStr = $"{TurkishNumber.Format(Frequency, "G3")}Hz";
 
             if (Math.Abs(Phase) < 0.01)
-                return $"{ampStr} {freqStr}";
+                return $"{prefix}{ampStr} {freqStr}";
 
-            return $"{ampStr} {freqStr} ∠{TurkishNumber.Format(Phase, "G3")}°";
+            return $"{prefix}{ampStr} {freqStr} ∠{TurkishNumber.Format(Phase, "G3")}°";
         }
     }
 }

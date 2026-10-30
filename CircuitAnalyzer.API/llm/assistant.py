@@ -50,6 +50,15 @@ Kurallar:
 6. İşaret kuralı (pasif işaret kuralı): Her elemanın akımı, ELEMANIN İÇİNDEN (+) ucundan (−) ucuna doğru (eleman adının yanındaki "1→0" gibi düğüm sırası) pozitif alınır. Güç veren bir gerilim kaynağında gerçek akım kaynağın içinden (−) uçtan (+) uca akar ve dış devreye (+) uçtan çıkar; bu yüzden kaynağın akımı EKSİ çıkar. Eksi işaret hata değildir, akımın seçilen referans yönün tersine aktığını gösterir.
 7. Formülleri düz metinle yaz (LaTeX ve Markdown kullanma)."""
 
+
+def _rules_for(value_basis: str) -> str:
+    if value_basis == "RMS":
+        return _RULES.replace(
+            "5. Fazörler tepe (maksimum) değerdir, etkin değer değildir.",
+            "5. Fazörler etkin (RMS) değerdir; tepe değer Um = √2·V ile bulunur."
+        )
+    return _RULES
+
 _PRACTICE_RULES = """ÖNEMLİ: Öğrenci şu anda bu devreyle ALIŞTIRMA çözüyor; sonuçlar sana bilerek verilmedi.
 Hiçbir sorunun sayısal cevabını söyleme ve sayısal hesap yapma.
 Yalnızca yöntemi, hangi denklemin nasıl kurulacağını ve bir sonraki adımı sözle tarif et."""
@@ -59,10 +68,11 @@ def _node(n: str) -> str:
     return "GND" if n == "0" else f"Düğüm {n}"
 
 
-def describe_element(e: ParsedElement) -> str:
+def describe_element(e: ParsedElement, value_basis: str = "PEAK") -> str:
     t = e.element_type
     between = f"{_node(e.node_positive)} – {_node(e.node_negative)}"
     p = e.params
+    basis_label = "etkin (RMS)" if value_basis == "RMS" else "tepe"
     if t == ElementType.RESISTOR:
         return f"{e.id}: direnç {eng(e.value, 'Ω')}, {between}"
     if t == ElementType.CAPACITOR:
@@ -78,7 +88,7 @@ def describe_element(e: ParsedElement) -> str:
         amp = p.get("amplitude", e.value)
         freq = p.get("frequency")
         f_txt = f", f = {num(freq)} Hz" if freq else ""
-        return (f"{e.id}: AC gerilim kaynağı, genlik (tepe) {eng(amp, 'V')}, faz {num(p.get('phase', 0))}°{f_txt}, "
+        return (f"{e.id}: AC gerilim kaynağı, genlik ({basis_label}) {eng(amp, 'V')}, faz {num(p.get('phase', 0))}°{f_txt}, "
                 f"(+) ucu {_node(e.node_positive)}, (−) ucu {_node(e.node_negative)}")
     if t == ElementType.CURRENT_DC:
         return (f"{e.id}: DC akım kaynağı {eng(e.value, 'A')}, akım kaynak içinde "
@@ -87,7 +97,7 @@ def describe_element(e: ParsedElement) -> str:
         amp = p.get("amplitude", e.value)
         freq = p.get("frequency")
         f_txt = f", f = {num(freq)} Hz" if freq else ""
-        return (f"{e.id}: AC akım kaynağı, genlik (tepe) {eng(amp, 'A')}, faz {num(p.get('phase', 0))}°{f_txt}, "
+        return (f"{e.id}: AC akım kaynağı, genlik ({basis_label}) {eng(amp, 'A')}, faz {num(p.get('phase', 0))}°{f_txt}, "
                 f"akım kaynak içinde {_node(e.node_positive)} → {_node(e.node_negative)} yönünde")
     if t == ElementType.SWITCH:
         kind = p.get("kind")
@@ -114,9 +124,11 @@ def describe_element(e: ParsedElement) -> str:
 
 
 def circuit_text(parsed: ParsedCircuit, is_dc: bool, frequency: Optional[float]) -> str:
+    basis = getattr(parsed, "value_basis", "PEAK")
     lines = ["DEVRE:"]
-    lines += [f"- {describe_element(e)}" for e in parsed.elements]
-    lines.append(f"Analiz: {'DC' if is_dc else f'AC (fazör), f = {num(frequency)} Hz' if frequency else 'AC (fazör)'}")
+    lines += [f"- {describe_element(e, basis)}" for e in parsed.elements]
+    ac_label = f"AC (fazör, {'etkin/RMS' if basis == 'RMS' else 'tepe'})"
+    lines.append(f"Analiz: {'DC' if is_dc else f'{ac_label}, f = {num(frequency)} Hz' if frequency else ac_label}")
     return "\n".join(lines)
 
 
@@ -205,7 +217,8 @@ def build_messages(
     if terminals is not None and analysis_type in (AnalysisType.THEVENIN, AnalysisType.NORTON,
                                                   AnalysisType.SOURCE_TRANSFORM):
         method += f" ({_node(terminals.node_positive)} – {_node(terminals.node_negative)} terminalleri)"
-    ctx = [_RULES, "", circuit_text(parsed, is_dc, frequency), f"Yöntem: {method}", ""]
+    basis = getattr(parsed, "value_basis", "PEAK")
+    ctx = [_rules_for(basis), "", circuit_text(parsed, is_dc, frequency), f"Yöntem: {method}", ""]
     if practice:
         ctx.append(_PRACTICE_RULES)
         known_text = known_nodes_text(parsed, is_dc)
@@ -235,7 +248,7 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
     for e in parsed.elements:
         values.append(complex(e.params.get("impedance", e.value)) if e.element_type == ElementType.IMPEDANCE
                       else e.value)
-        for key in ("amplitude", "frequency", "phase"):
+        for key in ("amplitude", "input_value", "frequency", "phase"):
             if e.params.get(key) is not None:
                 values.append(e.params[key])
     if frequency:

@@ -11,4 +11,5 @@ public sealed record SolveOptions(
     string AnalysisType,
     double? Frequency,
     string? TerminalPositive,
-    string TerminalNegative);
+    string TerminalNegative,
+    string ValueDisplay = "RMS");

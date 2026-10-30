@@ -18,6 +18,7 @@ Kullanım:
 from enum import Enum
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field, ConfigDict
+from pydantic.json_schema import SkipJsonSchema
 from models.response import PracticeQuestion
 
 
@@ -36,6 +37,17 @@ class AnalysisMode(str, Enum):
     DC = "DC"
     AC_TIME = "AC_TIME"
     AC_PHASOR = "AC_PHASOR"
+
+
+class ValueDisplay(str, Enum):
+    """
+    AC büyüklüklerin gösterim tabanı.
+
+    PEAK: Tepe (maksimum) değer — V = Vm∠φ, S = ½·V·I*
+    RMS:  Etkin (RMS) değer     — V = V_rms∠φ, S = V·I*
+    """
+    PEAK = "PEAK"
+    RMS = "RMS"
 
 
 class AnalysisType(str, Enum):
@@ -305,6 +317,12 @@ class AnalysisRequest(BaseModel):
         default=None,
         description="Thevenin, Norton veya kaynak dönüşümü analizi yapılırken eşdeğer devrenin hesaplanacağı iki terminal düğümü.",
         examples=[{"node_positive": "2", "node_negative": "0"}],
+    )
+
+    value_display: SkipJsonSchema[ValueDisplay] = Field(
+        default=ValueDisplay.PEAK,
+        description="AC büyüklüklerin gösterim tabanı: 'PEAK' (tepe değer, varsayılan) veya 'RMS' (etkin değer).",
+        examples=["PEAK"],
     )
 
 

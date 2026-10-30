@@ -219,6 +219,7 @@ namespace CircuitAnalyzer.WPF.Services
             Amplitude = rng.Pick(AcAmplitudes),
             Frequency = frequency,
             Phase = rng.Pick(AcPhases),
+            ValueKind = AcValueKind.Rms,
         };
 
         /// <summary>

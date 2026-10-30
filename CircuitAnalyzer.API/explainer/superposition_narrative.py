@@ -166,7 +166,8 @@ def build_superposition_sections(ctx: _Ctx, contributions: List[Contribution]) -
                 else:
                     ph = math.degrees(cmath.phase(z))
                     sign = "+" if ph >= 0 else MINUS
-                    parts.append(f"{num(abs(z))}·{fn_by_freq[f]}({num(2 * math.pi * f)}t "
+                    amp = math.sqrt(2.0) * abs(z) if ctx.is_rms else abs(z)
+                    parts.append(f"{num(amp)}·{fn_by_freq[f]}({num(2 * math.pi * f)}t "
                                  f"{sign} {num(abs(ph))}°)")
             return _join_terms(parts) or "0"
 

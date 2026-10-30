@@ -217,15 +217,49 @@ namespace CircuitAnalyzer.WPF
                 ac.InputMode == AcInputMode.Physical,
                 isFirst =>
                 {
+                    SyncValuesBeforeRebuild(ac);
                     ac.InputMode = isFirst ? AcInputMode.Physical : AcInputMode.Phasor;
                     RebuildAcFields(ac);
-                });
+                },
+                "InputMode_" + ac.Id);
+
+            // Değer türü seçici
+            AddModeSelector(
+                "Değer türü:",
+                "Etkin",
+                "Tepe",
+                ac.ValueKind == AcValueKind.Rms,
+                isEtkin =>
+                {
+                    SyncValuesBeforeRebuild(ac);
+                    ac.ValueKind = isEtkin ? AcValueKind.Rms : AcValueKind.Peak;
+                    RebuildAcFields(ac);
+                },
+                "ValueKind_" + ac.Id);
 
             // Dinamik alanlar paneli
             _dynamicPanel = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
             PropertiesPanel.Children.Add(_dynamicPanel);
 
             RebuildAcFields(ac);
+        }
+
+        private void SyncValuesBeforeRebuild(AcVoltageSource ac)
+        {
+            if (ac.InputMode == AcInputMode.Physical && _valueBoxes.Count >= 3)
+            {
+                if (TurkishNumber.TryParse(_valueBoxes[0].Text, out double a)) ac.Amplitude = a;
+                if (TurkishNumber.TryParse(_valueBoxes[1].Text, out double f)) ac.Frequency = f;
+                if (TurkishNumber.TryParse(_valueBoxes[2].Text, out double p)) ac.Phase = p;
+            }
+            else if (ac.InputMode == AcInputMode.Phasor && _complexInputBox != null)
+            {
+                if (ComplexValue.TryParse(_complexInputBox.Text, out var cv))
+                {
+                    ac.Amplitude = cv.Magnitude;
+                    ac.Phase = cv.AngleDegrees;
+                }
+            }
         }
 
         /// <summary>
@@ -245,7 +279,8 @@ namespace CircuitAnalyzer.WPF
             if (ac.InputMode == AcInputMode.Physical)
             {
                 // ── Fiziksel mod: üç ayrı sayısal alan ──
-                AddFieldTo(_dynamicPanel, "Genlik (V)", ac.Amplitude,
+                string ampLabel = ac.ValueKind == AcValueKind.Rms ? "Etkin değer (V)" : "Tepe değer Um (V)";
+                AddFieldTo(_dynamicPanel, ampLabel, ac.Amplitude,
                     v => ac.Amplitude = v);
                 AddFieldTo(_dynamicPanel, "Frekans (Hz)", ac.Frequency,
                     v => ac.Frequency = v);
@@ -255,9 +290,13 @@ namespace CircuitAnalyzer.WPF
             else
             {
                 // ── Fazör mod: kutupsal metin girişi ──
+                string phasorLabel = ac.ValueKind == AcValueKind.Rms
+                    ? "Fazör değeri, etkin (V∠θ°)"
+                    : "Fazör değeri, tepe (Um∠θ°)";
+
                 string currentText = $"{TurkishNumber.Format(ac.Amplitude, "G4")}∠{TurkishNumber.Format(ac.Phase, "G4")}";
 
-                AddComplexFieldTo(_dynamicPanel, "Fazör değeri (V∠θ°):",
+                AddComplexFieldTo(_dynamicPanel, phasorLabel,
                     currentText, cv =>
                     {
                         ac.Amplitude = cv.Magnitude;
@@ -297,14 +336,47 @@ namespace CircuitAnalyzer.WPF
                 ac.InputMode == AcInputMode.Physical,
                 isFirst =>
                 {
+                    SyncValuesBeforeRebuild(ac);
                     ac.InputMode = isFirst ? AcInputMode.Physical : AcInputMode.Phasor;
                     RebuildAcFields(ac);
-                });
+                },
+                "InputMode_" + ac.Id);
+
+            AddModeSelector(
+                "Değer türü:",
+                "Etkin",
+                "Tepe",
+                ac.ValueKind == AcValueKind.Rms,
+                isEtkin =>
+                {
+                    SyncValuesBeforeRebuild(ac);
+                    ac.ValueKind = isEtkin ? AcValueKind.Rms : AcValueKind.Peak;
+                    RebuildAcFields(ac);
+                },
+                "ValueKind_" + ac.Id);
 
             _dynamicPanel = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
             PropertiesPanel.Children.Add(_dynamicPanel);
 
             RebuildAcFields(ac);
+        }
+
+        private void SyncValuesBeforeRebuild(AcCurrentSource ac)
+        {
+            if (ac.InputMode == AcInputMode.Physical && _valueBoxes.Count >= 3)
+            {
+                if (TurkishNumber.TryParse(_valueBoxes[0].Text, out double a)) ac.Amplitude = a;
+                if (TurkishNumber.TryParse(_valueBoxes[1].Text, out double f)) ac.Frequency = f;
+                if (TurkishNumber.TryParse(_valueBoxes[2].Text, out double p)) ac.Phase = p;
+            }
+            else if (ac.InputMode == AcInputMode.Phasor && _complexInputBox != null)
+            {
+                if (ComplexValue.TryParse(_complexInputBox.Text, out var cv))
+                {
+                    ac.Amplitude = cv.Magnitude;
+                    ac.Phase = cv.AngleDegrees;
+                }
+            }
         }
 
         private void RebuildAcFields(AcCurrentSource ac)
@@ -320,7 +392,8 @@ namespace CircuitAnalyzer.WPF
 
             if (ac.InputMode == AcInputMode.Physical)
             {
-                AddFieldTo(_dynamicPanel, "Genlik (A)", ac.Amplitude,
+                string ampLabel = ac.ValueKind == AcValueKind.Rms ? "Etkin değer (A)" : "Tepe değer Im (A)";
+                AddFieldTo(_dynamicPanel, ampLabel, ac.Amplitude,
                     v => ac.Amplitude = v);
                 AddFieldTo(_dynamicPanel, "Frekans (Hz)", ac.Frequency,
                     v => ac.Frequency = v);
@@ -329,9 +402,13 @@ namespace CircuitAnalyzer.WPF
             }
             else
             {
+                string phasorLabel = ac.ValueKind == AcValueKind.Rms
+                    ? "Fazör değeri, etkin (A∠θ°)"
+                    : "Fazör değeri, tepe (Im∠θ°)";
+
                 string currentText = $"{TurkishNumber.Format(ac.Amplitude, "G4")}∠{TurkishNumber.Format(ac.Phase, "G4")}";
 
-                AddComplexFieldTo(_dynamicPanel, "Fazör değeri (A∠θ°):",
+                AddComplexFieldTo(_dynamicPanel, phasorLabel,
                     currentText, cv =>
                     {
                         ac.Amplitude = cv.Magnitude;
@@ -647,7 +724,7 @@ namespace CircuitAnalyzer.WPF
 
         /// <summary>Mod seçici RadioButton çifti ekler.</summary>
         private void AddModeSelector(string label, string option1, string option2,
-            bool isFirstSelected, Action<bool> onChanged)
+            bool isFirstSelected, Action<bool> onChanged, string groupName = "InputMode")
         {
             var lbl = new TextBlock
             {
@@ -666,7 +743,7 @@ namespace CircuitAnalyzer.WPF
             {
                 Content = option1,
                 IsChecked = isFirstSelected,
-                GroupName = "InputMode",
+                GroupName = groupName,
                 Margin = new Thickness(0, 0, 16, 0)
             };
             radio1.SetResourceReference(Control.ForegroundProperty, "Brush.Text.Primary");
@@ -675,7 +752,7 @@ namespace CircuitAnalyzer.WPF
             {
                 Content = option2,
                 IsChecked = !isFirstSelected,
-                GroupName = "InputMode"
+                GroupName = groupName
             };
             radio2.SetResourceReference(Control.ForegroundProperty, "Brush.Text.Primary");
 

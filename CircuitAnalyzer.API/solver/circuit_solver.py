@@ -43,7 +43,7 @@ from parser.netlist_parser import (
     ElementType, to_lcapy_netlist, lcapy_sense_map,
     ALL_SOURCES, CURRENT_SOURCES, DEPENDENT_SOURCES, DEPENDENT_CURRENT_OUTPUT,
     VOLTAGE_SOURCES,
-    SWITCH_NOTE, circuit_at_time, has_switches,
+    SWITCH_NOTE, circuit_at_time, has_switches, apply_value_basis,
 )
 from explainer.step_generator import generate_solution_steps
 from explainer.topology import generate_topology_step
@@ -427,7 +427,8 @@ def solve_circuit(
     analysis_type: AnalysisType = AnalysisType.NODAL,
     thevenin_terminals: Optional[TheveninTerminals] = None,
     target_probes: Optional[List[ProbeTarget]] = None,
-    warnings: Optional[List[str]] = None
+    warnings: Optional[List[str]] = None,
+    value_display: Optional[Union[str, object]] = None,
 ) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
     """
     Devreyi çözer (anahtarlı devreler için giriş noktası).
@@ -438,6 +439,8 @@ def solve_circuit(
       ve anlatımın başına bu durumu söyleyen bir not eklenir.
     • Anahtarsız devrede doğrudan _solve_core çalışır.
     """
+    if value_display is not None:
+        parsed = apply_value_basis(parsed, value_display)
     if analysis_type == AnalysisType.TRANSIENT:
         return _solve_transient(parsed, mode, frequency, target_probes, warnings)
     if has_switches(parsed) and not parsed.errors:
@@ -1509,14 +1512,16 @@ def _compute_power(
     Her eleman için karmaşık gücü hesaplar (pasif işaret kuralı).
 
         V = V(+) − V(−),  I = lcapy eleman akımı (+ → −, eleman içinden)
-        AC:  S = ½ · V · I*      (fazör genlikleri TEPE değerdir —
-                                  C# AcVoltageSource.Amplitude tepe değer)
-        DC:  S = V · I
+        AC (tepe):  S = ½ · V · I*
+        AC (etkin): S = V · I*
+        DC:         S = V · I
 
     Kaynaklar için emilen güç negatiftir (güç verir). Tellegen
     teoremi gereği tüm elemanların S toplamı sıfır olmalıdır.
     """
-    factor = 1.0 if is_dc else 0.5
+    is_rms = getattr(parsed, "value_basis", "PEAK") == "RMS"
+    factor = 1.0 if (is_dc or is_rms) else 0.5
+    s_expr = "V·I*" if is_rms else "½·V·I*"
     elements = {}
     supplied = 0j
     absorbed = 0j
@@ -1568,7 +1573,7 @@ def _compute_power(
             )
         else:
             equations.append(
-                f"S_{elem.id} = ½·V·I* = {num(s.real)} {'+' if q >= 0 else '-'} "
+                f"S_{elem.id} = {s_expr} = {num(s.real)} {'+' if q >= 0 else '-'} "
                 f"j{num(abs(q))} VA  →  P = {num(p)} W, Q = {num(q)} VAR, "
                 f"|S| = {num(s_mag)} VA"
                 + (f", cos φ = {num(pf, 4)} ({pf_type})" if pf is not None else "")
@@ -1601,10 +1606,18 @@ def _compute_power(
             f"\\sum P_{{\\text{{yük}}}}"
         )
     else:
-        convention = (
-            "AC: S = ½·V·I* (tepe fazör), P = Re(S), Q = Im(S), "
-            "cos φ = P/|S| (pasif işaret kuralı, emilen güç)"
-        )
+        if is_rms:
+            convention = (
+                "AC: S = V·I* (etkin fazör), P = Re(S), Q = Im(S), "
+                "cos φ = P/|S| (pasif işaret kuralı, emilen güç)"
+            )
+            s_latex = "S = V I^{*}"
+        else:
+            convention = (
+                "AC: S = ½·V·I* (tepe fazör), P = Re(S), Q = Im(S), "
+                "cos φ = P/|S| (pasif işaret kuralı, emilen güç)"
+            )
+            s_latex = "S = \\tfrac{1}{2} V I^{*}"
         equations.append(
             f"Denge: S_verilen = {num(supplied.real)} {'+' if supplied.imag >= 0 else '-'} "
             f"j{num(abs(supplied.imag))} VA = S_çekilen"
@@ -1615,7 +1628,7 @@ def _compute_power(
                 f"{num(abs(supplied))} = {num(pf, 4)} ({pf_type})"
             )
         latex_parts.append(
-            "S = \\tfrac{1}{2} V I^{*} = P + jQ \\quad , \\quad "
+            f"{s_latex} = P + jQ \\quad , \\quad "
             "|S| = \\sqrt{P^2 + Q^2} \\quad , \\quad "
             "\\cos\\varphi = \\frac{P}{|S|}"
         )
@@ -1629,9 +1642,13 @@ def _compute_power(
             "kaynağın devreye güç verdiği anlamına gelir.\n"
             + ("DC devrede reaktif güç yoktur: P = V·I."
                if is_dc else
-               "Fazörler tepe değer olduğundan S = ½·V·I* kullanılır "
-               "(etkin değerlerle S = V_rms·I_rms*). Dirençler yalnızca P, "
-               "bobinler Q > 0, kapasitörler Q < 0 çeker.")
+               ("Fazörler etkin (RMS) değer olduğundan S = V·I* kullanılır "
+                "(tepe değerlerle S = ½·V_m·I_m*). Dirençler yalnızca P, "
+                "bobinler Q > 0, kapasitörler Q < 0 çeker."
+                if is_rms else
+                "Fazörler tepe değer olduğundan S = ½·V·I* kullanılır "
+                "(etkin değerlerle S = V_rms·I_rms*). Dirençler yalnızca P, "
+                "bobinler Q > 0, kapasitörler Q < 0 çeker."))
         ),
         equations=equations,
         latex_formula=" \\\\ ".join(latex_parts),

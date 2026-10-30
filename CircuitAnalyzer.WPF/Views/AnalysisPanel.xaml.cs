@@ -16,6 +16,7 @@ namespace CircuitAnalyzer.WPF.Views;
 public partial class AnalysisPanel : UserControl
 {
     public event EventHandler? SolveRequested;
+    public event EventHandler? ValueDisplayChanged;
     public event EventHandler<TransientAnalysisDto>? EnlargePlotRequested;
 
     private BackendState _backendState = BackendState.Starting;
@@ -130,6 +131,7 @@ public partial class AnalysisPanel : UserControl
     {
         InitializeComponent();
 
+        SetValueDisplay(AppSettings.AcValueDisplay, notify: false);
         SetBackendStatus(BackendState.Starting, "Çözücü başlatılıyor…");
         SetCircuitInfo(hasAcSource: false, needsFrequency: false);
     }
@@ -201,6 +203,7 @@ public partial class AnalysisPanel : UserControl
 
         TxtModeLabel.Text = hasAcSource ? "AC (fazör) analiz" : "DC analiz";
         RowFrequency.Visibility = hasAcSource ? Visibility.Visible : Visibility.Collapsed;
+        RowValueDisplay.Visibility = hasAcSource ? Visibility.Visible : Visibility.Collapsed;
         TxtFrequencyLabel.Text = needsFrequency
             ? "Frekans (Hz) — gerekli"
             : "Frekans (Hz) — boş bırakılırsa kaynaktan alınır";
@@ -287,7 +290,7 @@ public partial class AnalysisPanel : UserControl
         }
     }
 
-    /// <summary>Şu anki analiz ayarlarını (yöntem, terminaller, frekans) CircuitDocument için döndürür.</summary>
+    /// <summary>Şu anki analiz ayarlarını (yöntem, terminaller, frekans, değer gösterimi) CircuitDocument için döndürür.</summary>
     public CircuitDocument.AnalysisData GetAnalysisSettings()
     {
         string selectedText = (CmbAnalysisType.SelectedItem as ComboBoxItem)?.Content as string
@@ -300,6 +303,7 @@ public partial class AnalysisPanel : UserControl
             TerminalPositive = GetSelectedTerminal(CmbTerminalPositive),
             TerminalNegative = GetSelectedTerminal(CmbTerminalNegative),
             Frequency = TxtFrequency?.Text,
+            ValueDisplay = ValueDisplay,
         };
     }
 
@@ -319,6 +323,54 @@ public partial class AnalysisPanel : UserControl
         if (settings.Frequency != null && TxtFrequency != null)
         {
             TxtFrequency.Text = settings.Frequency;
+        }
+        if (!string.IsNullOrEmpty(settings.ValueDisplay))
+        {
+            SetValueDisplay(settings.ValueDisplay, notify: false);
+        }
+    }
+
+    /// <summary>"RMS" | "PEAK"</summary>
+    public string ValueDisplay => BtnDisplayPeak?.IsChecked == true ? "PEAK" : "RMS";
+
+    private void BtnDisplayRms_Click(object sender, RoutedEventArgs e)
+    {
+        if (BtnDisplayPeak?.IsChecked == true)
+        {
+            SetValueDisplay("RMS", notify: true);
+        }
+        else if (BtnDisplayRms != null)
+        {
+            BtnDisplayRms.IsChecked = true;
+        }
+    }
+
+    private void BtnDisplayPeak_Click(object sender, RoutedEventArgs e)
+    {
+        if (BtnDisplayRms?.IsChecked == true)
+        {
+            SetValueDisplay("PEAK", notify: true);
+        }
+        else if (BtnDisplayPeak != null)
+        {
+            BtnDisplayPeak.IsChecked = true;
+        }
+    }
+
+    public void SetValueDisplay(string valueDisplay, bool notify = false)
+    {
+        bool isPeak = string.Equals(valueDisplay, "PEAK", StringComparison.OrdinalIgnoreCase);
+        string normalized = isPeak ? "PEAK" : "RMS";
+        bool changed = (isPeak && BtnDisplayRms?.IsChecked == true) || (!isPeak && BtnDisplayPeak?.IsChecked == true);
+
+        if (BtnDisplayRms != null) BtnDisplayRms.IsChecked = !isPeak;
+        if (BtnDisplayPeak != null) BtnDisplayPeak.IsChecked = isPeak;
+
+        AppSettings.AcValueDisplay = normalized;
+
+        if (notify && changed)
+        {
+            ValueDisplayChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -430,7 +482,7 @@ public partial class AnalysisPanel : UserControl
             }
         }
 
-        options = new SolveOptions(analysisType, freq, pos, neg);
+        options = new SolveOptions(analysisType, freq, pos, neg, ValueDisplay);
         return true;
     }
 
@@ -576,7 +628,8 @@ public partial class AnalysisPanel : UserControl
             // 3. PracticeView oluştur
             var practiceView = new PracticeView
             {
-                AnswerChecker = this.AnswerChecker
+                AnswerChecker = this.AnswerChecker,
+                ValueDisplay = this.ValueDisplay
             };
             practiceView.Load(response.Results.Practice, response.Results.Explanation ?? new List<ExplanationSectionDto>());
             practiceView.RevealRequested += (_, _) => RevealSolution();

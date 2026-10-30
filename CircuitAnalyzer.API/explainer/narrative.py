@@ -138,6 +138,10 @@ class _Ctx:
     # ── Eleman bilgileri ──
 
     @property
+    def is_rms(self) -> bool:
+        return getattr(self.parsed, "value_basis", "PEAK") == "RMS"
+
+    @property
     def elements(self) -> List[ParsedElement]:
         return self.parsed.elements
 
@@ -413,7 +417,8 @@ def _intro(ctx: _Ctx) -> List[_Section]:
             src_texts.append(f"{e.id} = {eng(e.value, unit)} (DC{', ' + what if what else ''})")
         elif e.element_type in SINE_SOURCES:
             src_texts.append(
-                f"{e.id}: genlik {eng(e.params.get('amplitude', e.value), unit)}, "
+                f"{e.id}: {'etkin değer' if ctx.is_rms else 'genlik (tepe)'} "
+                f"{eng(e.params.get('amplitude', e.value), unit)}, "
                 f"f = {num(e.params.get('frequency', 0))} Hz, "
                 f"faz {num(e.params.get('phase', 0))}°" + (f" ({what})" if what else ""))
         else:
@@ -424,6 +429,30 @@ def _intro(ctx: _Ctx) -> List[_Section]:
 
     if src_texts:
         s.text(f"Kaynaklar: {', '.join(src_texts)}.")
+    has_ac_source = any(e.element_type not in DC_SOURCES for e in ctx.sources())
+    if not ctx.is_dc or (ctx.analysis_type == AnalysisType.SUPERPOSITION and has_ac_source):
+        s.text(
+            "Bu çözümde AC değerler etkin (RMS) olarak gösterilir."
+            if ctx.is_rms
+            else "Bu çözümde AC değerler tepe değer olarak gösterilir."
+        )
+        disp_basis = "RMS" if ctx.is_rms else "PEAK"
+        for e in ctx.sources():
+            if e.element_type in DC_SOURCES:
+                continue
+            in_basis = e.params.get("input_basis", "PEAK")
+            if in_basis != disp_basis:
+                unit = "A" if e.element_type in CURRENT_SOURCES else "V"
+                p_sym = "Im" if e.element_type in CURRENT_SOURCES else "Um"
+                r_sym = "I" if e.element_type in CURRENT_SOURCES else "V"
+                in_val = float(e.params.get("input_value", e.value))
+                shown_val = float(e.params.get("amplitude", e.value))
+                if in_basis == "PEAK" and disp_basis == "RMS":
+                    s.math(f"{e.id}: {p_sym} = {eng(in_val, unit)} (tepe) → "
+                           f"{r_sym} = {p_sym}/√2 = {eng(shown_val, unit)} (etkin)")
+                else:
+                    s.math(f"{e.id}: {r_sym} = {eng(in_val, unit)} (etkin) → "
+                           f"{p_sym} = √2·{r_sym} = {eng(shown_val, unit)} (tepe)")
     if passives:
         s.text(f"Pasif elemanlar: {', '.join(passives)}.")
     if ctx.has_dependent:
@@ -441,7 +470,10 @@ def _intro(ctx: _Ctx) -> List[_Section]:
 
     if not ctx.is_dc and ctx.omega is not None:
         s.math(f"ω = 2πf = 2π · {num(ctx.frequency)} Hz = {num(ctx.omega)} rad/s")
-        s.note("Fazör gösteriminde V = Vm∠θ; Vm tepe (maksimum) değerdir, etkin değer değil.")
+        if ctx.is_rms:
+            s.note("Fazörün büyüklüğü etkin (RMS) değerdir; tepe değer Um = √2·V olur.")
+        else:
+            s.note("Fazör gösteriminde V = Vm∠θ; Vm tepe (maksimum) değerdir, etkin değer değil.")
 
     if ctx.analysis_type == AnalysisType.THEVENIN and ctx.terminals:
         a, b = ctx.terminals.node_positive, ctx.terminals.node_negative
@@ -1294,6 +1326,13 @@ def _thevenin(ctx: _Ctx) -> List[_Section]:
                     "seçilirse yüke en fazla güç aktarılır:")
             s4.math(f"Pmax = Vth² / (4·Rth) = ({eng(vth.real, 'V')})² / (4 · {eng(zth.real, 'Ω')}) "
                     f"= {eng(pmax, 'W')}")
+        elif ctx.is_rms:
+            pmax = abs(vth) ** 2 / (4 * zth.real)
+            s4.text(f"Yük empedansı Zth'nin eşleniği seçilirse (ZL = Zth* = "
+                    f"{rect(zth.conjugate(), 'Ω')}) yüke en fazla ortalama güç aktarılır:")
+            s4.math(f"Pmax = |Vth|² / (4·Rth) = ({eng(abs(vth), 'V')})² / (4 · {eng(zth.real, 'Ω')}) "
+                    f"= {eng(pmax, 'W')}")
+            s4.note("Fazörler etkin (RMS) değer olduğu için payda 4·Rth'dir (tepe değerlerle 8·Rth).")
         else:
             pmax = abs(vth) ** 2 / (8 * zth.real)
             s4.text(f"Yük empedansı Zth'nin eşleniği seçilirse (ZL = Zth* = "
@@ -1361,8 +1400,12 @@ def _power(ctx: _Ctx) -> List[_Section]:
         return []
     s = _Section("Güç Hesabı")
     if not ctx.is_dc:
-        s.text("Fazörler tepe değer olduğundan ortalama (aktif) güç P = ½·|I|²·R, "
-               "reaktif güç Q = ½·|I|²·X formülüyle bulunur.")
+        if ctx.is_rms:
+            s.text("Fazörler etkin (RMS) değer olduğundan ortalama (aktif) güç P = |I|²·R, "
+                   "reaktif güç Q = |I|²·X formülüyle bulunur.")
+        else:
+            s.text("Fazörler tepe değer olduğundan ortalama (aktif) güç P = ½·|I|²·R, "
+                   "reaktif güç Q = ½·|I|²·X formülüyle bulunur.")
 
     absorbed_terms = []
     for e in ctx.passive():
@@ -1383,16 +1426,28 @@ def _power(ctx: _Ctx) -> List[_Section]:
                 absorbed_terms.append(eng(ep.active_power, 'W'))
         else:
             z = ctx.impedance(e)
-            if t == ElementType.RESISTOR:
-                s.math(f"P_{name} = ½·|I|²·R = ½ · ({eng(i_mag, 'A')})² · {eng(e.value, 'Ω')} = {eng(ep.active_power, 'W')}")
-            elif t == ElementType.INDUCTOR:
-                s.math(f"Q_{name} = ½·|I|²·X_L = ½ · ({eng(i_mag, 'A')})² · {eng(z.imag, 'Ω')} = "
-                       f"{eng(ep.reactive_power, 'VAR')} (bobin reaktif güç çeker, P = 0)")
-            elif t == ElementType.CAPACITOR:
-                s.math(f"Q_{name} = −½·|I|²·|X_C| = −½ · ({eng(i_mag, 'A')})² · {eng(abs(z.imag), 'Ω')} = "
-                       f"{eng(ep.reactive_power, 'VAR')} (kondansatör reaktif güç üretir, P = 0)")
+            if ctx.is_rms:
+                if t == ElementType.RESISTOR:
+                    s.math(f"P_{name} = |I|²·R = ({eng(i_mag, 'A')})² · {eng(e.value, 'Ω')} = {eng(ep.active_power, 'W')}")
+                elif t == ElementType.INDUCTOR:
+                    s.math(f"Q_{name} = |I|²·X_L = ({eng(i_mag, 'A')})² · {eng(z.imag, 'Ω')} = "
+                           f"{eng(ep.reactive_power, 'VAR')} (bobin reaktif güç çeker, P = 0)")
+                elif t == ElementType.CAPACITOR:
+                    s.math(f"Q_{name} = −|I|²·|X_C| = −({eng(i_mag, 'A')})² · {eng(abs(z.imag), 'Ω')} = "
+                           f"{eng(ep.reactive_power, 'VAR')} (kondansatör reaktif güç üretir, P = 0)")
+                else:
+                    s.math(f"S_{name} = |I|²·Z = {eng(ep.active_power, 'W')} + j{eng(ep.reactive_power, 'VAR')}")
             else:
-                s.math(f"S_{name} = ½·|I|²·Z = {eng(ep.active_power, 'W')} + j{eng(ep.reactive_power, 'VAR')}")
+                if t == ElementType.RESISTOR:
+                    s.math(f"P_{name} = ½·|I|²·R = ½ · ({eng(i_mag, 'A')})² · {eng(e.value, 'Ω')} = {eng(ep.active_power, 'W')}")
+                elif t == ElementType.INDUCTOR:
+                    s.math(f"Q_{name} = ½·|I|²·X_L = ½ · ({eng(i_mag, 'A')})² · {eng(z.imag, 'Ω')} = "
+                           f"{eng(ep.reactive_power, 'VAR')} (bobin reaktif güç çeker, P = 0)")
+                elif t == ElementType.CAPACITOR:
+                    s.math(f"Q_{name} = −½·|I|²·|X_C| = −½ · ({eng(i_mag, 'A')})² · {eng(abs(z.imag), 'Ω')} = "
+                           f"{eng(ep.reactive_power, 'VAR')} (kondansatör reaktif güç üretir, P = 0)")
+                else:
+                    s.math(f"S_{name} = ½·|I|²·Z = {eng(ep.active_power, 'W')} + j{eng(ep.reactive_power, 'VAR')}")
 
     for e in ctx.sources():
         ep = pw.elements.get(e.id)
@@ -1406,7 +1461,8 @@ def _power(ctx: _Ctx) -> List[_Section]:
                    f"({'verilen' if ep.active_power < 0 else 'çekilen'})")
         else:
             supplied = complex(-ep.active_power, -ep.reactive_power)
-            s.math(f"S_{e.id} = ½·V·I* = {rect(supplied, 'VA')} → P = {eng(supplied.real, 'W')}, "
+            s_form = "V·I*" if ctx.is_rms else "½·V·I*"
+            s.math(f"S_{e.id} = {s_form} = {rect(supplied, 'VA')} → P = {eng(supplied.real, 'W')}, "
                    f"Q = {eng(supplied.imag, 'VAR')}, |S| = {eng(abs(supplied), 'VA')} (verilen)")
 
     for e in ctx.dependents():
@@ -1421,7 +1477,8 @@ def _power(ctx: _Ctx) -> List[_Section]:
                    f"({'verilen' if ep.active_power < 0 else 'çekilen'}; bağımlı kaynak)")
         else:
             net = complex(-ep.active_power, -ep.reactive_power)
-            s.math(f"S_{e.id} = ½·V·I* = {rect(net, 'VA')} → P = {eng(net.real, 'W')}, "
+            s_form = "V·I*" if ctx.is_rms else "½·V·I*"
+            s.math(f"S_{e.id} = {s_form} = {rect(net, 'VA')} → P = {eng(net.real, 'W')}, "
                    f"Q = {eng(net.imag, 'VAR')} (bağımlı kaynağın net verdiği)")
 
     sup = complex(pw.total_supplied.real, pw.total_supplied.imaginary)
@@ -1496,23 +1553,35 @@ def _time_domain(ctx: _Ctx) -> List[_Section]:
     has_sine = any(e.element_type in SINE_SOURCES for e in ctx.elements)
     fn = "sin" if has_sine else "cos"
     s = _Section("Zaman Domenine Dönüş")
-    s.text(f"Fazör V = Vm∠θ, zamanda v(t) = Vm·{fn}(ωt + θ) demektir"
-           + (" (kaynak sinüs olarak verildiği için referans sin)." if has_sine
-              else " (kosinüs referansı kullanıldı)."))
+    if ctx.is_rms:
+        s.text(f"Fazör V etkin (RMS) değer olduğundan zamanda v(t) = √2·|V|·{fn}(ωt + θ) "
+               f"(Um = √2·V) demektir"
+               + (" (kaynak sinüs olarak verildiği için referans sin)." if has_sine
+                  else " (kosinüs referansı kullanıldı)."))
+    else:
+        s.text(f"Fazör V = Vm∠θ, zamanda v(t) = Vm·{fn}(ωt + θ) demektir"
+               + (" (kaynak sinüs olarak verildiği için referans sin)." if has_sine
+                  else " (kosinüs referansı kullanıldı)."))
     w = num(ctx.omega)
 
-    def expr(z: complex) -> str:
+    def expr(z: complex, unit: str = "V") -> str:
         mag, ph = abs(z), math.degrees(cmath.phase(z))
         sign = "+" if ph >= 0 else MINUS
-        return f"{num(mag)}·{fn}({w}t {sign} {num(abs(ph))}°)"
+        if ctx.is_rms:
+            peak = math.sqrt(2.0) * mag
+            p_sym = "Um" if unit == "V" else "Im"
+            r_sym = "V" if unit == "V" else "I"
+            return (f"{num(peak)}·{fn}({w}t {sign} {num(abs(ph))}°) {unit}  "
+                    f"({p_sym} = √2·{r_sym} = √2·{num(mag)} = {num(peak)} {unit})")
+        return f"{num(mag)}·{fn}({w}t {sign} {num(abs(ph))}°) {unit}"
 
     for n in sorted((n for n in ctx.v if n != "0"), key=lambda n: (len(n), n)):
         z = ctx.node_value(n)
         if abs(z) > 1e-15:
-            s.math(f"v{n.translate(str.maketrans('0123456789', '₀₁₂₃₄₅₆₇₈₉'))}(t) = {expr(z)} V")
+            s.math(f"v{n.translate(str.maketrans('0123456789', '₀₁₂₃₄₅₆₇₈₉'))}(t) = {expr(z, 'V')}")
     for e in ctx.passive():
         if e.id in ctx.i and abs(ctx.i[e.id]) > 1e-15:
-            s.math(f"i_{e.id}(t) = {expr(ctx.i[e.id])} A")
+            s.math(f"i_{e.id}(t) = {expr(ctx.i[e.id], 'A')}")
     return [s]
 
 

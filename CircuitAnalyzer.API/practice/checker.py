@@ -123,7 +123,7 @@ def _diagnose(q: PracticeQuestion, p: ParsedAnswer, exp: complex) -> Optional[st
         same_phase = _angle_diff(r_ang, 0.0) < 2.0
         if same_phase and (_near(r_mag, math.sqrt(2)) or _near(r_mag, 1 / math.sqrt(2))):
             return ("Büyüklük √2 kat farklı: tepe değer ile etkin (RMS) değer karışmış olabilir. "
-                    "Bu uygulamada fazörler tepe değerdir (Vm); etkin değer Vm/√2'dir.")
+                    "Etkin değer = tepe/√2; programda seçili gösterime dikkat edin.")
         if same_phase and (_near(r_mag, 2 * math.pi) or _near(r_mag, 1 / (2 * math.pi))):
             return ("Büyüklük 2π kat farklı: reaktansta ω = 2πf kullanılmalı; f'yi doğrudan "
                     "kullanmış olabilirsiniz (X_L = ωL, X_C = 1/(ωC)).")

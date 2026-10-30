@@ -96,7 +96,8 @@ public class ExampleCircuitsTests : IClassFixture<BackendFixture>
             AnalysisType = c.SuggestedAnalysisType,
             TheveninTerminals = c.SuggestedTerminal != null
                 ? new TerminalsDto { NodePositive = c.SuggestedTerminal, NodeNegative = "0" }
-                : null
+                : null,
+            ValueDisplay = "RMS"
         };
 
     [Fact]

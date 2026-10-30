@@ -11,6 +11,7 @@ Python backend'in C# Frontend'e döndürdüğü yapılandırılmış çıktı.
 
 from typing import Optional, List, Dict, Any, Union, Literal
 from pydantic import BaseModel, Field, ConfigDict
+from pydantic.json_schema import SkipJsonSchema
 
 
 # ═══════════════════════════════════════════════════════
@@ -293,8 +294,9 @@ class ElementPower(BaseModel):
     Tek bir elemanın gücü — pasif işaret kuralıyla (PSC) EMİLEN güç.
 
     V = V(+) − V(−), I = (+)'dan (−)'ye eleman içinden akan akım.
-        AC:  S = ½ · V · I*   (fazör genlikleri tepe değerdir)
-        DC:  S = V · I        (Q = 0)
+        AC (PEAK): S = ½ · V · I*   (fazör genlikleri tepe değerdir)
+        AC (RMS):  S = V · I*       (fazör genlikleri etkin değerdir)
+        DC:        S = V · I        (Q = 0)
 
     Güç veren kaynaklarda P negatiftir (emilen güç < 0).
     """
@@ -326,7 +328,7 @@ class PowerAnalysis(BaseModel):
         → kaynakların verdiği karmaşık güç = yüklerin çektiği karmaşık güç
     """
     convention: str = Field(
-        ..., description="Kullanılan formül: AC'de 'S = ½·V·I* (tepe fazör)', DC'de 'P = V·I'")
+        ..., description="Kullanılan formül: AC'de 'S = ½·V·I* (tepe fazör)' veya 'S = V·I* (etkin/RMS fazör)', DC'de 'P = V·I'")
     elements: Dict[str, ElementPower] = Field(
         default_factory=dict, description="Eleman bazında güçler")
     total_supplied: ComplexNumber = Field(
@@ -594,6 +596,9 @@ class AnalysisResponse(BaseModel):
         ..., description="Kullanılan analiz modu")
     analysis_type: str = Field(
         ..., description="Kullanılan çözüm yöntemi")
+    value_display: SkipJsonSchema[str] = Field(
+        default="PEAK",
+        description="AC büyüklüklerin gösterim tabanı ('PEAK' veya 'RMS')")
     results: AnalysisResults = Field(
         default_factory=AnalysisResults,
         description="Analiz sonuçları")

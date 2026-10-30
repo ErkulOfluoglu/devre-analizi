@@ -161,6 +161,8 @@ class ParsedCircuit:
     # İsteğe bağlı çizim konumları (* NODEPOS n x y) — çevre akımlarının
     # ekranda saat yönünde seçilmesi için; hesaplamayı etkilemez
     node_positions: Dict[str, Tuple[float, float]] = field(default_factory=dict)
+    # AC büyüklüklerin gösterim tabanı: "PEAK" (tepe) veya "RMS" (etkin)
+    value_basis: str = "PEAK"
 
 
 # ═══════════════════════════════════════════════════════
@@ -262,13 +264,13 @@ _PATTERNS = {
     ),
 
     # ── AC Kaynaklar ──
-    # SINE(V_offset V_amplitude Frequency T_delay Damping Phase)
+    # SINE(V_offset V_amplitude Frequency T_delay Damping Phase) [RMS]
     "ac_sine": re.compile(
-        r"^([VI]\w+)\s+(\w+)\s+(\w+)\s+SINE\(([^)]*)\)\s*$", re.IGNORECASE
+        r"^([VI]\w+)\s+(\w+)\s+(\w+)\s+SINE\(([^)]*)\)(?:\s+(RMS))?\s*$", re.IGNORECASE
     ),
-    # AC_PHASOR(Magnitude, Phase_degrees)
+    # AC_PHASOR(Magnitude, Phase_degrees) [RMS]
     "ac_phasor": re.compile(
-        r"^([VI]\w+)\s+(\w+)\s+(\w+)\s+AC_PHASOR\(([^)]*)\)\s*$", re.IGNORECASE
+        r"^([VI]\w+)\s+(\w+)\s+(\w+)\s+AC_PHASOR\(([^)]*)\)(?:\s+(RMS))?\s*$", re.IGNORECASE
     ),
 
     # ── Empedans (Özel uzantı) ──
@@ -322,7 +324,7 @@ _PATTERNS = {
 #  ANA PARSER
 # ═══════════════════════════════════════════════════════
 
-def parse_netlist(netlist_text: str) -> ParsedCircuit:
+def parse_netlist(netlist_text: str, value_basis: str = "PEAK") -> ParsedCircuit:
     """
     SPICE Netlist metnini ayrıştırır.
 
@@ -331,6 +333,8 @@ def parse_netlist(netlist_text: str) -> ParsedCircuit:
             Satırlar '\\n' ile ayrılır.
             '*' ile başlayan satırlar yorum veya ölçüm direktifidir.
             '.end' satırı dosya sonunu belirtir.
+        value_basis: AC kaynak genliklerinin dönüştürüleceği gösterim tabanı
+            ("PEAK" veya "RMS"; varsayılan "PEAK").
 
     Returns:
         ParsedCircuit: Ayrıştırılmış devre yapısı.
@@ -375,6 +379,49 @@ def parse_netlist(netlist_text: str) -> ParsedCircuit:
         if element.element_type == ElementType.SWITCH and element.params.get("pos2"):
             all_nodes.add(element.params["pos2"])
     circuit.node_count = len(all_nodes)
+    apply_value_basis(circuit, value_basis)
+    return circuit
+
+
+def apply_value_basis(circuit: ParsedCircuit, value_basis: str = "PEAK") -> ParsedCircuit:
+    """
+    AC kaynakların genliğini seçilen gösterim tabanına ("PEAK" veya "RMS") çevirir.
+
+    • Giriş etkin (RMS) ve gösterim tepe (PEAK) → değer · √2
+    • Giriş tepe (PEAK) ve gösterim etkin (RMS) → değer / √2
+    • Aynı tabanda ise → olduğu gibi
+    DC kaynaklar ve diğer elemanlar asla ölçeklenmez.
+    """
+    basis_raw = getattr(value_basis, "value", value_basis) or "PEAK"
+    basis = str(basis_raw).strip().upper()
+    if basis not in ("PEAK", "RMS"):
+        basis = "PEAK"
+    circuit.value_basis = basis
+
+    sqrt2 = math.sqrt(2.0)
+    for elem in circuit.elements:
+        if elem.element_type not in SINE_SOURCES + PHASOR_SOURCES:
+            continue
+        in_val = float(elem.params.get("input_value", elem.params.get("amplitude", elem.value)))
+        in_basis = str(elem.params.get("input_basis", "PEAK")).upper()
+        elem.params["input_value"] = in_val
+        elem.params["input_basis"] = in_basis
+
+        if in_basis == basis:
+            scaled = in_val
+        elif in_basis == "RMS" and basis == "PEAK":
+            scaled = in_val * sqrt2
+        else:
+            scaled = in_val / sqrt2
+
+        elem.value = scaled
+        elem.params["amplitude"] = scaled
+        if elem.element_type in PHASOR_SOURCES or "phasor_complex" in elem.params:
+            phase = float(elem.params.get("phase", 0.0))
+            elem.params["phasor_complex"] = complex(
+                scaled * math.cos(math.radians(phase)),
+                scaled * math.sin(math.radians(phase)),
+            )
     return circuit
 
 
@@ -466,6 +513,15 @@ def _parse_element_line(
     m = _PATTERNS["ac_phasor"].match(line)
     if m:
         return _parse_ac_phasor(m)
+
+    # Başka tür satırda RMS eki varsa Türkçe hata üret
+    if re.search(r"\s+RMS\s*$", line, re.IGNORECASE):
+        _reject(
+            circuit,
+            f"Satır {line_num}: 'RMS' (etkin değer) eki yalnızca AC kaynaklarda "
+            f"(SINE, AC_PHASOR) kullanılabilir → '{line}'."
+        )
+        return None
 
     # ── Empedans (Dikdörtgensel): Z1 2 3 COMPLEX(50, 30) ──
     m = _PATTERNS["impedance_complex"].match(line)
@@ -654,6 +710,7 @@ def _parse_ac_sine(m: re.Match) -> ParsedElement:
     amplitude = float(parts[1]) if len(parts) > 1 else 0
     frequency = float(parts[2]) if len(parts) > 2 else 0
     phase = float(parts[5]) if len(parts) > 5 else 0
+    input_basis = "RMS" if m.group(5) else "PEAK"
 
     return ParsedElement(
         id=m.group(1),
@@ -666,7 +723,9 @@ def _parse_ac_sine(m: re.Match) -> ParsedElement:
             "offset": offset,
             "amplitude": amplitude,
             "frequency": frequency,
-            "phase": phase
+            "phase": phase,
+            "input_value": amplitude,
+            "input_basis": input_basis,
         }
     )
 
@@ -675,12 +734,13 @@ def _parse_ac_phasor(m: re.Match) -> ParsedElement:
     """
     AC_PHASOR formatını ayrıştırır.
 
-    AC_PHASOR(Magnitude, Phase_degrees)
+    AC_PHASOR(Magnitude, Phase_degrees) [RMS]
     Örnek: AC_PHASOR(10, 30) → 10∠30° V
     """
     parts = re.split(r"[,\s]+", m.group(4).strip())
     magnitude = float(parts[0])
     phase = float(parts[1]) if len(parts) > 1 else 0
+    input_basis = "RMS" if m.group(5) else "PEAK"
 
     return ParsedElement(
         id=m.group(1),
@@ -692,6 +752,8 @@ def _parse_ac_phasor(m: re.Match) -> ParsedElement:
         params={
             "amplitude": magnitude,
             "phase": phase,
+            "input_value": magnitude,
+            "input_basis": input_basis,
             # Kartezyen forma çevir (solver için)
             "phasor_complex": complex(
                 magnitude * math.cos(math.radians(phase)),
@@ -837,6 +899,7 @@ def circuit_at_time(circuit: ParsedCircuit, when: str) -> ParsedCircuit:
     new = ParsedCircuit(
         probes=[], has_ground=circuit.has_ground, raw_netlist=circuit.raw_netlist,
         warnings=list(circuit.warnings), errors=list(circuit.errors),
+        value_basis=circuit.value_basis,
     )
     for e in circuit.elements:
         if e.element_type == ElementType.SWITCH:

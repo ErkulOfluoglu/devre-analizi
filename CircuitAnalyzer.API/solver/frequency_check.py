@@ -145,13 +145,15 @@ def check_source_frequencies(
                 f"frequency = {num(ac_freqs[0])} gönderin."
             )
         if 0.0 in groups and ac_freqs:
+            is_rms = getattr(parsed, "value_basis", "PEAK") == "RMS"
+            amp_txt = "√2·|V|" if is_rms else "|V|"
             check.warnings.append(
                 f"ℹ AC analizde DC bileşenler ({', '.join(groups[0.0])}) "
                 "sıfırlandı (gerilim kaynağı → kısa devre, akım kaynağı → "
                 "açık devre). Sonuçlar yalnızca "
                 f"f = {num(ac_freqs[0])} Hz AC bileşenidir; toplam yanıt için "
                 "DC analizini ayrıca yapıp süperpozisyonla ekleyin: "
-                "v(t) = V_DC + |V|·cos(ωt + θ)."
+                f"v(t) = V_DC + {amp_txt}·cos(ωt + θ)."
             )
         if dc and not (sine or phasor):
             check.warnings.append(
@@ -162,6 +164,9 @@ def check_source_frequencies(
             )
 
     if len(groups) > 1:
+        is_rms = getattr(parsed, "value_basis", "PEAK") == "RMS"
+        amp_k = "√2·|V_k|" if is_rms else "|V_k|"
+        latex_amp = "\\sqrt{2}\\,|V_k|" if is_rms else "|V_k|"
         check.steps.append(SolutionStep(
             step_number=0,
             title="Frekans Analizi — Süperpozisyon",
@@ -174,14 +179,14 @@ def check_source_frequencies(
                 "2. O frekansta empedansları hesapla (Z_L = jωL, "
                 "Z_C = 1/(jωC); DC'de C açık, L kısa devre) ve devreyi çöz.\n"
                 "3. Her sonucu zaman alanına çevir ve topla: "
-                "v(t) = V_DC + Σ |V_k|·cos(ω_k t + θ_k)."
+                f"v(t) = V_DC + Σ {amp_k}·cos(ω_k t + θ_k)."
             ),
             equations=[
                 f"{_fmt_hz(f)}: {', '.join(ids)}"
                 for f, ids in sorted(groups.items())
             ],
             latex_formula=(
-                "v(t) = V_{DC} + \\sum_k |V_k| \\cos(\\omega_k t + \\theta_k)"
+                f"v(t) = V_{{DC}} + \\sum_k {latex_amp} \\cos(\\omega_k t + \\theta_k)"
             ),
             result_snapshot={
                 "frequency_groups": {

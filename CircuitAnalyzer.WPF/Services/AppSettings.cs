@@ -32,6 +32,13 @@ namespace CircuitAnalyzer.WPF.Services
             set => Set("Theme", value);
         }
 
+        /// <summary>AC sonuçların gösterim modu: "RMS" (varsayılan) | "PEAK"</summary>
+        public static string AcValueDisplay
+        {
+            get => GetString("AcValueDisplay") ?? "RMS";
+            set => Set("AcValueDisplay", value);
+        }
+
         /// <summary>İlk açılış tanıtımı gösterildi mi (atlandıysa da true).</summary>
         public static bool OnboardingCompleted
         {

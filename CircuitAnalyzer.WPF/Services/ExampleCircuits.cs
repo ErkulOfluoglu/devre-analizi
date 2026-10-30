@@ -297,7 +297,7 @@ namespace CircuitAnalyzer.WPF.Services
                 Name = "AC RC Alçak Geçiren Filtre",
                 Description = "10 V, 50 Hz kaynak; çıkış kondansatör üzerinden alınır.",
             },
-            new AcVoltageSource { Amplitude = 10, Frequency = 50, Phase = 0 }, "VAC1",
+            new AcVoltageSource { Amplitude = 10, Frequency = 50, Phase = 0, ValueKind = AcValueKind.Rms }, "VAC1",
             new Resistor { Value = 100 }, "R1",
             new Capacitor { Value = 100e-6 }, "C1");
 
@@ -308,7 +308,7 @@ namespace CircuitAnalyzer.WPF.Services
                 Name = "AC RL Seri Devre (Güç)",
                 Description = "20 V ∠45°, 60 Hz kaynak; R–L seri. Güç üçgenini ve güç faktörünü inceleyin.",
             },
-            new AcVoltageSource { Amplitude = 20, Frequency = 60, Phase = 45 }, "VAC1",
+            new AcVoltageSource { Amplitude = 20, Frequency = 60, Phase = 45, ValueKind = AcValueKind.Rms }, "VAC1",
             new Resistor { Value = 50 }, "R1",
             new Inductor { Value = 0.1 }, "L1");
 

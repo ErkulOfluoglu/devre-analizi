@@ -179,19 +179,30 @@ def build_questions(
         p_total = s_abs.real
         if p_total <= 1e-15:
             return []
+        is_rms = getattr(parsed, "value_basis", "PEAK") == "RMS"
         alts = []
         if not is_dc:
             alts.append((abs(s_abs), "Bu görünür güç |S| (birimi VA). Aktif güç P = |S|·cos φ "
                                      "ya da dirençlerdeki güçlerin toplamıdır."))
-            alts.append((2 * p_total, "Fazörler tepe değer olduğundan P = ½·Vm·Im·cos φ; "
-                                      "½ çarpanını unutmuş olabilirsiniz."))
+            if is_rms:
+                alts.append((0.5 * p_total, "Fazörler etkin (RMS) değer olduğundan P = V·I·cos φ = |I|²·R "
+                                            "(½ çarpanı tepe değerler içindir)."))
+                alts.append((2 * p_total, "Etkin değerlerle P = |I|²·R (2 çarpanı yoktur)."))
+            else:
+                alts.append((2 * p_total, "Fazörler tepe değer olduğundan P = ½·Vm·Im·cos φ; "
+                                          "½ çarpanını unutmuş olabilirsiniz."))
             if abs(s_abs.imag) > 1e-15:
                 alts.append((abs(s_abs.imag), "Bu reaktif güç Q (birimi VAR). Aktif güç P soruluyor."))
+        if is_rms and not is_dc:
+            p_hint = ("Her direncin gücünü bulup toplayın: etkin (RMS) değerlerle P = |I|²·R "
+                      "(tepe değerlerle P = ½·|Im|²·R). Bobin ve kondansatör aktif güç harcamaz.")
+        else:
+            p_hint = ("Her direncin gücünü bulup toplayın: DC'de P = I²·R; AC'de (tepe değerlerle) "
+                      "P = ½·|I|²·R. Bobin ve kondansatör aktif güç harcamaz.")
         return [q(
             "P_TOTAL", "P", "Dirençlerde harcanan toplam aktif güç (kaynakların verdiği güç)",
             "W", group, p_total, p_total,
-            hint=("Her direncin gücünü bulup toplayın: DC'de P = I²·R; AC'de (tepe değerlerle) "
-                  "P = ½·|I|²·R. Bobin ve kondansatör aktif güç harcamaz."),
+            hint=p_hint,
             sign_hint="Harcanan güç pozitiftir.",
             alternatives=alts, is_ac=False,
         )]
@@ -225,11 +236,22 @@ def build_questions(
             sign_hint=_DEP_RTH_SIGN if has_dep else "Pasif devrenin eşdeğer direnci negatif olamaz.",
         ))
         if zth.real > 1e-12:
+            is_rms = getattr(parsed, "value_basis", "PEAK") == "RMS"
             if is_dc:
                 pmax = abs(vth) ** 2 / (4 * zth.real)
                 alts = [(abs(vth) ** 2 / zth.real, "Pmax formülünde payda 4·Rth'dir: "
                                                    "Pmax = Vth² / (4·Rth).")]
                 hint = "Yük direnci RL = Rth seçildiğinde güç en büyük olur: Pmax = Vth² / (4·Rth)."
+            elif is_rms:
+                pmax = abs(vth) ** 2 / (4 * zth.real)
+                alts = [
+                    (abs(vth) ** 2 / (8 * zth.real),
+                     "Fazörler etkin (RMS) değer olduğundan payda 4·Rth'dir (tepe değerlerle 8·Rth)."),
+                    (abs(vth) ** 2 / zth.real,
+                     "Pmax formülünde payda 4·Rth'dir: Pmax = |Vth|² / (4·Rth)."),
+                ]
+                hint = ("Yük empedansı ZL = Zth* (eşlenik) seçildiğinde ortalama güç en büyük olur: "
+                        "Pmax = |Vth|² / (4·Rth), Rth = Zth'nin gerçel kısmı.")
             else:
                 pmax = abs(vth) ** 2 / (8 * zth.real)
                 alts = [(abs(vth) ** 2 / (4 * zth.real),

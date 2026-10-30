@@ -467,6 +467,7 @@ def _without(circuit: ParsedCircuit, eid: str) -> ParsedCircuit:
         probes=list(circuit.probes), has_ground=circuit.has_ground,
         raw_netlist=circuit.raw_netlist, warnings=list(circuit.warnings),
         errors=list(circuit.errors), node_positions=dict(circuit.node_positions),
+        value_basis=circuit.value_basis,
     )
     new.node_count = len({n for e in new.elements for n in (e.node_positive, e.node_negative)})
     return new

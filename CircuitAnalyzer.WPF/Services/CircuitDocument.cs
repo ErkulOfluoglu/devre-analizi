@@ -59,6 +59,7 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("im")] public double? Im { get; set; }
             [JsonPropertyName("probe_type")] public string? ProbeType { get; set; }
             [JsonPropertyName("target")] public string? Target { get; set; }
+            [JsonPropertyName("value_kind")] public string? ValueKind { get; set; }
 
             // ── Bağımlı kaynak ("DEP"): türü, kazancı, kontrol elemanı. Eski dosyalarda yoktur (varsayılanlar geçerli). ──
             [JsonPropertyName("kind")] public string? Kind { get; set; }
@@ -87,6 +88,7 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("terminal_positive")] public string? TerminalPositive { get; set; }
             [JsonPropertyName("terminal_negative")] public string? TerminalNegative { get; set; }
             [JsonPropertyName("frequency")] public string? Frequency { get; set; }
+            [JsonPropertyName("value_display")] public string? ValueDisplay { get; set; }
         }
 
         private static readonly JsonSerializerOptions JsonOptions = new()
@@ -138,10 +140,12 @@ namespace CircuitAnalyzer.WPF.Services
                 case AcVoltageSource ac:
                     d.Type = "VAC"; d.Amplitude = ac.Amplitude; d.Frequency = ac.Frequency; d.Phase = ac.Phase;
                     d.InputMode = ac.InputMode.ToString();
+                    d.ValueKind = ac.ValueKind == AcValueKind.Rms ? "rms" : "peak";
                     break;
                 case AcCurrentSource aci:
                     d.Type = "IAC"; d.Amplitude = aci.Amplitude; d.Frequency = aci.Frequency; d.Phase = aci.Phase;
                     d.InputMode = aci.InputMode.ToString();
+                    d.ValueKind = aci.ValueKind == AcValueKind.Rms ? "rms" : "peak";
                     break;
                 case ImpedanceElement z:
                     d.Type = "Z"; d.Re = z.Impedance.Real; d.Im = z.Impedance.Imaginary; d.InputMode = z.InputMode.ToString();
@@ -285,12 +289,18 @@ namespace CircuitAnalyzer.WPF.Services
                     {
                         Amplitude = V(d.Amplitude, "genlik"), Frequency = V(d.Frequency, "frekans"),
                         Phase = d.Phase ?? 0, InputMode = ParseEnum(d.InputMode, AcInputMode.Physical),
+                        ValueKind = string.Equals(d.ValueKind, "rms", StringComparison.OrdinalIgnoreCase)
+                            ? AcValueKind.Rms
+                            : AcValueKind.Peak,
                     };
                 case "IAC":
                     return new AcCurrentSource
                     {
                         Amplitude = V(d.Amplitude, "genlik"), Frequency = V(d.Frequency, "frekans"),
                         Phase = d.Phase ?? 0, InputMode = ParseEnum(d.InputMode, AcInputMode.Physical),
+                        ValueKind = string.Equals(d.ValueKind, "rms", StringComparison.OrdinalIgnoreCase)
+                            ? AcValueKind.Rms
+                            : AcValueKind.Peak,
                     };
                 case "Z":
                     return new ImpedanceElement

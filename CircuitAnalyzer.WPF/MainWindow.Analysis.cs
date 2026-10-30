@@ -42,6 +42,10 @@ namespace CircuitAnalyzer.WPF
         {
             _overlay = new ResultOverlay(CircuitCanvas);
             AnalysisPanel.SolveRequested += async (_, _) => await SolveAsync();
+            AnalysisPanel.ValueDisplayChanged += async (_, _) =>
+            {
+                if (_hasResults) await SolveAsync();
+            };
             AnalysisPanel.EnlargePlotRequested += (_, data) => PlotOverlay.Show(data);
             Closed += (_, _) => _backend.Dispose();
 
@@ -218,6 +222,7 @@ namespace CircuitAnalyzer.WPF
                         NodePositive = options.TerminalPositive ?? "",
                         NodeNegative = options.TerminalNegative,
                     },
+                ValueDisplay = AnalysisPanel.ValueDisplay,
             };
 
             int versionAtStart = _circuitVersion;

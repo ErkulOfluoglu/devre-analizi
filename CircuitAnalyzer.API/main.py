@@ -177,7 +177,7 @@ async def analyze_circuit(
 
     # ── 1. NETLIST AYRIŞTIRMA ──
     try:
-        parsed = parse_netlist(request.netlist)
+        parsed = parse_netlist(request.netlist, value_basis=request.value_display.value)
     except Exception as e:
         raise HTTPException(
             status_code=400,
@@ -218,6 +218,7 @@ async def analyze_circuit(
         status="warning" if has_problem else "success",
         mode=request.mode.value,
         analysis_type=request.analysis_type.value,
+        value_display=request.value_display.value,
         results=results,
         solution_steps=solution_steps,
         errors=errors,
@@ -254,7 +255,7 @@ async def parse_only(
     C# tarafında Netlist formatını test etmek için kullanışlıdır.
     """
     try:
-        parsed = parse_netlist(request.netlist)
+        parsed = parse_netlist(request.netlist, value_basis=request.value_display.value)
         lcapy_text = to_lcapy_netlist(parsed, request.frequency)
     except Exception as e:
         raise HTTPException(
@@ -264,6 +265,7 @@ async def parse_only(
 
     return {
         "status": "parsed",
+        "value_basis": parsed.value_basis,
         "element_count": len(parsed.elements),
         "elements": [
             {
@@ -466,7 +468,7 @@ def llm_ask(request: LlmAskRequest):
             detail=f"Ollama'da kurulu model yok. Terminalde “ollama pull {ollama.RECOMMENDED_MODEL}” yazın.")
 
     try:
-        parsed = parse_netlist(request.netlist)
+        parsed = parse_netlist(request.netlist, value_basis=request.value_display.value)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Netlist ayrıştırma hatası: {str(e)}")
     _raise_if_netlist_invalid(parsed)

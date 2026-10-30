@@ -234,7 +234,8 @@ namespace CircuitAnalyzer.Tests
                 AnalysisType = c.SuggestedAnalysisType,
                 TheveninTerminals = c.SuggestedTerminal != null
                     ? new TerminalsDto { NodePositive = c.SuggestedTerminal, NodeNegative = "0" }
-                    : null
+                    : null,
+                ValueDisplay = "RMS"
             };
 
         [Fact]

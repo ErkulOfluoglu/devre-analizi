@@ -22,6 +22,8 @@ public partial class PracticeView : UserControl
 
     public Func<AnswerCheckRequestDto, Task<AnswerCheckResponseDto>>? AnswerChecker { get; set; }
 
+    public string ValueDisplay { get; set; } = "RMS";
+
     public IReadOnlyList<PracticeQuestionDto> Questions { get; private set; } = Array.Empty<PracticeQuestionDto>();
 
     public int CorrectCount => _rows.Values.Count(r => r.IsCorrect);
@@ -345,9 +347,12 @@ public partial class PracticeView : UserControl
         // AC ise ek bilgi satırı (Text.Caption)
         if (q.IsAc)
         {
+            string kindText = string.Equals(ValueDisplay, "PEAK", StringComparison.OrdinalIgnoreCase)
+                ? "tepe değer"
+                : "etkin değer";
             string acText = q.Frequency.HasValue
-                ? $"Fazör (tepe değer), f = {q.Frequency.Value} Hz"
-                : "Fazör (tepe değer)";
+                ? $"Fazör ({kindText}), f = {q.Frequency.Value} Hz"
+                : $"Fazör ({kindText})";
             var txtAc = new TextBlock
             {
                 Text = acText,

@@ -151,7 +151,8 @@ namespace CircuitAnalyzer.WPF
                 Id = $"VAC{_acSourceCounter + 1}",
                 Amplitude = 10,
                 Frequency = 50,
-                Phase = 0
+                Phase = 0,
+                ValueKind = AcValueKind.Rms
             };
 
             BeginPlacement(acSource, $"{acSource.Id} eklendi — {acSource.Amplitude}V, " +
@@ -176,7 +177,8 @@ namespace CircuitAnalyzer.WPF
                 Id = $"IAC{_acCurrentSourceCounter + 1}",
                 Amplitude = 0.01,
                 Frequency = 50,
-                Phase = 0
+                Phase = 0,
+                ValueKind = AcValueKind.Rms
             };
 
             BeginPlacement(acSource, $"{acSource.Id} eklendi — {acSource.Amplitude}A, " +
