@@ -68,11 +68,11 @@ namespace CircuitAnalyzer.Tests
             Assert.Equal("T", src.Pins[2].Id);
             Assert.Equal("N", src.Pins[3].Id);
 
-            // Sağda alt alta 20px ızgara kontrolü (VisualWidth = 80, VisualHeight = 60)
-            Assert.Equal(new Point(80, 0), src.Pins[0].RelativePosition);
-            Assert.Equal(new Point(80, 20), src.Pins[1].RelativePosition);
-            Assert.Equal(new Point(80, 40), src.Pins[2].RelativePosition);
-            Assert.Equal(new Point(80, 60), src.Pins[3].RelativePosition);
+            // Sağda alt alta 40 px aralık (sonuç etiketleri için; VisualWidth = 140, VisualHeight = 120)
+            Assert.Equal(new Point(140, 0), src.Pins[0].RelativePosition);
+            Assert.Equal(new Point(140, 40), src.Pins[1].RelativePosition);
+            Assert.Equal(new Point(140, 80), src.Pins[2].RelativePosition);
+            Assert.Equal(new Point(140, 120), src.Pins[3].RelativePosition);
         }
 
         [Fact]
@@ -86,11 +86,11 @@ namespace CircuitAnalyzer.Tests
             Assert.Equal("T", load.Pins[2].Id);
             Assert.Equal("N", load.Pins[3].Id);
 
-            // Solda alt alta 20px ızgara kontrolü (VisualWidth = 80, VisualHeight = 60)
+            // Solda alt alta 40 px aralık (sonuç etiketleri için; VisualWidth = 140, VisualHeight = 120)
             Assert.Equal(new Point(0, 0), load.Pins[0].RelativePosition);
-            Assert.Equal(new Point(0, 20), load.Pins[1].RelativePosition);
-            Assert.Equal(new Point(0, 40), load.Pins[2].RelativePosition);
-            Assert.Equal(new Point(0, 60), load.Pins[3].RelativePosition);
+            Assert.Equal(new Point(0, 40), load.Pins[1].RelativePosition);
+            Assert.Equal(new Point(0, 80), load.Pins[2].RelativePosition);
+            Assert.Equal(new Point(0, 120), load.Pins[3].RelativePosition);
         }
 
         [Fact]

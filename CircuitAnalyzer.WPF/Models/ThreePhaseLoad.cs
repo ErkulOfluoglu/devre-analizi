@@ -19,8 +19,9 @@ namespace CircuitAnalyzer.WPF.Models
     /// </summary>
     public class ThreePhaseLoad : CircuitElement
     {
-        private const double TotalWidth = 80;
-        private const double TotalHeight = 60;
+        // Genişlik yüksekliği aşmalı: Pin.OutwardDirection köşe uçlarını da gövdeden dışarı baktırsın (dönükken de)
+        private const double TotalWidth = 140;
+        private const double TotalHeight = 120;
 
         public override double VisualWidth => TotalWidth;
         public override double VisualHeight => TotalHeight;
@@ -46,21 +47,21 @@ namespace CircuitAnalyzer.WPF.Models
             Pins.Add(new Pin
             {
                 Id = "S",
-                RelativePosition = new Point(0, 20),
-                Owner = this
-            });
-
-            Pins.Add(new Pin
-            {
-                Id = "T",
                 RelativePosition = new Point(0, 40),
                 Owner = this
             });
 
             Pins.Add(new Pin
             {
+                Id = "T",
+                RelativePosition = new Point(0, 80),
+                Owner = this
+            });
+
+            Pins.Add(new Pin
+            {
                 Id = "N",
-                RelativePosition = new Point(0, 60),
+                RelativePosition = new Point(0, 120),
                 Owner = this
             });
         }
@@ -102,38 +103,38 @@ namespace CircuitAnalyzer.WPF.Models
             // Kutu gövde dolgusu ve çerçevesi
             var box = new Rectangle
             {
-                Width = 46,
-                Height = 44,
+                Width = 76,
+                Height = 104,
                 StrokeThickness = 1.5,
                 RadiusX = 2,
                 RadiusY = 2
             };
             box.SetResourceReference(Shape.FillProperty, "Brush.Circuit.Fill");
             box.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
-            Canvas.SetLeft(box, 24);
+            Canvas.SetLeft(box, 64);
             Canvas.SetTop(box, 8);
             container.Children.Add(box);
 
             // Soldaki 4 uçtan kutuya giden hatlar (R, S, T, N)
             var leadR = new Path
             {
-                Data = Geometry.Parse("M 0,0 L 16,0 L 24,14"),
+                Data = Geometry.Parse("M 0,0 L 56,0 L 64,14"),
                 StrokeThickness = 1.5
             };
             leadR.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
             container.Children.Add(leadR);
 
-            var leadS = new Line { X1 = 0, Y1 = 20, X2 = 24, Y2 = 20, StrokeThickness = 1.5 };
+            var leadS = new Line { X1 = 0, Y1 = 40, X2 = 64, Y2 = 40, StrokeThickness = 1.5 };
             leadS.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
             container.Children.Add(leadS);
 
-            var leadT = new Line { X1 = 0, Y1 = 40, X2 = 24, Y2 = 40, StrokeThickness = 1.5 };
+            var leadT = new Line { X1 = 0, Y1 = 80, X2 = 64, Y2 = 80, StrokeThickness = 1.5 };
             leadT.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
             container.Children.Add(leadT);
 
             var leadN = new Path
             {
-                Data = Geometry.Parse("M 0,60 L 16,60 L 24,46"),
+                Data = Geometry.Parse("M 0,120 L 56,120 L 64,106"),
                 StrokeThickness = 1.5
             };
             leadN.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
@@ -144,7 +145,7 @@ namespace CircuitAnalyzer.WPF.Models
             {
                 var yPath = new Path
                 {
-                    Data = Geometry.Parse("M 38,18 L 47,30 L 56,18 M 47,30 L 47,42"),
+                    Data = Geometry.Parse("M 93,48 L 102,60 L 111,48 M 102,60 L 102,72"),
                     StrokeThickness = 1.8,
                     StrokeStartLineCap = PenLineCap.Round,
                     StrokeEndLineCap = PenLineCap.Round
@@ -156,7 +157,7 @@ namespace CircuitAnalyzer.WPF.Models
             {
                 var deltaPath = new Path
                 {
-                    Data = Geometry.Parse("M 47,18 L 57,40 L 37,40 Z"),
+                    Data = Geometry.Parse("M 102,48 L 112,70 L 92,70 Z"),
                     StrokeThickness = 1.8,
                     StrokeStartLineCap = PenLineCap.Round,
                     StrokeEndLineCap = PenLineCap.Round,
@@ -179,14 +180,14 @@ namespace CircuitAnalyzer.WPF.Models
                 lbl.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
                 lbl.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 Canvas.SetLeft(lbl, 4);
-                Canvas.SetTop(lbl, y - lbl.DesiredSize.Height / 2);
+                Canvas.SetTop(lbl, y - lbl.DesiredSize.Height);
                 container.Children.Add(lbl);
             }
 
             AddPinLabel("R", 0);
-            AddPinLabel("S", 20);
-            AddPinLabel("T", 40);
-            AddPinLabel("N", 60);
+            AddPinLabel("S", 40);
+            AddPinLabel("T", 80);
+            AddPinLabel("N", 120);
 
             // Eleman ID etiketi (üstte)
             var idLabel = new TextBlock

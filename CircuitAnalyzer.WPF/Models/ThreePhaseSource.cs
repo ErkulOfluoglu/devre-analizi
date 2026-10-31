@@ -37,8 +37,9 @@ namespace CircuitAnalyzer.WPF.Models
     /// </summary>
     public class ThreePhaseSource : CircuitElement
     {
-        private const double TotalWidth = 80;
-        private const double TotalHeight = 60;
+        // Genişlik yüksekliği aşmalı: Pin.OutwardDirection köşe uçlarını da gövdeden dışarı baktırsın (dönükken de)
+        private const double TotalWidth = 140;
+        private const double TotalHeight = 120;
 
         public override double VisualWidth => TotalWidth;
         public override double VisualHeight => TotalHeight;
@@ -66,21 +67,21 @@ namespace CircuitAnalyzer.WPF.Models
             Pins.Add(new Pin
             {
                 Id = "S",
-                RelativePosition = new Point(TotalWidth, 20),
-                Owner = this
-            });
-
-            Pins.Add(new Pin
-            {
-                Id = "T",
                 RelativePosition = new Point(TotalWidth, 40),
                 Owner = this
             });
 
             Pins.Add(new Pin
             {
+                Id = "T",
+                RelativePosition = new Point(TotalWidth, 80),
+                Owner = this
+            });
+
+            Pins.Add(new Pin
+            {
                 Id = "N",
-                RelativePosition = new Point(TotalWidth, 60),
+                RelativePosition = new Point(TotalWidth, 120),
                 Owner = this
             });
         }
@@ -103,37 +104,37 @@ namespace CircuitAnalyzer.WPF.Models
             // Daire gövde dolgusu ve çerçevesi
             var circle = new Ellipse
             {
-                Width = 40,
-                Height = 40,
+                Width = 48,
+                Height = 48,
                 StrokeThickness = 1.5
             };
             circle.SetResourceReference(Shape.FillProperty, "Brush.Circuit.Fill");
             circle.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
-            Canvas.SetLeft(circle, 10);
-            Canvas.SetTop(circle, 10);
+            Canvas.SetLeft(circle, 26);
+            Canvas.SetTop(circle, 36);
             container.Children.Add(circle);
 
             // Sağdaki 4 uca giden hatlar (R, S, T, N)
-            // (10+20, 10+20) = merkez (30, 30), daire yarıçapı 20
+            // Merkez (50, 60), daire yarıçapı 24
             var leadR = new Path
             {
-                Data = Geometry.Parse("M 46,16 L 60,0 L 80,0"),
+                Data = Geometry.Parse("M 67,43 L 80,0 L 140,0"),
                 StrokeThickness = 1.5
             };
             leadR.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
             container.Children.Add(leadR);
 
-            var leadS = new Line { X1 = 50, Y1 = 20, X2 = 80, Y2 = 20, StrokeThickness = 1.5 };
+            var leadS = new Line { X1 = 63, Y1 = 40, X2 = 140, Y2 = 40, StrokeThickness = 1.5 };
             leadS.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
             container.Children.Add(leadS);
 
-            var leadT = new Line { X1 = 50, Y1 = 40, X2 = 80, Y2 = 40, StrokeThickness = 1.5 };
+            var leadT = new Line { X1 = 63, Y1 = 80, X2 = 140, Y2 = 80, StrokeThickness = 1.5 };
             leadT.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
             container.Children.Add(leadT);
 
             var leadN = new Path
             {
-                Data = Geometry.Parse("M 46,44 L 60,60 L 80,60"),
+                Data = Geometry.Parse("M 67,77 L 80,120 L 140,120"),
                 StrokeThickness = 1.5
             };
             leadN.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
@@ -149,8 +150,8 @@ namespace CircuitAnalyzer.WPF.Models
             symText.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Circuit.Stroke");
             symText.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
             symText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            Canvas.SetLeft(symText, 30 - symText.DesiredSize.Width / 2);
-            Canvas.SetTop(symText, 14);
+            Canvas.SetLeft(symText, 50 - symText.DesiredSize.Width / 2);
+            Canvas.SetTop(symText, 44);
             container.Children.Add(symText);
 
             // Daire içinde Y/Δ bağlantı metni
@@ -163,8 +164,8 @@ namespace CircuitAnalyzer.WPF.Models
             connText.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Circuit.LabelSecondary");
             connText.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
             connText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            Canvas.SetLeft(connText, 30 - connText.DesiredSize.Width / 2);
-            Canvas.SetTop(connText, 28);
+            Canvas.SetLeft(connText, 50 - connText.DesiredSize.Width / 2);
+            Canvas.SetTop(connText, 60);
             container.Children.Add(connText);
 
             // Uç etiketleri (R, S, T, N)
@@ -180,14 +181,14 @@ namespace CircuitAnalyzer.WPF.Models
                 lbl.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
                 lbl.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 Canvas.SetLeft(lbl, TotalWidth - lbl.DesiredSize.Width - 6);
-                Canvas.SetTop(lbl, y - lbl.DesiredSize.Height / 2);
+                Canvas.SetTop(lbl, y - lbl.DesiredSize.Height);
                 container.Children.Add(lbl);
             }
 
             AddPinLabel("R", 0);
-            AddPinLabel("S", 20);
-            AddPinLabel("T", 40);
-            AddPinLabel("N", 60);
+            AddPinLabel("S", 40);
+            AddPinLabel("T", 80);
+            AddPinLabel("N", 120);
 
             // Eleman ID etiketi (üstte)
             var idLabel = new TextBlock

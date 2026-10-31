@@ -263,17 +263,23 @@ namespace CircuitAnalyzer.WPF.Views
 
         private static Point ThreePhaseLoadPinAnchor(Pin pin)
         {
+            // Etiketler gövdenin arkasına yazılır: uç tarafında tel ve düğüm etiketleri var
+            const double behindBody = 146;
             var pos = pin.AbsolutePosition;
             var dir = pin.OutwardDirection ?? new Vector(-1, 0);
 
             if (dir.X < -0.5) // sola bakıyor (0°)
-                return new Point(pos.X - 74, pos.Y - 10);
+                return new Point(pos.X + behindBody, pos.Y - 10);
             if (dir.X > 0.5) // sağa bakıyor (180°)
-                return new Point(pos.X + 8, pos.Y - 10);
-            if (dir.Y < -0.5) // yukarı bakıyor (90°)
-                return new Point(pos.X - 35, pos.Y - 30);
-            // aşağı bakıyor (270°)
-            return new Point(pos.X - 35, pos.Y + 8);
+                return new Point(pos.X - behindBody - 100, pos.Y - 10);
+
+            // Dikey durumda uçlar yan yana kalır; etiketler sığsın diye alt alta dizilir
+            var owner = pin.Owner!;
+            double centerX = owner.Position.X + owner.VisualWidth / 2;
+            int row = owner.Pins.IndexOf(pin);
+            return dir.Y < 0 // yukarı bakıyor (90°)
+                ? new Point(centerX - 50, pos.Y + behindBody + row * 20)
+                : new Point(centerX - 50, pos.Y - behindBody - (owner.Pins.Count - row) * 20);
         }
 
         // ═══════════════════════════════════════════════════════
