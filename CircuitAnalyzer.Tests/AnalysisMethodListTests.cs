@@ -42,12 +42,13 @@ public class AnalysisMethodListTests
     [InlineData(8, "Güç ve Güç Katsayısı", AnalysisTypes.Power, false)]
     [InlineData(9, "Rezonans", AnalysisTypes.Resonance, false)]
     [InlineData(10, "Transformatör", AnalysisTypes.Transformer, false)]
+    [InlineData(11, "Üç Faz", AnalysisTypes.ThreePhase, false)]
     public void ComboItem_MapsToApiTypeAndTerminalsRow(int index, string label, string apiType, bool showsTerminals)
     {
         RunOnSta(() =>
         {
             var panel = new AnalysisPanel();
-            Assert.Equal(11, panel.CmbAnalysisType.Items.Count);
+            Assert.Equal(12, panel.CmbAnalysisType.Items.Count);
             Assert.Equal(label, (panel.CmbAnalysisType.Items[index] as ComboBoxItem)?.Content as string);
 
             panel.CmbAnalysisType.SelectedIndex = index;
@@ -67,6 +68,7 @@ public class AnalysisMethodListTests
         Assert.Equal("POWER", AnalysisTypes.Power);
         Assert.Equal("RESONANCE", AnalysisTypes.Resonance);
         Assert.Equal("TRANSFORMER", AnalysisTypes.Transformer);
+        Assert.Equal("THREE_PHASE", AnalysisTypes.ThreePhase);
     }
 
     [Fact]
@@ -122,12 +124,26 @@ public class AnalysisMethodListTests
     }
 
     [Fact]
+    public void ThreePhase_TryGetOptions_NeedsNoTerminals()
+    {
+        RunOnSta(() =>
+        {
+            var panel = new AnalysisPanel();
+            panel.SetAnalysisType(AnalysisTypes.ThreePhase);
+            Assert.Equal(11, panel.CmbAnalysisType.SelectedIndex);
+
+            Assert.True(panel.TryGetOptions(out var opt, out var err), err);
+            Assert.Equal(AnalysisTypes.ThreePhase, opt!.AnalysisType);
+        });
+    }
+
+    [Fact]
     public void RestoreAnalysisSettings_NewMethods_RoundTrip()
     {
         RunOnSta(() =>
         {
             var panel = new AnalysisPanel();
-            foreach (var type in new[] { AnalysisTypes.Millman, AnalysisTypes.SourceTransform, AnalysisTypes.Resonance, AnalysisTypes.Transformer })
+            foreach (var type in new[] { AnalysisTypes.Millman, AnalysisTypes.SourceTransform, AnalysisTypes.Resonance, AnalysisTypes.Transformer, AnalysisTypes.ThreePhase })
             {
                 panel.RestoreAnalysisSettings(new CircuitDocument.AnalysisData { Type = type });
                 Assert.Equal(type, panel.GetAnalysisSettings().Type);

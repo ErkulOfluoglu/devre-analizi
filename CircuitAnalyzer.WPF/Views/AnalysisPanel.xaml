@@ -119,6 +119,7 @@
                     <ComboBoxItem Content="Güç ve Güç Katsayısı" ToolTip="Devrenin aktif (P), reaktif (Q) ve görünür (S) gücü, güç faktörü ve kompanzasyon hesabı"/>
                     <ComboBoxItem Content="Rezonans" ToolTip="Seri veya paralel RLC devrelerinin rezonans frekansı, kalite faktörü, bant genişliği ve frekans eğrisi"/>
                     <ComboBoxItem Content="Transformatör" ToolTip="İdeal veya kuplajlı transformatör analizi"/>
+                    <ComboBoxItem Content="Üç Faz" ToolTip="Üç fazlı devrelerin hat/faz gerilim ve akımları, güç ve kompanzasyon hesabı"/>
                 </ComboBox>
 
                 <!-- Terminaller (Thevenin/Norton için) -->

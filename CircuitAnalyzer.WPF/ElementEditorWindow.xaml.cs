@@ -35,6 +35,7 @@ namespace CircuitAnalyzer.WPF
         private readonly List<double> _unitScales = new();
 
         // ── Karmaşık sayı alanları ──
+        private readonly List<(TextBox Box, Action<ComplexValue> Setter)> _complexInputs = new();
         private TextBox? _complexInputBox = null;
         private Action<ComplexValue>? _complexSetter = null;
         private TextBlock? _previewText = null;
@@ -138,6 +139,18 @@ namespace CircuitAnalyzer.WPF
 
                 case TransformerElement tf:
                     BuildTransformerForm(tf);
+                    break;
+
+                case ThreePhaseSource tps:
+                    BuildThreePhaseSourceForm(tps);
+                    break;
+
+                case ThreePhaseLoad tpl:
+                    BuildThreePhaseLoadForm(tpl);
+                    break;
+
+                case Wattmeter wm:
+                    BuildWattmeterForm(wm);
                     break;
             }
 
@@ -281,6 +294,7 @@ namespace CircuitAnalyzer.WPF
             _valueBoxes.Clear();
             _setters.Clear();
             _unitScales.Clear();
+            _complexInputs.Clear();
             _complexInputBox = null;
             _complexSetter = null;
 
@@ -400,6 +414,7 @@ namespace CircuitAnalyzer.WPF
             _valueBoxes.Clear();
             _setters.Clear();
             _unitScales.Clear();
+            _complexInputs.Clear();
             _complexInputBox = null;
             _complexSetter = null;
 
@@ -652,6 +667,7 @@ namespace CircuitAnalyzer.WPF
             _valueBoxes.Clear();
             _setters.Clear();
             _unitScales.Clear();
+            _complexInputs.Clear();
             _complexInputBox = null;
             _complexSetter = null;
 
@@ -731,6 +747,117 @@ namespace CircuitAnalyzer.WPF
             }
         }
 
+        private void BuildThreePhaseSourceForm(ThreePhaseSource src)
+        {
+            Title = $"{src.Id} — Üç Fazlı Kaynak";
+            AddNameField(src.Id, id => src.Id = id);
+
+            AddModeSelector("Bağlantı:", "Yıldız (Y)", "Üçgen (Δ)", src.Connection == ThreePhaseConnection.Star, isStar =>
+            {
+                src.Connection = isStar ? ThreePhaseConnection.Star : ThreePhaseConnection.Delta;
+            }, "3psConnGroup");
+
+            AddModeSelector("Değer:", "Hat gerilimi", "Faz gerilimi", src.ValueBasis == ThreePhaseValueBasis.Line, isLine =>
+            {
+                src.ValueBasis = isLine ? ThreePhaseValueBasis.Line : ThreePhaseValueBasis.Phase;
+            }, "3psBasisGroup");
+
+            AddModeSelector("Değer türü:", "Etkin", "Tepe", src.ValueKind == AcValueKind.Rms, isEtkin =>
+            {
+                src.ValueKind = isEtkin ? AcValueKind.Rms : AcValueKind.Peak;
+            }, "3psValueKindGroup");
+
+            AddField("Değer (V)", src.Value, v => src.Value = v);
+            AddField("Frekans (Hz)", src.Frequency, f => src.Frequency = f);
+            AddField("Faz (°)", src.Phase, p => src.Phase = p);
+
+            AddModeSelector("Sıra:", "RST", "RTS", src.Sequence == ThreePhaseSequence.Rst, isRst =>
+            {
+                src.Sequence = isRst ? ThreePhaseSequence.Rst : ThreePhaseSequence.Rts;
+            }, "3psSeqGroup");
+        }
+
+        private void BuildThreePhaseLoadForm(ThreePhaseLoad load)
+        {
+            Title = $"{load.Id} — Üç Fazlı Yük";
+            AddNameField(load.Id, id => load.Id = id);
+
+            AddModeSelector("Bağlantı:", "Yıldız (Y)", "Üçgen (Δ)", load.Connection == ThreePhaseConnection.Star, isStar =>
+            {
+                load.Connection = isStar ? ThreePhaseConnection.Star : ThreePhaseConnection.Delta;
+                RebuildThreePhaseLoadFields(load);
+            }, "3plConnGroup");
+
+            var chkBalanced = new CheckBox
+            {
+                Content = "Dengeli",
+                IsChecked = load.Balanced,
+                Margin = new Thickness(0, 8, 0, 8)
+            };
+            chkBalanced.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
+            chkBalanced.Checked += (s, e) =>
+            {
+                load.Balanced = true;
+                RebuildThreePhaseLoadFields(load);
+            };
+            chkBalanced.Unchecked += (s, e) =>
+            {
+                load.Balanced = false;
+                RebuildThreePhaseLoadFields(load);
+            };
+            PropertiesPanel.Children.Add(chkBalanced);
+
+            _dynamicPanel = new StackPanel();
+            PropertiesPanel.Children.Add(_dynamicPanel);
+
+            RebuildThreePhaseLoadFields(load);
+
+            AddHintText("N ucu bağlı değilse üç iletkenli çalışır.");
+        }
+
+        private void RebuildThreePhaseLoadFields(ThreePhaseLoad load)
+        {
+            if (_dynamicPanel == null) return;
+
+            _dynamicPanel.Children.Clear();
+            _valueBoxes.Clear();
+            _setters.Clear();
+            _unitScales.Clear();
+            _complexInputs.Clear();
+            _complexInputBox = null;
+            _complexSetter = null;
+
+            if (load.Balanced)
+            {
+                AddComplexFieldTo(_dynamicPanel, "Empedans Z:", load.ZR.ToRectangularString(), cv =>
+                {
+                    load.ZR = cv;
+                    load.ZS = ComplexValue.FromRectangular(cv.Real, cv.Imaginary);
+                    load.ZT = ComplexValue.FromRectangular(cv.Real, cv.Imaginary);
+                });
+            }
+            else
+            {
+                var labels = ThreePhaseLoad.GetPhaseLabels(load.Connection);
+                AddComplexFieldTo(_dynamicPanel, $"{labels[0]}:", load.ZR.ToRectangularString(), cv => load.ZR = cv);
+                AddComplexFieldTo(_dynamicPanel, $"{labels[1]}:", load.ZS.ToRectangularString(), cv => load.ZS = cv);
+                AddComplexFieldTo(_dynamicPanel, $"{labels[2]}:", load.ZT.ToRectangularString(), cv => load.ZT = cv);
+            }
+
+            if (_complexInputBox != null)
+            {
+                _complexInputBox.Focus();
+                _complexInputBox.SelectAll();
+            }
+        }
+
+        private void BuildWattmeterForm(Wattmeter wm)
+        {
+            Title = $"{wm.Id} — Wattmetre";
+            AddNameField(wm.Id, id => wm.Id = id);
+            AddHintText("Akım bobinini hatta seri, gerilim bobinini ölçülecek iki noktaya bağlayın.");
+        }
+
         // ═══════════════════════════════════════════════════════
         //  FORM BİLEŞENLERİ
         // ═══════════════════════════════════════════════════════
@@ -795,27 +922,51 @@ namespace CircuitAnalyzer.WPF
                 Margin = new Thickness(0, 0, 0, 8)
             };
 
-            // Yazarken canlı önizleme güncelle
-            textBox.TextChanged += (s, e) => UpdateComplexPreview(textBox.Text);
-
-            panel.Children.Add(lbl);
-            panel.Children.Add(textBox);
-
-            _complexInputBox = textBox;
-            _complexSetter = setter;
-
             // Önizleme alanı
-            _previewText = new TextBlock
+            var previewBlock = new TextBlock
             {
                 FontSize = 12,
                 Margin = new Thickness(0, 2, 0, 8),
                 TextWrapping = TextWrapping.Wrap
             };
-            _previewText.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
-            panel.Children.Add(_previewText);
+            previewBlock.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
+            _previewText = previewBlock;
+
+            void UpdatePreview(string input)
+            {
+                if (ComplexValue.TryParse(input, out var cv))
+                {
+                    previewBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Success");
+                    string unit = _element switch
+                    {
+                        AcVoltageSource => "V",
+                        AcCurrentSource => "A",
+                        _ => "Ω",
+                    };
+                    previewBlock.Text =
+                        $"Dikdörtgensel: {cv.ToRectangularString()} {unit}\n" +
+                        $"Kutupsal: {cv.ToPolarString()} {unit}";
+                }
+                else
+                {
+                    previewBlock.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Error");
+                    previewBlock.Text = "Geçersiz format — Örnek: 50+j30, 10∠30, 4+3i";
+                }
+            }
+
+            // Yazarken canlı önizleme güncelle
+            textBox.TextChanged += (s, e) => UpdatePreview(textBox.Text);
+
+            panel.Children.Add(lbl);
+            panel.Children.Add(textBox);
+            panel.Children.Add(previewBlock);
+
+            _complexInputs.Add((textBox, setter));
+            _complexInputBox = textBox;
+            _complexSetter = setter;
 
             // Başlangıç önizlemesi
-            UpdateComplexPreview(currentText);
+            UpdatePreview(currentText);
         }
 
         /// <summary>
@@ -1045,7 +1196,38 @@ namespace CircuitAnalyzer.WPF
             }
 
             // ── 2. Karmaşık sayı alanını doğrula ──
-            if (_complexInputBox != null && _complexSetter != null)
+            if (_complexInputs.Count > 0)
+            {
+                var validated = new List<(Action<ComplexValue> Setter, ComplexValue Value)>();
+                foreach (var (box, setter) in _complexInputs)
+                {
+                    string complexText = box.Text.Trim();
+                    if (!ComplexValue.TryParse(complexText, out var cv))
+                    {
+                        MessageBox.Show(
+                            $"Geçersiz karmaşık sayı: \"{complexText}\"\n\n" +
+                            "Kabul edilen formatlar:\n" +
+                            "  Dikdörtgensel: 50+j30, 50+30j, 4+3i, 4+i3\n" +
+                            "  Kutupsal: 10∠30, 10<30°\n" +
+                            "  Saf reel: 100\n" +
+                            "  Saf sanal: j50, -j30",
+                            "Giriş Hatası",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+
+                        box.Focus();
+                        box.SelectAll();
+                        return;
+                    }
+                    validated.Add((setter, cv));
+                }
+
+                foreach (var (setter, cv) in validated)
+                {
+                    setter(cv);
+                }
+            }
+            else if (_complexInputBox != null && _complexSetter != null)
             {
                 string complexText = _complexInputBox.Text.Trim();
 
@@ -1068,6 +1250,23 @@ namespace CircuitAnalyzer.WPF
                 }
 
                 _complexSetter(cv);
+            }
+
+            // ── 3. Üç fazlı kaynak ek doğrulaması ──
+            if (_element is ThreePhaseSource tpsCheck)
+            {
+                if (tpsCheck.Value <= 0)
+                {
+                    MessageBox.Show("Gerilim sıfırdan büyük olmalıdır.",
+                        "Giriş Hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                if (tpsCheck.Frequency <= 0)
+                {
+                    MessageBox.Show("Frekans sıfırdan büyük olmalıdır.",
+                        "Giriş Hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
             }
 
             // ── 3. AC kaynak ek doğrulaması ──

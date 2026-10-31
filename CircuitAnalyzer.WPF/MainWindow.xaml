@@ -135,6 +135,15 @@
                             </StackPanel>
                         </Button>
 
+                        <Button x:Name="BtnAddThreePhaseLoad"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddThreePhaseLoad_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.ThreePhaseLoad}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Üç fazlı yük" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
                         <!-- Grup 2: Kaynaklar (18px grup aralığı) -->
                         <TextBlock Text="Kaynaklar"
                                    Style="{DynamicResource Text.Overline}"
@@ -173,6 +182,15 @@
                             <StackPanel Orientation="Horizontal">
                                 <controls:Icon Data="{DynamicResource Icon.AcCurrentSource}" Width="20" Height="20" Margin="0,0,12,0"/>
                                 <TextBlock Text="AC akım kaynağı" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnAddThreePhaseSource"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddThreePhaseSource_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.ThreePhaseSource}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Üç fazlı kaynak" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
@@ -302,6 +320,15 @@
                             <StackPanel Orientation="Horizontal">
                                 <controls:Icon Data="{DynamicResource Icon.Probe}" Width="20" Height="20" Margin="0,0,12,0"/>
                                 <TextBlock Text="Ölçüm probu" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnAddWattmeter"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddWattmeter_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Wattmeter}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Wattmetre" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 

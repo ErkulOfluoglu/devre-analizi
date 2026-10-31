@@ -235,7 +235,7 @@ namespace CircuitAnalyzer.WPF
                         NodeNegative = options.TerminalNegative,
                     },
                 ValueDisplay = AnalysisPanel.ValueDisplay,
-                PowerFactorTarget = options.AnalysisType == AnalysisTypes.Power ? options.PowerFactorTarget : null,
+                PowerFactorTarget = (options.AnalysisType == AnalysisTypes.Power || options.AnalysisType == AnalysisTypes.ThreePhase) ? options.PowerFactorTarget : null,
             };
 
             int versionAtStart = _circuitVersion;
@@ -458,6 +458,9 @@ namespace CircuitAnalyzer.WPF
             _probeCounter = Math.Max(Max("VP"), Max("IP"));
             _junctionCounter = Max("J");
             _switchCounter = Max("S");
+            _threePhaseSourceCounter = Max("U");
+            _threePhaseLoadCounter = Max("Y");
+            _wattmeterCounter = Max("W");
         }
 
         // ═══════════════════════════════════════════════════════

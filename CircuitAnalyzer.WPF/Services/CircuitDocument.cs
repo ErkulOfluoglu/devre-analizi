@@ -76,6 +76,13 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("l2")] public double? L2 { get; set; }
             [JsonPropertyName("k")] public double? K { get; set; }
             [JsonPropertyName("coupling_input")] public string? CouplingInput { get; set; }
+
+            // ── Üç faz ("3PS", "3PL") ve Wattmetre ("W") ──
+            [JsonPropertyName("connection")] public string? Connection { get; set; }
+            [JsonPropertyName("value_basis")] public string? ValueBasis { get; set; }
+            [JsonPropertyName("sequence")] public string? Sequence { get; set; }
+            [JsonPropertyName("balanced")] public bool? Balanced { get; set; }
+            [JsonPropertyName("z")] public List<double[]>? Z { get; set; }
         }
 
         public sealed class WireData
@@ -194,6 +201,30 @@ namespace CircuitAnalyzer.WPF.Services
                     d.L2 = t.L2;
                     d.K = t.K;
                     d.CouplingInput = t.CouplingInput == CouplingInput.M ? "M" : "K";
+                    break;
+                case ThreePhaseSource tps:
+                    d.Type = "3PS";
+                    d.Connection = tps.Connection == ThreePhaseConnection.Star ? "Y" : "D";
+                    d.ValueBasis = tps.ValueBasis == ThreePhaseValueBasis.Line ? "line" : "phase";
+                    d.Value = tps.Value;
+                    d.Frequency = tps.Frequency;
+                    d.Phase = tps.Phase;
+                    d.Sequence = tps.Sequence == ThreePhaseSequence.Rst ? "RST" : "RTS";
+                    d.ValueKind = tps.ValueKind == AcValueKind.Rms ? "rms" : "peak";
+                    break;
+                case ThreePhaseLoad tpl:
+                    d.Type = "3PL";
+                    d.Connection = tpl.Connection == ThreePhaseConnection.Star ? "Y" : "D";
+                    d.Balanced = tpl.Balanced;
+                    d.Z = new List<double[]>
+                    {
+                        new[] { tpl.ZR.Real, tpl.ZR.Imaginary },
+                        new[] { tpl.ZS.Real, tpl.ZS.Imaginary },
+                        new[] { tpl.ZT.Real, tpl.ZT.Imaginary }
+                    };
+                    break;
+                case Wattmeter:
+                    d.Type = "W";
                     break;
                 default:
                     throw new NotSupportedException($"Kaydedilemeyen eleman türü: {e.GetType().Name}");
@@ -365,6 +396,73 @@ namespace CircuitAnalyzer.WPF.Services
                             CouplingInput = couplingInput,
                         };
                     }
+                case "3PS":
+                    {
+                        var conn = string.Equals(d.Connection, "D", StringComparison.OrdinalIgnoreCase) ||
+                                   string.Equals(d.Connection, "delta", StringComparison.OrdinalIgnoreCase)
+                            ? ThreePhaseConnection.Delta
+                            : ThreePhaseConnection.Star;
+                        var basis = string.Equals(d.ValueBasis, "phase", StringComparison.OrdinalIgnoreCase)
+                            ? ThreePhaseValueBasis.Phase
+                            : ThreePhaseValueBasis.Line;
+                        var seq = string.Equals(d.Sequence, "RTS", StringComparison.OrdinalIgnoreCase)
+                            ? ThreePhaseSequence.Rts
+                            : ThreePhaseSequence.Rst;
+                        var vk = string.Equals(d.ValueKind, "peak", StringComparison.OrdinalIgnoreCase)
+                            ? AcValueKind.Peak
+                            : AcValueKind.Rms;
+
+                        return new ThreePhaseSource
+                        {
+                            Connection = conn,
+                            ValueBasis = basis,
+                            Value = d.Value is { } v && v > 0 ? v : 380.0,
+                            Frequency = d.Frequency is { } f && f > 0 ? f : 50.0,
+                            Phase = d.Phase ?? 0.0,
+                            Sequence = seq,
+                            ValueKind = vk
+                        };
+                    }
+                case "3PL":
+                    {
+                        var conn = string.Equals(d.Connection, "D", StringComparison.OrdinalIgnoreCase) ||
+                                   string.Equals(d.Connection, "delta", StringComparison.OrdinalIgnoreCase)
+                            ? ThreePhaseConnection.Delta
+                            : ThreePhaseConnection.Star;
+                        bool balanced = d.Balanced ?? true;
+
+                        ComplexValue zR, zS, zT;
+                        if (d.Z != null && d.Z.Count >= 3)
+                        {
+                            zR = ComplexValue.FromRectangular(d.Z[0].Length > 0 ? d.Z[0][0] : 10, d.Z[0].Length > 1 ? d.Z[0][1] : 5);
+                            zS = ComplexValue.FromRectangular(d.Z[1].Length > 0 ? d.Z[1][0] : 10, d.Z[1].Length > 1 ? d.Z[1][1] : 5);
+                            zT = ComplexValue.FromRectangular(d.Z[2].Length > 0 ? d.Z[2][0] : 10, d.Z[2].Length > 1 ? d.Z[2][1] : 5);
+                        }
+                        else if (d.Z != null && d.Z.Count >= 1)
+                        {
+                            var z0 = ComplexValue.FromRectangular(d.Z[0].Length > 0 ? d.Z[0][0] : 10, d.Z[0].Length > 1 ? d.Z[0][1] : 5);
+                            zR = z0;
+                            zS = ComplexValue.FromRectangular(z0.Real, z0.Imaginary);
+                            zT = ComplexValue.FromRectangular(z0.Real, z0.Imaginary);
+                        }
+                        else
+                        {
+                            zR = ComplexValue.FromRectangular(10, 5);
+                            zS = ComplexValue.FromRectangular(10, 5);
+                            zT = ComplexValue.FromRectangular(10, 5);
+                        }
+
+                        return new ThreePhaseLoad
+                        {
+                            Connection = conn,
+                            Balanced = balanced,
+                            ZR = zR,
+                            ZS = zS,
+                            ZT = zT
+                        };
+                    }
+                case "W":
+                    return new Wattmeter();
                 default:
                     throw new CircuitFileException($"Tanınmayan eleman türü: “{d.Type}”. Dosya daha yeni bir sürümle kaydedilmiş olabilir.");
             }

@@ -60,6 +60,63 @@ namespace CircuitAnalyzer.WPF.Views
             Redraw();
         }
 
+        public void LoadData(ThreePhaseResultDto data)
+        {
+            if (data == null)
+                return;
+
+            _data = new PowerSummaryDto
+            {
+                P = data.P,
+                Q = data.Q,
+                S = data.S,
+                Pf = data.Pf,
+                PfType = data.PfType,
+                Compensation = data.Compensation == null ? null : new PowerCompensationDto
+                {
+                    TargetPf = data.Compensation.TargetPf,
+                    Qc = data.Compensation.Qc,
+                    Applied = data.Compensation.Applied,
+                    Reason = data.Compensation.Reason
+                }
+            };
+
+            string pfTypeTr = (data.PfType ?? "").ToLowerInvariant() switch
+            {
+                "lagging" => "geri",
+                "leading" => "ileri",
+                "unity" => "birim",
+                _ => data.PfType ?? ""
+            };
+
+            string pfFormatted = TurkishNumber.Format(data.Pf, "0.###");
+            string pfText = string.IsNullOrEmpty(pfTypeTr) ? pfFormatted : $"{pfFormatted} {pfTypeTr}";
+
+            TxtSummary.Text = $"P = {EngFormat.Format(data.P, "W")} | Q = {EngFormat.Format(data.Q, "VAR")} | S = {EngFormat.Format(data.S, "VA")} | cos φ = {pfText}";
+
+            if (data.Compensation == null)
+            {
+                TxtCompensation.Visibility = Visibility.Collapsed;
+            }
+            else if (data.Compensation.Applied)
+            {
+                TxtCompensation.Visibility = Visibility.Visible;
+                string qcStr = EngFormat.Format(data.Compensation.Qc ?? 0, "VAR");
+                string cyStr = EngFormat.Format(data.Compensation.CY ?? 0, "F");
+                string cDeltaStr = EngFormat.Format(data.Compensation.CDelta ?? 0, "F");
+                TxtCompensation.Text = $"Q_C = {qcStr}, C_Y = {cyStr}, C_Δ = {cDeltaStr}";
+                SubscriptText.Apply(TxtCompensation);
+            }
+            else
+            {
+                TxtCompensation.Visibility = Visibility.Visible;
+                TxtCompensation.Text = data.Compensation.Reason ?? "";
+                SubscriptText.Apply(TxtCompensation);
+            }
+
+            Redraw();
+        }
+
         private void TriangleCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             Redraw();

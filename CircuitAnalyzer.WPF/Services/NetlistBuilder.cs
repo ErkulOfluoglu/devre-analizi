@@ -219,6 +219,8 @@ namespace CircuitAnalyzer.WPF.Services
             bool hasGround = elements.Any(el => el is GroundElement);
             var acSources = elements.OfType<AcVoltageSource>().ToList();
             var acCurrentSources = elements.OfType<AcCurrentSource>().ToList();
+            var threePhaseSources = elements.OfType<ThreePhaseSource>().ToList();
+            var wattmeters = elements.OfType<Wattmeter>().ToList();
 
             // ═══ Netlist metni ═══
             int componentCount = elements.Count(el => el is not JunctionElement);
@@ -276,7 +278,7 @@ namespace CircuitAnalyzer.WPF.Services
                 NodeMap = nodeMap,
                 NodePins = nodePins,
                 HasGround = hasGround,
-                HasAcSource = acSources.Count > 0 || acCurrentSources.Count > 0,
+                HasAcSource = acSources.Count > 0 || acCurrentSources.Count > 0 || threePhaseSources.Count > 0 || wattmeters.Count > 0,
                 HasPhasorSource = acSources.Any(s => s.InputMode == AcInputMode.Phasor) || acCurrentSources.Any(s => s.InputMode == AcInputMode.Phasor),
                 PhasorFrequencies = acSources.Where(s => s.InputMode == AcInputMode.Phasor).Select(s => s.Frequency)
                     .Concat(acCurrentSources.Where(s => s.InputMode == AcInputMode.Phasor).Select(s => s.Frequency))

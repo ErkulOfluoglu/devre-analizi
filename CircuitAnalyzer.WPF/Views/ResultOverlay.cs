@@ -135,6 +135,48 @@ namespace CircuitAnalyzer.WPF.Views
                     continue;
                 }
 
+                if (element is ThreePhaseLoad loadEl)
+                {
+                    var tp = response.ThreePhaseResult;
+                    if (tp != null && tp.LineCurrents != null)
+                    {
+                        if (tp.LineCurrents.TryGetValue("R", out var ir))
+                        {
+                            var irVal = ResultValue.FromComplex(ir);
+                            AddLabel(ThreePhaseLoadPinAnchor(loadEl.Pins[0]), $"I_R: {EngFormat.Format(irVal, "A")}", "Brush.Overlay.Current", bold: false);
+                        }
+                        if (tp.LineCurrents.TryGetValue("S", out var isCur))
+                        {
+                            var isVal = ResultValue.FromComplex(isCur);
+                            AddLabel(ThreePhaseLoadPinAnchor(loadEl.Pins[1]), $"I_S: {EngFormat.Format(isVal, "A")}", "Brush.Overlay.Current", bold: false);
+                        }
+                        if (tp.LineCurrents.TryGetValue("T", out var it))
+                        {
+                            var itVal = ResultValue.FromComplex(it);
+                            AddLabel(ThreePhaseLoadPinAnchor(loadEl.Pins[2]), $"I_T: {EngFormat.Format(itVal, "A")}", "Brush.Overlay.Current", bold: false);
+                        }
+
+                        bool nConnected = netlist.NodeMap.TryGetValue(loadEl.Pins[3], out int nNode) &&
+                                          netlist.NodePins.TryGetValue(nNode, out var nPins) && nPins.Count >= 2;
+                        if (nConnected && tp.NeutralCurrent != null)
+                        {
+                            var inVal = ResultValue.FromComplex(tp.NeutralCurrent);
+                            AddLabel(ThreePhaseLoadPinAnchor(loadEl.Pins[3]), $"I_N: {EngFormat.Format(inVal, "A")}", "Brush.Overlay.Current", bold: false);
+                        }
+                    }
+                    continue;
+                }
+
+                if (element is Wattmeter wm)
+                {
+                    var wmRes = response.WattmeterResults?.FirstOrDefault(w => string.Equals(w.Id, wm.Id, StringComparison.OrdinalIgnoreCase));
+                    if (wmRes != null)
+                    {
+                        AddLabel(BelowOrRight(wm), $"P = {EngFormat.Format(wmRes.P, "W")}", "Brush.Overlay.Current", bold: true);
+                    }
+                    continue;
+                }
+
                 if (results.ElementCurrents.TryGetValue(element.Id, out var current))
                 {
                     var (value, direction) = CurrentDisplay.Format(element.Id, current);
@@ -217,6 +259,21 @@ namespace CircuitAnalyzer.WPF.Views
             }
             return (new Point(pMid.X - 10, pMid.Y + 24),
                     new Point(sMid.X - 10, sMid.Y + 24));
+        }
+
+        private static Point ThreePhaseLoadPinAnchor(Pin pin)
+        {
+            var pos = pin.AbsolutePosition;
+            var dir = pin.OutwardDirection ?? new Vector(-1, 0);
+
+            if (dir.X < -0.5) // sola bakıyor (0°)
+                return new Point(pos.X - 74, pos.Y - 10);
+            if (dir.X > 0.5) // sağa bakıyor (180°)
+                return new Point(pos.X + 8, pos.Y - 10);
+            if (dir.Y < -0.5) // yukarı bakıyor (90°)
+                return new Point(pos.X - 35, pos.Y - 30);
+            // aşağı bakıyor (270°)
+            return new Point(pos.X - 35, pos.Y + 8);
         }
 
         // ═══════════════════════════════════════════════════════
@@ -312,6 +369,7 @@ namespace CircuitAnalyzer.WPF.Views
             };
             tb.SetResourceReference(TextBlock.ForegroundProperty, foregroundToken);
             tb.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
+            SubscriptText.Apply(tb);
             label.Child = tb;
 
             Place(label, position);

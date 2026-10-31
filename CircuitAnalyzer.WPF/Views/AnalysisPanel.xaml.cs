@@ -285,6 +285,10 @@ public partial class AnalysisPanel : UserControl
         {
             CmbAnalysisType.SelectedIndex = 10;
         }
+        else if (string.Equals(analysisType, AnalysisTypes.ThreePhase, StringComparison.OrdinalIgnoreCase))
+        {
+            CmbAnalysisType.SelectedIndex = 11;
+        }
         else
         {
             CmbAnalysisType.SelectedIndex = 0;
@@ -419,7 +423,8 @@ public partial class AnalysisPanel : UserControl
             ?? CmbAnalysisType.SelectedItem as string
             ?? "";
 
-        bool isPower = string.Equals(AnalysisTypeFromText(selectedText), AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase);
+        bool isPower = string.Equals(AnalysisTypeFromText(selectedText), AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(AnalysisTypeFromText(selectedText), AnalysisTypes.ThreePhase, StringComparison.OrdinalIgnoreCase);
         RowPowerFactorTarget.Visibility = isPower ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -446,6 +451,8 @@ public partial class AnalysisPanel : UserControl
             return AnalysisTypes.Resonance;
         if (selectedText.Contains("Transformatör", StringComparison.OrdinalIgnoreCase))
             return AnalysisTypes.Transformer;
+        if (selectedText.Contains("Üç Faz", StringComparison.OrdinalIgnoreCase))
+            return AnalysisTypes.ThreePhase;
         return AnalysisTypes.Nodal;
     }
 
@@ -770,6 +777,7 @@ public partial class AnalysisPanel : UserControl
 
         // Güç Üçgeni Kartı
         var powerSummary = response.PowerSummary ?? response.Results?.PowerSummary;
+        var threePhase = response.ThreePhaseResult;
         if (powerSummary != null)
         {
             var powerCard = new Border
@@ -781,6 +789,21 @@ public partial class AnalysisPanel : UserControl
 
             var triangleView = new PowerTriangleView();
             triangleView.LoadData(powerSummary);
+
+            powerCard.Child = triangleView;
+            ResultsContainer.Children.Add(powerCard);
+        }
+        else if (threePhase != null)
+        {
+            var powerCard = new Border
+            {
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            powerCard.SetResourceReference(StyleProperty, "Card");
+
+            var triangleView = new PowerTriangleView();
+            triangleView.LoadData(threePhase);
 
             powerCard.Child = triangleView;
             ResultsContainer.Children.Add(powerCard);

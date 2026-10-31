@@ -28,6 +28,9 @@ namespace CircuitAnalyzer.WPF
         private int _probeCounter = 0;
         private int _junctionCounter = 0;
         private int _switchCounter = 0;
+        private int _threePhaseSourceCounter = 0;
+        private int _threePhaseLoadCounter = 0;
+        private int _wattmeterCounter = 0;
 
         private Point? _contextMenuCanvasPos = null;
         private ContextMenu? _canvasContextMenu = null;
@@ -111,6 +114,36 @@ namespace CircuitAnalyzer.WPF
             };
 
             BeginPlacement(t, $"{t.Id} (Transformatör) eklendi — Sürükle/Sağ-tık/Çift-tık");
+        }
+
+        private void BtnAddThreePhaseLoad_Click(object sender, RoutedEventArgs e)
+        {
+            var load = new ThreePhaseLoad
+            {
+                Id = $"Y{_threePhaseLoadCounter + 1}"
+            };
+
+            BeginPlacement(load, $"{load.Id} (Üç fazlı yük) eklendi — Sürükle/Sağ-tık/Çift-tık");
+        }
+
+        private void BtnAddThreePhaseSource_Click(object sender, RoutedEventArgs e)
+        {
+            var source = new ThreePhaseSource
+            {
+                Id = $"U{_threePhaseSourceCounter + 1}"
+            };
+
+            BeginPlacement(source, $"{source.Id} (Üç fazlı kaynak) eklendi — Sürükle/Sağ-tık/Çift-tık");
+        }
+
+        private void BtnAddWattmeter_Click(object sender, RoutedEventArgs e)
+        {
+            var wm = new Wattmeter
+            {
+                Id = $"W{_wattmeterCounter + 1}"
+            };
+
+            BeginPlacement(wm, $"{wm.Id} (Wattmetre) eklendi — Sürükle/Sağ-tık/Çift-tık");
         }
 
         /// <summary>
@@ -852,6 +885,9 @@ namespace CircuitAnalyzer.WPF
             _probeCounter = 0;
             _junctionCounter = 0;
             _switchCounter = 0;
+            _threePhaseSourceCounter = 0;
+            _threePhaseLoadCounter = 0;
+            _wattmeterCounter = 0;
             _pendingStartSplit = null;
 
             _controlMarkers.Clear();

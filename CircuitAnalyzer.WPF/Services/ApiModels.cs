@@ -29,6 +29,7 @@ namespace CircuitAnalyzer.WPF.Services
         public const string Power = "POWER";
         public const string Resonance = "RESONANCE";
         public const string Transformer = "TRANSFORMER";
+        public const string ThreePhase = "THREE_PHASE";
     }
 
     public sealed class TerminalsDto
@@ -245,6 +246,8 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("power_summary")] public PowerSummaryDto? PowerSummary { get; set; }
         [JsonPropertyName("resonance")] public ResonanceDto? Resonance { get; set; }
         [JsonPropertyName("transformer")] public TransformerResultDto? Transformer { get; set; }
+        [JsonPropertyName("three_phase")] public ThreePhaseResultDto? ThreePhase { get; set; }
+        [JsonPropertyName("wattmeters")] public List<WattmeterResultDto>? Wattmeters { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -546,6 +549,48 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("floating_secondary")] public bool FloatingSecondary { get; set; }
     }
 
+    public sealed class ThreePhaseAronDto
+    {
+        [JsonPropertyName("p_a")] public double Pa { get; set; }
+        [JsonPropertyName("p_b")] public double Pb { get; set; }
+    }
+
+    public sealed class ThreePhaseCompensationDto
+    {
+        [JsonPropertyName("target_pf")] public double TargetPf { get; set; }
+        [JsonPropertyName("q_c")] public double? Qc { get; set; }
+        [JsonPropertyName("c_y")] public double? CY { get; set; }
+        [JsonPropertyName("c_delta")] public double? CDelta { get; set; }
+        [JsonPropertyName("applied")] public bool Applied { get; set; }
+        [JsonPropertyName("reason")] public string? Reason { get; set; }
+    }
+
+    public sealed class ThreePhaseResultDto
+    {
+        [JsonPropertyName("source")] public string Source { get; set; } = "Y";
+        [JsonPropertyName("load")] public string? Load { get; set; }
+        [JsonPropertyName("wires")] public int Wires { get; set; } = 4;
+        [JsonPropertyName("balanced")] public bool Balanced { get; set; } = true;
+        [JsonPropertyName("u_line")] public double ULine { get; set; }
+        [JsonPropertyName("u_phase")] public double UPhase { get; set; }
+        [JsonPropertyName("line_currents")] public Dictionary<string, ComplexNumberDto>? LineCurrents { get; set; }
+        [JsonPropertyName("neutral_current")] public ComplexNumberDto? NeutralCurrent { get; set; }
+        [JsonPropertyName("load_phase_currents")] public Dictionary<string, ComplexNumberDto>? LoadPhaseCurrents { get; set; }
+        [JsonPropertyName("p")] public double P { get; set; }
+        [JsonPropertyName("q")] public double Q { get; set; }
+        [JsonPropertyName("s")] public double S { get; set; }
+        [JsonPropertyName("pf")] public double Pf { get; set; }
+        [JsonPropertyName("pf_type")] public string PfType { get; set; } = "unity";
+        [JsonPropertyName("aron")] public ThreePhaseAronDto? Aron { get; set; }
+        [JsonPropertyName("compensation")] public ThreePhaseCompensationDto? Compensation { get; set; }
+    }
+
+    public sealed class WattmeterResultDto
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("p")] public double P { get; set; }
+    }
+
     public sealed class AnalysisResponseDto
     {
         /// <summary>"success" veya "warning".</summary>
@@ -561,8 +606,12 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("power_summary")] public PowerSummaryDto? PowerSummary { get; set; }
         [JsonPropertyName("resonance")] public ResonanceDto? Resonance { get; set; }
         [JsonPropertyName("transformer")] public TransformerResultDto? Transformer { get; set; }
+        [JsonPropertyName("three_phase")] public ThreePhaseResultDto? ThreePhase { get; set; }
+        [JsonPropertyName("wattmeters")] public List<WattmeterResultDto>? Wattmeters { get; set; }
 
         [JsonIgnore] public TransformerResultDto? TransformerResult => Transformer ?? Results?.Transformer;
+        [JsonIgnore] public ThreePhaseResultDto? ThreePhaseResult => ThreePhase ?? Results?.ThreePhase;
+        [JsonIgnore] public List<WattmeterResultDto>? WattmeterResults => Wattmeters ?? Results?.Wattmeters;
     }
 
     public sealed class HealthDto

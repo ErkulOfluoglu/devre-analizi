@@ -26,6 +26,9 @@
     <Geometry x:Key="Icon.Switch">M2,12 H6 M18,12 H22 M6,12 A1.5,1.5 0 1 0 9,12 A1.5,1.5 0 1 0 6,12 Z M15,12 A1.5,1.5 0 1 0 18,12 A1.5,1.5 0 1 0 15,12 Z M8,11 L16,6 M12,4 A4,4 0 0 1 14,8 M12.5,7 L14,8 L14.5,6.5</Geometry>
     <Geometry x:Key="Icon.SpdtSwitch">M2,12 H6 M6,12 A1.5,1.5 0 1 0 9,12 A1.5,1.5 0 1 0 6,12 Z M15,7 A1.5,1.5 0 1 0 18,7 A1.5,1.5 0 1 0 15,7 Z M18,7 H22 M15,17 A1.5,1.5 0 1 0 18,17 A1.5,1.5 0 1 0 15,17 Z M18,17 H22 M8,11 L15,7 M13,9 A5,5 0 0 1 14,14 M12.5,13 L14,14 L14.5,12.5</Geometry>
     <Geometry x:Key="Icon.Transformer">M2,6 H7 M7,6 A2,2 0 0 0 7,10 A2,2 0 0 0 7,14 A2,2 0 0 0 7,18 M7,18 H2 M11,4 V20 M13,4 V20 M22,6 H17 M17,6 A2,2 0 0 1 17,10 A2,2 0 0 1 17,14 A2,2 0 0 1 17,18 M17,18 H22 M4,8 A0.75,0.75 0 1 0 5.5,8 A0.75,0.75 0 1 0 4,8 Z M18.5,8 A0.75,0.75 0 1 0 20,8 A0.75,0.75 0 1 0 18.5,8 Z</Geometry>
+    <Geometry x:Key="Icon.ThreePhaseSource">M4,12 A8,8 0 1 0 20,12 A8,8 0 1 0 4,12 Z M12,12 L12,6.5 M12,12 L7.2,14.8 M12,12 L16.8,14.8</Geometry>
+    <Geometry x:Key="Icon.ThreePhaseLoad">M4,4 H20 V20 H4 Z M8,8 L12,12 L16,8 M12,12 V17</Geometry>
+    <Geometry x:Key="Icon.Wattmeter">M4,12 A8,8 0 1 0 20,12 A8,8 0 1 0 4,12 Z M8,8.5 L9.8,15.5 L12,10.5 L14.2,15.5 L16,8.5</Geometry>
     <Geometry x:Key="Icon.Wire">M3,17 A2,2 0 1 0 7,17 A2,2 0 1 0 3,17 Z M17,7 A2,2 0 1 0 21,7 A2,2 0 1 0 17,7 Z M7,17 H12 V7 H17</Geometry>
     <Geometry x:Key="Icon.Probe">M5,19 L11,13 M11,13 L13,7 L17,11 L11,13 Z</Geometry>
 
