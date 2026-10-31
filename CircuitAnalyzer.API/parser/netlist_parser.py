@@ -499,12 +499,21 @@ def _parse_element_line(
     # ── Direnç: R1 1 2 1000 ──
     m = _PATTERNS["resistor"].match(line)
     if m and m.group(1)[0].upper() == "R":
+        value = parse_spice_value(m.group(4))
+        if value == 0:
+            # R = 0 iletkenliği sonsuz yapar (JSON'a çevrilemez, 1/R sıfıra bölünür)
+            _reject(
+                circuit,
+                f"Satır {line_num}: {m.group(1)} direncinin değeri 0 olamaz; "
+                "kısa devre için tel kullanın."
+            )
+            return None
         return ParsedElement(
             id=m.group(1),
             element_type=ElementType.RESISTOR,
             node_positive=m.group(2),
             node_negative=m.group(3),
-            value=parse_spice_value(m.group(4))
+            value=value
         )
 
     # ── Kapasitör: C1 2 0 10u ──

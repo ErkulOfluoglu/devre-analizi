@@ -15,6 +15,8 @@ Endpoint'ler:
     POST /llm/pull   → Modeli indir (GET: ilerleme, POST /llm/pull/cancel: iptal)
 """
 
+import json
+
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -215,7 +217,7 @@ async def analyze_circuit(
         raise HTTPException(status_code=422, detail=unsolvable[len(UNSOLVABLE_PREFIX):])
 
     has_problem = any("⚠" in m for m in errors + warnings)
-    return AnalysisResponse(
+    response = AnalysisResponse(
         status="warning" if has_problem else "success",
         mode=request.mode.value,
         analysis_type=request.analysis_type.value,
@@ -232,6 +234,19 @@ async def analyze_circuit(
         three_phase=results.three_phase,
         wattmeters=results.wattmeters,
     )
+
+    # Güvenlik ağı: sonsuz/NaN sayı JSON'a çevrilemez ve 500 hatası verir;
+    # bunun yerine Türkçe bir açıklamayla dön.
+    try:
+        json.dumps(response.model_dump(mode="json"), allow_nan=False)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail="Devre çözülemedi: sonuçta sonsuz ya da tanımsız bir değer çıktı. "
+                   "Devrede sıfır dirençli kol, kısa devre ya da bağlantısız düğüm olabilir; "
+                   "lütfen devreyi kontrol edin."
+        )
+    return response
 
 
 @app.post(

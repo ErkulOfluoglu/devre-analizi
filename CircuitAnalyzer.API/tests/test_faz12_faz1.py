@@ -479,8 +479,10 @@ def test_source_transform_y_to_delta_and_stuck_fallback(solve):
 
 @pytest.mark.xfail(
     strict=True,
-    reason="Bilinen sınır (sonuç doğru, Thevenin anlatımına düşer): _step_delta_y işe yararlık kontrolü yapmadan "
-           "(10,20,30) üçgenini çevirdiği için topology.py'nin indirgeyebildiği devrede tıkanıyor.",
+    reason="Bilinen sınır (sonuç doğru, Thevenin anlatımına düşer). Üçgen SEÇİMİ sorun değil: "
+           "_step_delta_y'nin göreceği tek saf dirençli üçgen (10,20,30)'dur; (10,20,100) üçgeninin "
+           "20–100 kolunda paralel bir akım kaynağı (Ib) kalır ve ikisi de kaynaklı bir köprüye "
+           "çıkar. Kaynaklı köprüyü indirgemek (akım kaynağı kaydırma) bu anlatımda yok.",
 )
 def test_source_transform_helpful_triangle_selection_bug(solve):
     """

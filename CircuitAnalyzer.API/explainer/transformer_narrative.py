@@ -19,7 +19,7 @@ import math
 from typing import List
 
 from explainer.cramer import cramer2, exact_fmt
-from explainer.formatting import MINUS, eng, is_real, num, paren, polar, rect
+from explainer.formatting import MINUS, eng, is_real, node_v, num, paren, polar, rect
 from explainer.narrative import _Section
 from models.request import AnalysisType
 from parser.netlist_parser import (
@@ -60,12 +60,64 @@ def build_transformer_sections(ctx, an: TransformerAnalysis, requested_type=None
         sections += _ideal_sections(ctx, an) if an.kind == "ideal" else _coupled_sections(ctx, an)
     else:
         sections += _short_sections(ctx, an)
+    equivalent = _equivalent_section(ctx, an, requested_type)
+    if equivalent:
+        # Son "Sonuç" bölümünden önce
+        at = next((i for i, s in enumerate(sections) if s.title == "Sonuç"), len(sections))
+        sections[at:at] = equivalent
     return sections
 
 
 # ═══════════════════════════════════════════════════════
 #  ORTAK BÖLÜMLER
 # ═══════════════════════════════════════════════════════
+
+def _equivalent_section(ctx, an: TransformerAnalysis, requested_type) -> List[_Section]:
+    """
+    Thevenin / Norton istendiyse (terminaller verilmişse) kısa eşdeğer bölümü. Sayılar çözücüden
+    gelir: Vth = terminaller açıkken gerilim, Zth = kaynaklar sıfırlanıp 1 A test akımıyla V/I.
+    """
+    th, no, term = ctx.results.thevenin, ctx.results.norton, ctx.terminals
+    if term is None:
+        return []
+    a, b = term.node_positive, term.node_negative
+    if requested_type == AnalysisType.THEVENIN and th is not None:
+        vth = complex(th.vth.real, th.vth.imaginary)
+        zth = complex(th.zth.real, th.zth.imaginary)
+        s = _Section("Thevenin Eşdeğeri")
+        s.text(f"Düğüm {a} (+) ile Düğüm {b} (−) terminallerinden bakılan Thevenin eşdeğerini buluruz. "
+               "Transformatör devrenin bir parçası olarak hesaba katılır.")
+        s.text("Vth: terminallere dışarıdan yük bağlı değilken (açık devre) terminaller arasındaki gerilimdir.")
+        va, vb = complex(ctx.v.get(a, 0j)), complex(ctx.v.get(b, 0j))
+        s.math(f"Vth = V_AB = {node_v(a)} {MINUS} {node_v(b)} = {paren(rect(va, 'V'))} {MINUS} {paren(rect(vb, 'V'))} = {_c(vth, 'V')}")
+        s.text("Zth: bağımsız kaynaklar sıfırlanır (gerilim kaynağı kısa devre, akım kaynağı açık devre); "
+               "terminallere 1 A'lik bir test akımı uygulanır ve terminaller arasındaki gerilimin akıma "
+               "oranı alınır: Zth = V_test / I_test.")
+        if an.kind == "ideal":
+            s.text(f"İdeal transformatörde (a = {num(an.a)}) bir taraftaki empedanslar diğer tarafa "
+                   "a² ile çarpılarak ya da bölünerek yansır: sekonderden bakılınca primerdeki Z, "
+                   "Z·a² olarak görünür.")
+        s.math(f"Zth = V_test / I_test = {_zeq(zth)}")
+        s.result(f"Vth = {_c(vth, 'V')},  Zth = {_zeq(zth)}")
+        return [s]
+    if requested_type == AnalysisType.NORTON and no is not None:
+        i_n = complex(no.i_n.real, no.i_n.imaginary)
+        s = _Section("Norton Eşdeğeri")
+        s.text(f"Düğüm {a} (+) ile Düğüm {b} (−) terminallerinden bakılan Norton eşdeğerini buluruz. "
+               "Transformatör devrenin bir parçası olarak hesaba katılır.")
+        s.text("In: terminaller bir telle kısa devre edildiğinde telden (+) uçtan (−) uca akan akımdır.")
+        s.math(f"In = I_kısa devre = {_c(i_n, 'A')}")
+        if no.z_n is not None:
+            zn = complex(no.z_n.real, no.z_n.imaginary)
+            s.text("Zn = Zth: bağımsız kaynaklar sıfırlanıp terminallere 1 A'lik test akımı uygulanınca "
+                   "V_test / I_test oranıdır.")
+            s.math(f"Zn = Zth = V_test / I_test = {_zeq(zn)}")
+            s.result(f"In = {_c(i_n, 'A')},  Zn = {_zeq(zn)}")
+        else:
+            s.result(f"In = {_c(i_n, 'A')}")
+        return [s]
+    return []
+
 
 def describe_transformer(t) -> str:
     p = t.params

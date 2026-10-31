@@ -109,8 +109,8 @@ def solve_contributions(
 ) -> List[Contribution]:
     """Her alt devreyi lcapy ile çözer (ham sayılar)."""
     # Döngüsel içe aktarmayı önlemek için yerel import
-    from lcapy import Circuit
     from parser.netlist_parser import to_lcapy_netlist
+    from solver.numeric_ac import make_circuit
     from solver.circuit_solver import _extract_numeric, lcapy_element_current
     from parser.netlist_parser import lcapy_sense_map
 
@@ -120,7 +120,8 @@ def solve_contributions(
             c.error = f"{c.source.id} için frekans bilinmiyor."
             continue
         try:
-            cct = Circuit(to_lcapy_netlist(c.parsed, c.frequency))
+            cct = make_circuit(c.parsed, c.is_dc, c.frequency,
+                               to_lcapy_netlist(c.parsed, c.frequency))
             nodes = {n for e in c.parsed.elements for n in (e.node_positive, e.node_negative)}
             c.node_voltages["0"] = 0j
             for n in nodes - {"0"}:

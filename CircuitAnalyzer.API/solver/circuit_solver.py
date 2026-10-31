@@ -60,6 +60,7 @@ from solver.three_phase import (
     analyze_three_phase, expand_three_phase, has_three_phase, has_wattmeters,
     wattmeter_readings,
 )
+from solver.numeric_ac import NumericAcUnsupported, NumericCircuit, make_circuit
 from solver.superposition import solve_contributions
 from practice.questions import build_questions
 from practice.transient_questions import build_transient_questions
@@ -433,6 +434,12 @@ def _evaluate_impedance(
         InfiniteImpedanceError: Sonuç sonsuzsa (ör: DC'de seri kapasitör)
         ValueError: AC modda frekans bilinmiyorsa
     """
+    if isinstance(expr, (int, float, complex)):
+        # Sayısal AC çözücüden gelen değer (sembolik değil)
+        if not cmath.isfinite(expr):
+            raise InfiniteImpedanceError("Empedans sonsuz (açık devre).")
+        return sympy_to_numeric(expr)
+
     e = _to_sympy(expr)
 
     s_syms = [sym for sym in getattr(e, 'free_symbols', ()) if str(sym) == 's']
@@ -846,7 +853,11 @@ def _solve_core(
             result_snapshot={"lcapy_netlist": lcapy_text}
         ))
 
-        cct = Circuit(lcapy_text)
+        # Karmaşık empedans (Z) içeren AC devrelerde lcapy yavaş/yanlış → sayısal çözücü.
+        # Rezonans doğrulaması devreyi birkaç frekansta okur; sayısal çözücü tek frekanslıdır.
+        cct = make_circuit(
+            parsed, mode == AnalysisMode.DC or analysis_type == AnalysisType.RESONANCE,
+            frequency, lcapy_text)
 
     except ImportError:
         errors.append(
@@ -983,6 +994,25 @@ def _solve_core(
             results.norton = _solve_norton(
                 cct, thevenin_terminals, is_dc, frequency, steps, errors
             )
+
+    # ── Adım 6.1: Transformatörlü devrede Thevenin/Norton (sayısal AC çözücüyle) ──
+    # Yöntem TRANSFORMER'a yönlendirildiği için yukarıdaki blok çalışmaz; terminaller
+    # verildiyse eşdeğer yine hesaplanır (Vth: terminaller açıkken gerilim, Zth: bağımsız
+    # kaynaklar sıfırlanıp 1 A test akımı uygulanınca V/I).
+    if (trafo and thevenin_terminals is not None
+            and requested_type in (AnalysisType.THEVENIN, AnalysisType.NORTON)):
+        try:
+            port_cct = NumericCircuit(parsed, frequency)
+        except NumericAcUnsupported as e:
+            errors.append(f"ℹ Transformatörlü devrede {requested_type.value} eşdeğeri "
+                          f"hesaplanamadı: {e}")
+        else:
+            if requested_type == AnalysisType.THEVENIN:
+                results.thevenin = _solve_thevenin(
+                    port_cct, thevenin_terminals, is_dc, frequency, steps, errors)
+            else:
+                results.norton = _solve_norton(
+                    port_cct, thevenin_terminals, is_dc, frequency, steps, errors)
 
     # ── Adım 6.5: Çevre akımları (MESH yöntemi) ──
     mesh_analysis = None
@@ -1712,8 +1742,6 @@ def _solve_port_extras(
 
     Her ikisi de lcapy ile gerçekten çözülür; Rth'den türetilmez.
     """
-    from lcapy import Circuit
-
     a, b = terminals.node_positive, terminals.node_negative
     extras = PortExtras()
 
@@ -1721,7 +1749,7 @@ def _solve_port_extras(
         sub = copy.deepcopy(base)
         sub.probes = []
         sub.elements.append(src)
-        cct = Circuit(to_lcapy_netlist(sub, frequency))
+        cct = make_circuit(sub, is_dc, frequency, to_lcapy_netlist(sub, frequency))
         return complex(lcapy_element_current(
             cct, src, lcapy_sense_map(sub), is_dc, frequency))
 
@@ -2408,8 +2436,6 @@ def _compute_compensation(
     # ── Çözücüyle doğrulama: C kaynağa paralel eklenip devre yeniden çözülür ──
     verified = False
     try:
-        from lcapy import Circuit
-
         comp_circuit = copy.deepcopy(parsed)
         comp_circuit.probes = []
         c_elem = ParsedElement(
@@ -2420,7 +2446,8 @@ def _compute_compensation(
             value=c_val,
         )
         comp_circuit.elements.append(c_elem)
-        cct_comp = Circuit(to_lcapy_netlist(comp_circuit, frequency))
+        cct_comp = make_circuit(comp_circuit, False, frequency,
+                                to_lcapy_netlist(comp_circuit, frequency))
         sense_comp = lcapy_sense_map(comp_circuit)
         i_src_new = complex(lcapy_element_current(cct_comp, v_src, sense_comp, False, frequency))
         vp_new = (0j if v_src.node_positive == "0"

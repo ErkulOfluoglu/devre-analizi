@@ -437,7 +437,9 @@ def test_inapplicable_circuits_fall_back_with_turkish_reason(name):
 
 
 def test_zero_resistor_is_not_applicable():
-    parsed = parse_netlist("V1 1 0 AC_PHASOR(10, 0)\nR1 1 2 0\nL1 2 3 10m\nC1 3 0 1u" + GND)
+    # Ayrıştırıcı R = 0 satırını artık reddeder; çözücünün kendi koruması için değer sonradan sıfırlanır
+    parsed = parse_netlist("V1 1 0 AC_PHASOR(10, 0)\nR1 1 2 1\nL1 2 3 10m\nC1 3 0 1u" + GND)
+    next(e for e in parsed.elements if e.id == "R1").value = 0.0
     with pytest.raises(ResonanceNotApplicable) as exc:
         analyze_resonance(parsed)
     assert PREFIX in str(exc.value)
