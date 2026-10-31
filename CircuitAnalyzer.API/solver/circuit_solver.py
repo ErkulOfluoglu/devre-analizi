@@ -310,6 +310,9 @@ def _extract_numeric(
             except:
                 continue
     else:
+        time_phasor = _phasor_from_time_part(expr)
+        if time_phasor is not None:
+            return time_phasor
         # lcapy AC stratejisi:
         # 1. .ac: ExprDict döndürür {omega_0: expr} — ilk değeri al
         #    Debug'da doğrulandı: expr.ac → ExprDict({omega_0: -1000j/(omega_0-100j)})
@@ -335,6 +338,37 @@ def _extract_numeric(
         raw = _substitute_frequency(raw, frequency)
 
     return sympy_to_numeric(raw)
+
+
+def _phasor_from_time_part(expr) -> Optional[complex]:
+    """
+    Yalnız dirençli devrede lcapy AC çözümünü zaman bölgesinde verir:
+        x(t) = A·cos(ω₀t) − B·sin(ω₀t)  →  fazör = A + jB
+
+    Bu biçimde .ac sanal kısmı kaybeder (farklı fazlı kaynaklarda yanlış sonuç), bu yüzden fazör
+    x(t)'nin çeyrek periyot aralıklı dört değerinden okunur. Biçim bu değilse None döner.
+    """
+    try:
+        parts = {str(key): value for key, value in expr.items()}
+    except (AttributeError, TypeError):
+        return None
+    if "t" not in parts or any(name.startswith("omega") for name in parts):
+        return None
+
+    x_t = _to_sympy(parts["t"])
+    symbols = {str(sym): sym for sym in x_t.free_symbols}
+    if not set(symbols) <= {"t", "omega_0"}:
+        return None
+
+    def sample(theta):
+        subs = {symbols["t"]: theta} if "t" in symbols else {}
+        if "omega_0" in symbols:
+            subs[symbols["omega_0"]] = 1
+        return float(x_t.subs(subs).evalf())
+
+    a = (sample(0) - sample(sympy.pi)) / 2
+    b = (sample(3 * sympy.pi / 2) - sample(sympy.pi / 2)) / 2
+    return a if abs(b) < 1e-12 else complex(a, b)
 
 
 def _exprdict_first(expr_dict):
