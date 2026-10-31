@@ -569,7 +569,8 @@ def _parse_element_line(
         return _parse_wattmeter(line, line_num, circuit)
 
     # Başka tür satırda RMS eki varsa Türkçe hata üret
-    if re.search(r"\s+RMS\s*$", line, re.IGNORECASE):
+    tokens = line.split()
+    if len(tokens) > 1 and tokens[-1].upper() == "RMS":
         _reject(
             circuit,
             f"Satır {line_num}: 'RMS' (etkin değer) eki yalnızca AC kaynaklarda "
