@@ -4,6 +4,8 @@ Kaynak dönüşümü (Thevenin/Norton eşdeğerine adım adım ulaşma) testleri
 Elle hesaplar yorumlarda; bulunan Vth/Rth çözücünün Thevenin sonucuyla karşılaştırılır.
 """
 
+import pytest
+
 from explainer.formatting import MINUS
 from tests.conftest import as_complex
 
@@ -108,12 +110,23 @@ def test_bridge_with_ideal_source_node_outside_triangle(solve):
     assert not any("uygulanamadı" in x for x in t)
 
 
-def test_fallback_bridge_with_source_inside_triangle(solve):
-    # Köprünün orta kolunda V2 (+ R3) var: kaynaksız (yalnızca dirençli) üçgen yok,
-    # seri/paralel ve kaynak dönüşümleri de tıkanıyor → Thevenin anlatımına dönülür
+def test_bridge_with_source_inside_triangle_uses_source_shifting(solve):
+    # Köprünün orta kolunda V2 + R3 var: kolu I ∥ R'ye çevrilir, üçgen dirençleri yıldıza dönerken
+    # akım kaynağı yıldız düğümü üzerinden kaydırılır. Beklenen değerler ayrı düğüm denklemiyle bulundu.
     net = ("V1 1 0 DC 20\nRs 1 2 100\nR1 2 3 200\nR2 2 4 300\nV2 3 5 DC 5\nR3 5 4 400\n"
            f"R4 3 0 600\nR5 4 0 500\n{GND}")
     results, _, errors = solve(net, "DC", analysis_type="SOURCE_TRANSFORM", terminals=("2", "0"))
+    assert not errors
+    assert as_complex(results.thevenin.vth).real == pytest.approx(16.040609, rel=1e-5)
+    assert as_complex(results.thevenin.zth).real == pytest.approx(79.864636, rel=1e-5)
+    assert "Kaynak Dönüşümü — Adım Adım" in titles(results)
+    assert any("akım kaynağı kaydırma" in x for x in texts(results))
+
+
+def test_fallback_when_ideal_source_blocks_reduction(solve):
+    # V2 doğrudan Düğüm 2 ile toprak arasında (seri direnci yok): dönüşümler tıkanır → Thevenin anlatımı
+    net = f"V1 1 0 DC 10\nR1 1 2 40\nR2 1 0 40\nR3 0 3 50\nR4 3 2 10\nV2 2 0 DC 5\n{GND}"
+    results, _, errors = solve(net, "DC", analysis_type="SOURCE_TRANSFORM", terminals=("3", "0"))
     assert not errors
     assert results.thevenin is not None
     t = texts(results)

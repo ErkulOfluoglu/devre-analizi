@@ -12,7 +12,8 @@ ders kitabındaki dönüşümlerle adım adım ulaşılır:
         (boşta kalan ya da iki ucu aynı düğümde olan eleman da akım taşımaz)
     (f) hiçbir adım kalmadıysa: kaynak içermeyen (yalnızca dirençli) üçgen → yıldız (Δ→Y);
         gerekirse kaynaksız dirençli yıldız → üçgen (Y→Δ). Formüller ve anlatım
-        explainer/topology.py'deki Δ–Y adımıyla aynı dilde yazılır.
+        explainer/topology.py'deki Δ–Y adımıyla aynı dilde yazılır. Kollarında paralel akım
+        kaynağı olan üçgen de çevrilir; kaynaklar yıldız düğümü üzerinden kaydırılır.
 
 Terminaller arasında "tek gerilim kaynağı + seri direnç" (ya da "akım kaynağı + paralel
 direnç") kalınca durulur. Bulunan Vth/Rth çözücünün Thevenin sonucuyla karşılaştırılır;
@@ -88,6 +89,7 @@ class _Net:
         self.a, self.b = a, b
         self.count = {"R": 0, "V": 0, "I": 0, "node": 0, "Ry": 0, "Rd": 0, "Y": 0}
         self.used_dy = False
+        self.used_shift = False
         self.steps: List[List[Tuple[str, str]]] = []   # her adım: [(tür, metin), …]
         self.cur: List[Tuple[str, str]] = []
         self.used_new_node = False
@@ -363,50 +365,79 @@ def _step_vr(net: _Net) -> bool:
     return False
 
 
+def _norton_to_thevenin(net: _Net, src: _El, res: _El, x: str, z: str):
+    """I ∥ R (x–z) → E + R: direnç x tarafında kalır, kaynağın + ucu akım okunun gösterdiği uçtadır."""
+    e_name = net.new_name("V")
+    emf_z = _inj_toward(src, z) * res.val        # z ucunu x'e göre yükselten gerilim
+    kn = net.new_node()
+    net.remove(src, res)
+    net.els.append(_El("R", res.name, x, kn, res.val))
+    net.els.append(_mk_v(e_name, z, kn, emf_z))
+    net.text(f"{src.name} akım kaynağı ile {res.name} direnci paralel bağlı. Kaynak dönüşümü: "
+             f"{src.name}, {res.name} direncine seri bir gerilim kaynağına dönüşür; gerilim "
+             f"kaynağının + ucu, akım okunun gösterdiği Düğüm {z if emf_z >= 0 else x} tarafındadır.")
+    net.math(f"{e_name} = {src.name}·{res.name} = {eng(src.val, 'A')} · {eng(res.val, 'Ω')} = "
+             f"{eng(src.val * res.val, 'V')}")
+
+
 def _step_ir(net: _Net) -> bool:
     """(c): akım kaynağı + paralel direnç → gerilim kaynağı + seri direnç."""
     inc = net.incidence()
     pairs: Dict[tuple, List[_El]] = {}
     for e in net.els:
         pairs.setdefault(tuple(sorted((e.p, e.n), key=_key)), []).append(e)
-    for pair in sorted(pairs, key=lambda k: [_key(x) for x in k]):
-        grp = pairs[pair]
-        if sorted(e.kind for e in grp) != ["I", "R"]:
-            continue
-        src = next(e for e in grp if e.kind == "I")
-        res = next(e for e in grp if e.kind == "R")
+    norton = {pair: grp for pair, grp in pairs.items() if sorted(e.kind for e in grp) == ["I", "R"]}
+
+    def parts(grp):
+        return next(e for e in grp if e.kind == "I"), next(e for e in grp if e.kind == "R")
+
+    for pair in sorted(norton, key=lambda k: [_key(x) for x in k]):
         x = next((nd for nd in pair if nd not in (net.a, net.b) and len(inc[nd]) == 3), None)
         if x is None:
             continue
-        z = pair[0] if pair[1] == x else pair[1]
-        e_name = net.new_name("V")
-        emf_z = _inj_toward(src, z) * res.val        # z ucunu x'e göre yükselten gerilim
-        kn = net.new_node()
-        net.remove(src, res)
-        net.els.append(_El("R", res.name, x, kn, res.val))
-        new_v = _mk_v(e_name, z, kn, emf_z)
-        net.els.append(new_v)
-        net.text(f"{src.name} akım kaynağı ile {res.name} direnci paralel bağlı. Kaynak dönüşümü: "
-                 f"{src.name}, {res.name} direncine seri bir gerilim kaynağına dönüşür; gerilim "
-                 f"kaynağının + ucu, akım okunun gösterdiği Düğüm {z if emf_z >= 0 else x} tarafındadır.")
-        net.math(f"{e_name} = {src.name}·{res.name} = {eng(src.val, 'A')} · {eng(res.val, 'Ω')} = "
-                 f"{eng(src.val * res.val, 'V')}")
+        src, res = parts(norton[pair])
+        _norton_to_thevenin(net, src, res, x, pair[0] if pair[1] == x else pair[1])
+        net.recap()
+        return True
+
+    # Düğümde yalnızca iki I ∥ R grubu buluşuyorsa ikisi birlikte çevrilir: tek tek çevrilen grup,
+    # birleşecek seri kol bulamadığı için bir sonraki adımda eski haline döner.
+    for x in sorted(inc, key=_key):
+        if x in (net.a, net.b) or len(inc[x]) != 4:
+            continue
+        at_x = [p for p in norton if x in p]
+        if len(at_x) != 2:
+            continue
+        for pair in sorted(at_x, key=lambda k: [_key(n) for n in k]):
+            src, res = parts(norton[pair])
+            _norton_to_thevenin(net, src, res, x, pair[0] if pair[1] == x else pair[1])
         net.recap()
         return True
     return False
 
 
-def _step_delta_y(net: _Net) -> bool:
-    """(f) Kaynaksız dirençli üçgen (Δ) → yıldız (Y). topology.py'deki formülle aynı."""
+def _step_delta_y(net: _Net, with_sources: bool = False) -> bool:
+    """
+    (f) Dirençli üçgen (Δ) → yıldız (Y). topology.py'deki formülle aynı.
+
+    with_sources: kollarında paralel akım kaynağı olan üçgen de çevrilir. Dönüşüm yalnızca
+    dirençleri kapsar; kaynaklar yeni yıldız düğümü üzerinden ikiye bölünür (u → w yerine
+    u → Y ve Y → w). Y'ye giren ve çıkan akım eşit, u ve w'ye verilen akım aynı kalır.
+    """
     pairs: Dict[frozenset, List[_El]] = {}
     for e in net.els:
         pairs.setdefault(frozenset((e.p, e.n)), []).append(e)
     nodes = sorted({x for e in net.els for x in (e.p, e.n)}, key=_key)
     for n1, n2, n3 in combinations(nodes, 3):
-        grp = [pairs.get(frozenset(pr)) for pr in ((n1, n2), (n1, n3), (n2, n3))]
-        if not all(g and len(g) == 1 and g[0].kind == "R" for g in grp):
+        grp = [pairs.get(frozenset(pr)) or [] for pr in ((n1, n2), (n1, n3), (n2, n3))]
+        allowed = ("R", "I") if with_sources else ("R",)
+        if not all(sum(e.kind == "R" for e in g) == 1 and len(g) <= len(allowed)
+                   and all(e.kind in allowed for e in g) for g in grp):
             continue
-        b12, b13, b23 = (g[0] for g in grp)
+        sources = [e for g in grp for e in g if e.kind == "I"]
+        if with_sources and not sources:
+            continue
+        b12, b13, b23 = (next(e for e in g if e.kind == "R") for g in grp)
         y = f"Y{net.count['Y'] + 1}"
         net.count["Y"] += 1
         denom = b12.val + b13.val + b23.val
@@ -426,6 +457,18 @@ def _step_delta_y(net: _Net) -> bool:
                  "dönüştürelim:")
         for ln in lines:
             net.math(ln)
+        if sources:
+            net.used_shift = True
+            net.remove(*sources)
+            net.text("Üçgen dönüşümü yalnızca dirençleri değiştirir; akım kaynakları aynı düğümlere aynı "
+                     f"akımı vermeye devam etmelidir. Bu yüzden her kaynağı {y} üzerinden ikiye böleriz "
+                     f"(akım kaynağı kaydırma): {y}'ye giren ve çıkan akım eşit olduğundan KCL değişmez.")
+            for src in sources:
+                first, second = net.new_name("I"), net.new_name("I")
+                net.els.append(_El("I", first, src.p, y, src.val))
+                net.els.append(_El("I", second, y, src.n, src.val))
+                net.math(f"{src.name} ({eng(src.val, 'A')}, Düğüm {src.p} → Düğüm {src.n})  →  "
+                         f"{first} (Düğüm {src.p} → {y}) ve {second} ({y} → Düğüm {src.n})")
         net.recap()
         return True
     return False
@@ -440,6 +483,9 @@ def _step_y_delta(net: _Net) -> bool:
         legs = [(e, e.n if e.p == m else e.p) for e in inc[m]]
         ends = [nd for _, nd in legs]
         if len(set(ends)) != 3 or m in ends:
+            continue
+        # Oluşan üçgen hiçbir elemanla birleşmeyecekse sonraki adım onu yıldıza geri çevirir
+        if not any({e.p, e.n} <= set(ends) for e in net.els):
             continue
         legs.sort(key=lambda t: _key(t[1]))
         (ra, n1), (rb, n2), (rc, n3) = legs
@@ -519,7 +565,7 @@ def _reduce(net: _Net) -> _Final:
         seen.add(sig)
         if (_step_cleanup(net) or _step_chain(net) or _step_parallel(net)
                 or _step_vr(net) or _step_ir(net)
-                or _step_delta_y(net) or _step_y_delta(net)):
+                or _step_delta_y(net) or _step_y_delta(net) or _step_delta_y(net, with_sources=True)):
             continue
         raise _Fail(_STUCK)
     raise _Fail(_STUCK)
@@ -576,6 +622,9 @@ def build_source_transform(ctx) -> Tuple[Optional[list], str]:
     if net.used_dy:
         s1.math("• Başka adım kalmazsa, kaynak içermeyen üçgen (Δ) bağlı dirençler yıldıza (Y) çevrilir: "
                 "Ry = Ra·Rb / (Ra + Rb + Rc)")
+    if net.used_shift:
+        s1.math("• Akım kaynağı kaydırma: u → w yönündeki I, herhangi bir m düğümü üzerinden "
+                "u → m ve m → w yönünde iki I olarak yazılabilir (m'de KCL değişmez)")
     s1.note("Yeni elemanlara Ra, Ia, Ea (Δ–Y'de Ry, Rd) gibi adlar, dönüşümle oluşan ara düğümlere x1, x2, … (Y düğümleri Y1, Y2, …) adı verilir. "
             "Terminaller (Düğüm " + a + " ve Düğüm " + b + ") hiçbir adımda ortadan kaldırılmaz.")
 

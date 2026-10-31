@@ -477,23 +477,14 @@ def test_source_transform_y_to_delta_and_stuck_fallback(solve):
     assert "kaynak dönüşümü yöntemi uygulanamadı" in all_text(res_st).lower()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Bilinen sınır (sonuç doğru, Thevenin anlatımına düşer). Üçgen SEÇİMİ sorun değil: "
-           "_step_delta_y'nin göreceği tek saf dirençli üçgen (10,20,30)'dur; (10,20,100) üçgeninin "
-           "20–100 kolunda paralel bir akım kaynağı (Ib) kalır ve ikisi de kaynaklı bir köprüye "
-           "çıkar. Kaynaklı köprüyü indirgemek (akım kaynağı kaydırma) bu anlatımda yok.",
-)
 def test_source_transform_helpful_triangle_selection_bug(solve):
     """
     BULGU-3:
     V1 5 0 DC 12, R0 5 10 6, R1 10 20 6, R2 20 30 6, R3 10 30 6,
     R4 10 100 6, R5 400 100 6, R6 0 100 6, I2 400 20 DC 1, R7 20 400 6.
-    I2 || R7 → 6 V + 6 Ω dönüşümünden sonra R5(6 Ω) + R7(6 Ω) = 12 Ω olur ve
-    devrede iki üçgen bulunur: (10, 20, 30) ve (10, 20, 100).
-    (10, 20, 100) üçgeni Düğüm 100 (derece 3) sayesinde seri kol açar (topology.py Rth = 7,2 Ω bulur);
-    ancak source_transform._step_delta_y düğüm sırasına göre ('30' < '100') önce (10, 20, 30) üçgenini
-    yıldıza çevirip tıkanır.
+    (10, 20, 30) üçgeni yıldıza dönünce (0, 10, 100) üçgeninin 0–10 kolunda akım kaynağı kalır.
+    Akım kaynağı yıldız düğümü üzerinden kaydırılarak çevrilir; sonda Düğüm Y2'de buluşan iki
+    I ∥ R grubu birlikte gerilim kaynağına döner. Beklenen: Vth = 8,4 V, Rth = 7,2 Ω.
     """
     net = (
         f"V1 5 0 DC 12\nR0 5 10 6\nR1 10 20 6\nR2 20 30 6\nR3 10 30 6\n"
@@ -501,5 +492,6 @@ def test_source_transform_helpful_triangle_selection_bug(solve):
     )
     res, _, err = solve(net, analysis_type="SOURCE_TRANSFORM", terminals=("30", "0"))
     assert err == []
+    assert as_complex(res.thevenin.vth).real == pytest.approx(8.4, rel=1e-5)
     assert as_complex(res.thevenin.zth).real == pytest.approx(7.2, rel=1e-5)
     assert "Kaynak Dönüşümü — Adım Adım" in section_titles(res)
