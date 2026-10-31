@@ -14,6 +14,8 @@ ders kitabındaki dönüşümlerle adım adım ulaşılır:
         gerekirse kaynaksız dirençli yıldız → üçgen (Y→Δ). Formüller ve anlatım
         explainer/topology.py'deki Δ–Y adımıyla aynı dilde yazılır. Kollarında paralel akım
         kaynağı olan üçgen de çevrilir; kaynaklar yıldız düğümü üzerinden kaydırılır.
+    (g) ideal gerilim kaynağına paralel direnç ya da akım kaynağı çıkarılır
+    (h) seri direnci olmayan gerilim kaynağı, bir ucundaki düğümün kollarına seri taşınır
 
 Terminaller arasında "tek gerilim kaynağı + seri direnç" (ya da "akım kaynağı + paralel
 direnç") kalınca durulur. Bulunan Vth/Rth çözücünün Thevenin sonucuyla karşılaştırılır;
@@ -31,9 +33,9 @@ from parser.netlist_parser import ElementType
 _ALLOWED = (ElementType.RESISTOR, ElementType.DC_SOURCE, ElementType.CURRENT_DC)
 _MAX_ITER = 80
 _LETTERS = "abcdefghijklmnopqrstuvwxyz"
-_STUCK = ("Bu devre, seri/paralel birleştirme, Δ–Y dönüşümü ve kaynak dönüşümleriyle terminallere "
-          "kadar sadeleştirilemiyor (örneğin kaynağı üçgenin içinde kalan köprü yapısı ya da gerilim "
-          "kaynağının doğrudan paralel bağlandığı bir düğüm var).")
+_STUCK = ("Bu devre, seri/paralel birleştirme, Δ–Y dönüşümü, kaynak dönüşümü ve kaynak kaydırmayla "
+          "terminallere kadar sadeleştirilemiyor (örneğin dört ya da daha çok kolun buluştuğu bir "
+          "köprü yapısı var).")
 
 
 class _Fail(Exception):
@@ -90,6 +92,8 @@ class _Net:
         self.count = {"R": 0, "V": 0, "I": 0, "node": 0, "Ry": 0, "Rd": 0, "Y": 0}
         self.used_dy = False
         self.used_shift = False
+        self.used_v_parallel = False
+        self.used_v_shift = False
         self.steps: List[List[Tuple[str, str]]] = []   # her adım: [(tür, metin), …]
         self.cur: List[Tuple[str, str]] = []
         self.used_new_node = False
@@ -211,6 +215,35 @@ def _step_cleanup(net: _Net) -> bool:
                  "devreden çıkarılır.")
         net.recap()
         return True
+    return _step_hanging_part(net, inc)
+
+
+def _step_hanging_part(net: _Net, inc: Dict[str, List[_El]]) -> bool:
+    """Terminallere tek düğümden bağlı parça: akım o düğümden girip başka yerden çıkamaz, çıkarılır."""
+    terminals = {net.a, net.b}
+    for cut in sorted(inc, key=_key):
+        seen = {cut}
+        for start in sorted(inc, key=_key):
+            if start in seen:
+                continue
+            part, stack = {start}, [start]
+            while stack:
+                for e in inc[stack.pop()]:
+                    for nd in (e.p, e.n):
+                        if nd != cut and nd not in part:
+                            part.add(nd)
+                            stack.append(nd)
+            seen |= part
+            if part & terminals:
+                continue
+            hanging = [e for e in net.els if {e.p, e.n} & part]
+            names = ", ".join(e.name for e in hanging)
+            net.remove(*hanging)
+            net.text(f"{names} elemanları devrenin kalanına yalnızca Düğüm {cut} üzerinden bağlı. Akım tek "
+                     "düğümden girip başka bir yerden çıkamayacağı için bu parça terminalleri etkilemez, "
+                     "devreden çıkarılır.")
+            net.recap()
+            return True
     return False
 
 
@@ -330,6 +363,75 @@ def _step_parallel(net: _Net) -> bool:
             else:
                 net.math(f"{new_name} = {sym} = {val} = 0")
                 net.text("Akımlar birbirini götürdü; bu iki düğüm arasında kaynak akımı kalmadı.")
+        net.recap()
+        return True
+    return False
+
+
+def _step_v_parallel(net: _Net) -> bool:
+    """(g): ideal gerilim kaynağına paralel direnç ya da akım kaynağı, devrenin kalanını etkilemez."""
+    for v in (e for e in net.els if e.kind == "V"):
+        ends = {v.p, v.n}
+        extra = [e for e in net.els if e is not v and e.kind in ("R", "I") and {e.p, e.n} == ends]
+        if not extra:
+            continue
+        names = [e.name for e in extra]
+        net.used_v_parallel = True
+        net.remove(*extra)
+        net.text(f"{' ve '.join(names) if len(names) == 2 else ', '.join(names)}, {v.name} ideal gerilim "
+                 f"kaynağına paralel bağlı (Düğüm {v.p}–{v.n}). Bu iki düğüm arasındaki gerilimi {v.name} "
+                 "belirler; paralel eleman bu gerilimi ve devrenin kalanını değiştirmez, çıkarılır.")
+        net.recap()
+        return True
+    return False
+
+
+def _step_v_shift(net: _Net) -> bool:
+    """
+    (h) Seri direnci olmayan gerilim kaynağı kaydırma: uçlarından biri (w) ortadan kaldırılır.
+    V_w = V_u + δ olduğundan w'deki her direnç kolu δ'lık seri kaynakla u'ya taşınır; akım kaynağı
+    uçlarını doğrudan u'ya alır (w ile u arasından kaynak akımı KCL'yi korur).
+    """
+    inc = net.incidence()
+    ends = (net.a, net.b)
+    for v in (e for e in net.els if e.kind == "V"):
+        options = [nd for nd in (v.p, v.n) if nd not in ends]
+        if not options:
+            continue
+        w = min(options, key=lambda nd: (nd == "0", len(inc[nd]), _key(nd)))
+        u = v.n if v.p == w else v.p
+        others = [e for e in inc[w] if e is not v]
+        if any(e.kind == "V" and {e.p, e.n} == {w, u} for e in others):
+            continue                    # paralel iki ideal kaynak: taşınamaz
+        delta = _emf_toward(v, w)       # V_w − V_u
+        net.used_v_shift = True
+        net.remove(v, *others)
+        net.text(f"{v.name} gerilim kaynağının seri direnci yok, kaynak dönüşümü doğrudan uygulanamaz. "
+                 f"Gerilim kaynağı kaydırma: Düğüm {w} ile Düğüm {u} arasındaki gerilim her zaman "
+                 f"{eng(abs(delta), 'V')} (+ ucu Düğüm {v.p}). {v.name} kaldırılır, Düğüm {w} üzerindeki kollar "
+                 f"Düğüm {u} üzerine taşınır; düğüm gerilimleri değişmez, Düğüm {w} ortadan kalkar.")
+        for e in others:
+            t = e.n if e.p == w else e.p
+            if e.kind == "I":
+                moved = _El("I", e.name, u if e.p == w else e.p, u if e.n == w else e.n, e.val)
+                net.els.append(moved)
+                net.math(f"{e.name}: Düğüm {w} ucu Düğüm {u} üzerine taşınır ({v.name} iki düğüm arasında "
+                         f"akımı geçirir)  →  Düğüm {moved.p} → Düğüm {moved.n}")
+            elif e.kind == "R":
+                name = net.new_name("V")
+                kn = net.new_node()
+                net.els.append(_El("R", e.name, t, kn, e.val))
+                new_v = _mk_v(name, kn, u, delta)
+                net.els.append(new_v)
+                net.math(f"{e.name} (Düğüm {t}–{w})  →  {e.name} ile seri {name} = {eng(abs(delta), 'V')} "
+                         f"(+ ucu {new_v.p}, Düğüm {t}–{u} kolunda)")
+            else:
+                name = net.new_name("V")
+                total = delta - _emf_toward(e, w)   # V_t − V_u
+                new_v = _mk_v(name, t, u, total)
+                net.els.append(new_v)
+                net.math(f"{e.name} (Düğüm {t}–{w})  →  {name} = {eng(abs(total), 'V')} "
+                         f"(Düğüm {t}–{u} arası, + ucu Düğüm {new_v.p})")
         net.recap()
         return True
     return False
@@ -518,7 +620,7 @@ def _step_y_delta(net: _Net) -> bool:
 
 @dataclass
 class _Final:
-    form: str          # 'R', 'VR', 'IR'
+    form: str          # 'R', 'VR', 'IR', 'V' (terminaller arasında ideal kaynak)
     e_th: float        # V_AB
     r_th: float
     elems: List[_El]
@@ -528,6 +630,9 @@ def _final(net: _Net) -> Optional[_Final]:
     a, b = net.a, net.b
     ends = {a, b}
     els = net.els
+    for e in els:
+        if e.kind == "V" and {e.p, e.n} == ends:
+            return _Final("V", _emf_toward(e, a), 0.0, [e])
     if len(els) == 1 and els[0].kind == "R" and {els[0].p, els[0].n} == ends:
         return _Final("R", 0.0, els[0].val, els)
     if len(els) != 2:
@@ -563,9 +668,10 @@ def _reduce(net: _Net) -> _Final:
         if sig in seen:
             raise _Fail(_STUCK)
         seen.add(sig)
-        if (_step_cleanup(net) or _step_chain(net) or _step_parallel(net)
+        if (_step_cleanup(net) or _step_chain(net) or _step_parallel(net) or _step_v_parallel(net)
                 or _step_vr(net) or _step_ir(net)
-                or _step_delta_y(net) or _step_y_delta(net) or _step_delta_y(net, with_sources=True)):
+                or _step_delta_y(net) or _step_y_delta(net) or _step_delta_y(net, with_sources=True)
+                or _step_v_shift(net)):
             continue
         raise _Fail(_STUCK)
     raise _Fail(_STUCK)
@@ -625,6 +731,11 @@ def build_source_transform(ctx) -> Tuple[Optional[list], str]:
     if net.used_shift:
         s1.math("• Akım kaynağı kaydırma: u → w yönündeki I, herhangi bir m düğümü üzerinden "
                 "u → m ve m → w yönünde iki I olarak yazılabilir (m'de KCL değişmez)")
+    if net.used_v_parallel:
+        s1.math("• İdeal gerilim kaynağına paralel direnç ya da akım kaynağı devrenin kalanını etkilemez, çıkarılır")
+    if net.used_v_shift:
+        s1.math("• Gerilim kaynağı kaydırma: seri direnci olmayan E, bir ucundaki düğümün her koluna seri "
+                "taşınır; düğüm gerilimleri değişmez, o düğüm ortadan kalkar")
     s1.note("Yeni elemanlara Ra, Ia, Ea (Δ–Y'de Ry, Rd) gibi adlar, dönüşümle oluşan ara düğümlere x1, x2, … (Y düğümleri Y1, Y2, …) adı verilir. "
             "Terminaller (Düğüm " + a + " ve Düğüm " + b + ") hiçbir adımda ortadan kaldırılmaz.")
 
@@ -641,6 +752,10 @@ def build_source_transform(ctx) -> Tuple[Optional[list], str]:
     if fin.form == "R":
         s2.text("Kalan tek eleman bir dirençtir: devrede terminalleri besleyen etkin kaynak kalmadı, "
                 "bu yüzden açık devre gerilimi sıfırdır.")
+    elif fin.form == "V":
+        s2.text(f"{fin.elems[0].name} ideal gerilim kaynağı doğrudan terminallerin arasında: terminal gerilimini "
+                "bu kaynak belirler, devrenin kalanı onu değiştirmez. Kaynak sıfırlanınca terminaller kısa "
+                "devre olduğu için eşdeğer direnç sıfırdır.")
     elif fin.form == "IR":
         src = next(e for e in fin.elems if e.kind == "I")
         res = next(e for e in fin.elems if e.kind == "R")

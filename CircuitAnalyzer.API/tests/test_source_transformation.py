@@ -123,10 +123,55 @@ def test_bridge_with_source_inside_triangle_uses_source_shifting(solve):
     assert any("akım kaynağı kaydırma" in x for x in texts(results))
 
 
-def test_fallback_when_ideal_source_blocks_reduction(solve):
-    # V2 doğrudan Düğüm 2 ile toprak arasında (seri direnci yok): dönüşümler tıkanır → Thevenin anlatımı
+def test_ideal_source_with_no_series_resistor(solve):
+    # V2 Düğüm 2'yi 5 V'ta tutar; soldaki V1, R1, R2 onun yanında etkisizdir.
+    # R3 ve R4 gerilim bölücü: V3 = 5·50/60 = 4,1667 V; Rth = 50 ∥ 10 = 8,3333 Ω
     net = f"V1 1 0 DC 10\nR1 1 2 40\nR2 1 0 40\nR3 0 3 50\nR4 3 2 10\nV2 2 0 DC 5\n{GND}"
     results, _, errors = solve(net, "DC", analysis_type="SOURCE_TRANSFORM", terminals=("3", "0"))
+    assert not errors
+    assert as_complex(results.thevenin.vth).real == pytest.approx(25 / 6, rel=1e-5)
+    assert as_complex(results.thevenin.zth).real == pytest.approx(25 / 3, rel=1e-5)
+    assert "Kaynak Dönüşümü — Adım Adım" in titles(results)
+
+
+def test_resistor_parallel_to_ideal_source_is_removed(solve):
+    # Rp, V1'e paralel: etkisiz. Vth = 12·3/9 = 4 V, Rth = 6 ∥ 3 = 2 Ω
+    net = f"V1 1 0 DC 12\nRp 1 0 100\nR1 1 2 6\nR2 2 0 3\n{GND}"
+    results, _, errors = solve(net, "DC", analysis_type="SOURCE_TRANSFORM", terminals=("2", "0"))
+    assert not errors
+    assert as_complex(results.thevenin.vth).real == pytest.approx(4.0, rel=1e-5)
+    assert as_complex(results.thevenin.zth).real == pytest.approx(2.0, rel=1e-5)
+    t = texts(results)
+    assert "Kaynak Dönüşümü — Adım Adım" in titles(results)
+    assert any("Rp, V1 ideal gerilim kaynağına paralel" in x for x in t)
+
+
+def test_ideal_source_across_terminals(solve):
+    # Terminal gerilimini V1 belirler: Vth = 12 V, Rth = 0
+    net = f"V1 1 0 DC 12\nR1 1 0 5\nR2 1 2 7\nR3 2 0 3\n{GND}"
+    results, _, errors = solve(net, "DC", analysis_type="SOURCE_TRANSFORM", terminals=("1", "0"))
+    assert not errors
+    assert as_complex(results.thevenin.vth).real == pytest.approx(12.0, rel=1e-5)
+    assert abs(as_complex(results.thevenin.zth)) < 1e-6
+    assert "Kaynak Dönüşümü — Adım Adım" in titles(results)
+
+
+def test_part_hanging_on_one_node_is_removed(solve):
+    # V2, R3, R4 halkası devreye yalnızca toprak üzerinden bağlı: akım göndermez.
+    # Vth = 10·30/40 = 7,5 V, Rth = 10 ∥ 30 = 7,5 Ω
+    net = (f"V1 1 0 DC 10\nR1 1 2 10\nR2 2 0 30\nV2 3 5 DC 6\nR3 5 4 2\nR4 4 3 2\nR5 3 0 8\n{GND}")
+    results, _, errors = solve(net, "DC", analysis_type="SOURCE_TRANSFORM", terminals=("2", "0"))
+    assert not errors
+    assert as_complex(results.thevenin.vth).real == pytest.approx(7.5, rel=1e-5)
+    assert as_complex(results.thevenin.zth).real == pytest.approx(7.5, rel=1e-5)
+    assert "Kaynak Dönüşümü — Adım Adım" in titles(results)
+
+
+def test_fallback_when_nodes_have_four_branches(solve):
+    # Beş düğümün hepsi birbirine bağlı: Δ–Y ile indirgenemez → Thevenin anlatımı
+    net = ("V1 5 0 DC 10\nR0 5 1 1\nR1 0 1 3\nR2 0 2 4\nR3 0 3 5\nR4 0 4 6\nR5 1 2 7\nR6 1 3 8\n"
+           f"R7 1 4 9\nR8 2 3 10\nR9 2 4 11\nR10 3 4 12\n{GND}")
+    results, _, errors = solve(net, "DC", analysis_type="SOURCE_TRANSFORM", terminals=("4", "0"))
     assert not errors
     assert results.thevenin is not None
     t = texts(results)

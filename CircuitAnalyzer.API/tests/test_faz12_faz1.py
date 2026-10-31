@@ -444,7 +444,7 @@ def test_source_transform_unbalanced_bridge_and_non_ground_terminals(solve):
     assert "Kaynak Dönüşümü — Adım Adım" in section_titles(res_12)
 
 
-def test_source_transform_y_to_delta_and_stuck_fallback(solve):
+def test_source_transform_y_to_delta_and_ideal_source_bridge(solve):
     """
     1) Y → Δ gerektiren üçgensiz devre (iki paralel yıldız: Düğüm 4 ve Düğüm 5):
        Düğüm 4 yıldızı: R1(1–4)=3 Ω, R2(2–4)=3 Ω, R3(0–4)=3 Ω.
@@ -457,7 +457,9 @@ def test_source_transform_y_to_delta_and_stuck_fallback(solve):
        R_12 = 4.5 Ω ile seri → 6.75 Ω; R_20 = 4.5 Ω ile paralel:
        Vth(2,0) = 9 · 4.5 / (6.75 + 4.5) = 3.6 V,
        Rth(2,0) = (6.75 · 4.5) / (6.75 + 4.5) = 2.7 Ω.
-    2) Kaynağı köprü içinde sıkışmış devre → tıkanıp Thevenin anlatımına döner.
+    2) Seri direnci olmayan kaynak köprü kolunda → gerilim kaynağı kaydırmayla çözülür. Köprü simetrik
+       olduğu için Düğüm 3 ile toprak aynı potansiyelde: Vth = 0; kaynak sıfırlanınca 1 ve 2 birleşir:
+       Rth = 4∥4 + 4∥4 = 4 Ω.
     """
     net_yd = (
         f"V1 3 0 DC 18\nR0 3 1 4.5\n"
@@ -470,11 +472,14 @@ def test_source_transform_y_to_delta_and_stuck_fallback(solve):
     assert as_complex(res_yd.thevenin.zth).real == pytest.approx(2.7, rel=1e-5)
     assert "yıldız (Y) bağlı (ortak Düğüm 4) → üçgene (Δ" in all_text(res_yd)
 
-    # Tıkanan devre: gerilim kaynağı köprü kolunun içinde ve seri direnci yok
-    net_stuck = f"V1 1 2 DC 10\nR1 1 0 4\nR2 2 0 4\nR3 1 3 4\nR4 2 3 4\n{GND}"
-    res_st, _, err_st = solve(net_stuck, analysis_type="SOURCE_TRANSFORM", terminals=("3", "0"))
+    # Gerilim kaynağı köprü kolunun içinde ve seri direnci yok
+    net_ideal = f"V1 1 2 DC 10\nR1 1 0 4\nR2 2 0 4\nR3 1 3 4\nR4 2 3 4\n{GND}"
+    res_st, _, err_st = solve(net_ideal, analysis_type="SOURCE_TRANSFORM", terminals=("3", "0"))
     assert err_st == []
-    assert "kaynak dönüşümü yöntemi uygulanamadı" in all_text(res_st).lower()
+    assert abs(as_complex(res_st.thevenin.vth)) < 1e-6
+    assert as_complex(res_st.thevenin.zth).real == pytest.approx(4.0, rel=1e-5)
+    assert "Kaynak Dönüşümü — Adım Adım" in section_titles(res_st)
+    assert "Gerilim kaynağı kaydırma" in all_text(res_st)
 
 
 def test_source_transform_helpful_triangle_selection_bug(solve):
