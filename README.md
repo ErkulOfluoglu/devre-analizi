@@ -51,6 +51,8 @@ https://github.com/user-attachments/assets/8298aa93-6456-4b34-bcca-171816584310
 | **Geçici durum (anahtar)** | Kondansatör/bobin şarj–deşarjı: τ, x(t) formülü, τ tablosu, enerji ve zaman grafiği | [Wiki](../../wiki/Geçici-Durum) |
 | **Güç ve güç katsayısı** | P, Q, S, cos φ, güç üçgeni ve kompanzasyon kondansatörü | [Wiki](../../wiki/Güç-ve-Güç-Katsayısı) |
 | **Rezonans** | f₀, Q, bant genişliği, kesim frekansları ve frekans eğrisi (seri, paralel, seri R + paralel LC) | [Wiki](../../wiki/Rezonans) |
+| **Transformatör** | İdeal trafo ve kuplajlı bobinler: yansıyan empedans, sekonder değerleri, güç | [Wiki](../../wiki/Transformatör) |
+| **Üç faz** | Yıldız/üçgen, dengeli/dengesiz yük, nötr akımı, P, Q, S, Aron ve kompanzasyon | [Wiki](../../wiki/Üç-Faz) |
 
 DC ve AC (fazör) devrelerin hepsinde çalışır; AC değerleri [etkin ya da tepe](../../wiki/Etkin-ve-Tepe-Değer) olarak girip gösterebilirsiniz. Köprü gibi seri/paralele indirgenemeyen devrelerde **Δ–Y (üçgen–yıldız) dönüşümü** kendiliğinden devreye girer.
 
