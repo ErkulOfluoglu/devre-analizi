@@ -542,6 +542,7 @@ def _solve_three_phase(
     results.wattmeters = [WattmeterReading(id=i, p=sig_round(p)) for i, p, _, _ in readings]
     if not three:
         _add_wattmeter_section(results, exp, readings, is_rms, is_dc)
+        _hide_expansion_ids(results, parsed, exp)
         return results, steps, errors
 
     def verify(extra):
@@ -574,7 +575,20 @@ def _solve_three_phase(
         results.practice = build_three_phase_questions(an, make_complex_number)
     except Exception as e:
         errors.append(f"ℹ Alıştırma soruları oluşturulamadı: {str(e)}")
-    return results, steps, errors
+    _hide_expansion_ids(results, parsed, exp)
+    # Genel çözüm adımları açılmış devreyi anlatır (V_U1_R, Y1_R_m …); üç faz anlatımı onların yerini tutar
+    return results, [], errors
+
+
+def _hide_expansion_ids(results, parsed: ParsedCircuit, exp) -> None:
+    """Açılımın iç elemanlarını ve düğümlerini sonuçlardan çıkarır: öğrencinin devresinde yoklar."""
+    real_ids = {e.id for e in parsed.elements}
+    hidden_ids = {e.id for e in exp.flat.elements} - real_ids
+    results.element_currents = {k: v for k, v in results.element_currents.items() if k not in hidden_ids}
+
+    real_nodes = {n for e in parsed.elements for n in element_nodes(e)}
+    hidden_nodes = {n for e in exp.flat.elements for n in element_nodes(e)} - real_nodes - {"0"}
+    results.node_voltages = {k: v for k, v in results.node_voltages.items() if k not in hidden_nodes}
 
 
 def _add_wattmeter_section(results, exp, readings, is_rms: bool, is_dc: bool) -> None:
@@ -744,9 +758,7 @@ def _solve_core(
         analysis_type = AnalysisType.TRANSFORMER
 
     # ── Adım 1: Topoloji ──
-    elem_summary = ", ".join(
-        f"{e.id}({e.element_type.value})" for e in parsed.elements
-    )
+    elem_summary = ", ".join(e.id for e in parsed.elements)
     steps.append(SolutionStep(
         step_number=1,
         title="Devre Topolojisi Belirleme",

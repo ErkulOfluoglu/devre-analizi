@@ -271,7 +271,9 @@ namespace CircuitAnalyzer.WPF
                     _overlay?.ShowResults(netlist, _elements, _wires, response);
                     _hasResults = true;
                     TxtStatus.Text = response.Status == "success"
-                        ? $"Çözüldü — {netlist.NodeCount} düğüm, {response.SolutionSteps.Count} çözüm adımı"
+                        ? response.SolutionSteps.Count > 0
+                            ? $"Çözüldü — {netlist.NodeCount} düğüm, {response.SolutionSteps.Count} çözüm adımı"
+                            : $"Çözüldü — {netlist.NodeCount} düğüm"
                         : "Uyarılarla çözüldü — ayrıntılar sağ panelde";
                 }
             }

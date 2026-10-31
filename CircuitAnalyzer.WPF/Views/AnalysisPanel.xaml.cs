@@ -1201,6 +1201,35 @@ public partial class AnalysisPanel : UserControl
             panel.Children.Add(CreateTwoColumnGrid(tiles));
         }
 
+        // Üç faz: hat ve faz akımları, wattmetre okumaları
+        if (response.ThreePhaseResult is { } threePhase)
+        {
+            if (threePhase.LineCurrents is { Count: > 0 } lineCurrents)
+            {
+                AddSectionHeader(panel, "Hat akımları");
+                var tiles = lineCurrents
+                    .Select(kv => CreateValueTile($"I_{kv.Key}", EngFormat.Format(ResultValue.FromComplex(kv.Value), "A")))
+                    .ToList<UIElement>();
+                if (threePhase.NeutralCurrent != null)
+                    tiles.Add(CreateValueTile("I_N", EngFormat.Format(ResultValue.FromComplex(threePhase.NeutralCurrent), "A")));
+                panel.Children.Add(CreateTwoColumnGrid(tiles));
+            }
+            if (threePhase.LoadPhaseCurrents is { Count: > 0 } phaseCurrents)
+            {
+                AddSectionHeader(panel, "Üçgen yükün faz akımları");
+                panel.Children.Add(CreateTwoColumnGrid(phaseCurrents
+                    .Select(kv => CreateValueTile($"I_{kv.Key}", EngFormat.Format(ResultValue.FromComplex(kv.Value), "A")))
+                    .ToList<UIElement>()));
+            }
+        }
+        if (response.WattmeterResults is { Count: > 0 } wattmeters)
+        {
+            AddSectionHeader(panel, "Wattmetre okumaları");
+            panel.Children.Add(CreateTwoColumnGrid(wattmeters
+                .Select(w => CreateValueTile(w.Id, EngFormat.Format(w.P, "W")))
+                .ToList<UIElement>()));
+        }
+
         // 4. Eleman Akımları
         if (response.Results?.ElementCurrents != null && response.Results.ElementCurrents.Count > 0)
         {

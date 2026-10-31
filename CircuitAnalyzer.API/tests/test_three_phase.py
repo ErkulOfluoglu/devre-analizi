@@ -93,6 +93,21 @@ def _currents(tp: dict) -> dict:
     return {k: _z(v) for k, v in tp["line_currents"].items()}
 
 
+def test_internal_names_stay_hidden():
+    # Karmaşık kol R + L'ye açılır; iç kimlikler ve ara düğümler öğrenciye gösterilmez
+    d = _ok("U1 1 2 3 0 3PH_SOURCE Y LINE 380 50 0 RST RMS\nW1 1 4 1 2 WATTMETER\nR1 2 5 1\n"
+            "Y1 4 5 3 0 3PH_LOAD Y Z(8,6) Z(8,6) Z(8,6)\n" + GND)
+    assert set(d["results"]["element_currents"]) == {"R1"}
+    assert set(d["results"]["node_voltages"]) == {"0", "1", "2", "3", "4", "5"}
+    assert d["solution_steps"] == []
+
+
+def test_internal_names_hidden_single_phase_wattmeter():
+    d = _ok("V1 1 0 AC_PHASOR(100, 0)\nW1 1 2 1 0 WATTMETER\nR1 2 0 10\n" + GND, analysis_type="NODAL")
+    assert set(d["results"]["element_currents"]) == {"V1", "R1"}
+    assert d["wattmeters"][0]["p"] == pytest.approx(500.0, rel=1e-4)   # 100 V tepe: P = 100² / (2·10)
+
+
 # ═══════════════════════════════════════════════════════
 #  Dengeli
 # ═══════════════════════════════════════════════════════
