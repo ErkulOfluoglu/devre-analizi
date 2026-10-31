@@ -33,6 +33,8 @@ from parser.netlist_parser import (
     DEPENDENT_VOLTAGE_OUTPUT, ElementType, ParsedCircuit,
 )
 
+from solver.three_phase import PHASES
+
 _PASSIVE = (ElementType.RESISTOR, ElementType.CAPACITOR,
             ElementType.INDUCTOR, ElementType.IMPEDANCE)
 
@@ -716,4 +718,89 @@ def _superposition_questions(q, contributions, unknown_nodes, v_scale,
                 alternatives=alts, is_ac=not is_dc_total,
                 frequency=None if is_dc_total else ok[0][1].frequency,
             ))
+    return out
+
+
+def build_three_phase_questions(an, to_cn: Callable[[complex], ComplexNumber]) -> List[PracticeQuestion]:
+    """
+    THREE_PHASE yönteminde alıştırma soruları (çözücünün seçili gösterimdeki sayıları).
+    Dengeli: faz akımı, hat akımı, P, Q, S, cos φ.  Dengesiz: hat akımları, nötr akımı (4 iletken), P.
+    Hedef cos φ verildiyse ve kompanzasyon uygulandıysa C_Y ve C_Δ da sorulur.
+    """
+    if not an.guided:
+        return []
+    scale_i = max(abs(v) for v in an.i_line.values()) or 1.0
+    freq = an.frequency
+    out: List[PracticeQuestion] = []
+
+    def q(id_, label, description, unit, group, expected, scale, hint, sign_hint,
+          alternatives=(), is_ac=False) -> PracticeQuestion:
+        exp = complex(expected)
+        alts = [PracticeAlternative(value=to_cn(v), message=m) for v, m in alternatives
+                if abs(complex(v) - exp) > 0.02 * max(abs(exp), 1e-3 * scale, 1e-12)]
+        return PracticeQuestion(
+            id=id_, label=label, description=description, unit=unit, group=group,
+            is_ac=is_ac, frequency=freq if is_ac else None, expected=to_cn(exp), scale=scale,
+            hint=hint, sign_hint=sign_hint, alternatives=alts)
+
+    s3 = math.sqrt(3.0)
+    if an.balanced:
+        i_h = an.i_line["R"]
+        if an.conn_l == "Y":
+            i_f = i_h
+            f_hint = "Yıldız yükte faz akımı hat akımına eşittir: I_f = I_h = U_f / Z."
+            f_alts = [(i_h * s3, "Faz akımı hat akımıdır; √3 ile çarpma üçgen bağlantıya özgüdür.")]
+            h_alts = [(i_h / s3, "Yıldızda hat akımı faz akımına eşittir (√3 ile bölmeyin).")]
+        else:
+            i_f = an.i_phase["RS"]
+            f_hint = "Üçgen yükte her kol hat gerilimini görür: I_f = U_h / Z."
+            f_alts = [(an.i_phase["RS"] * s3, "Bu hat akımı gibi görünüyor. Faz akımı I_f = U_h / Z.")]
+            h_alts = [(i_f, "Bu faz akımı. Hat akımı I_h = √3 · I_f (30° geride).")]
+        out.append(q("I_F", "I_f", "Dengeli yükün faz (kol) akımı I_f (R fazı / RS kolu)", "A", "main",
+                     i_f, scale_i, hint=f_hint,
+                     sign_hint="İşaret ters; açıyı kontrol edin (gerilim fazörüne göre).",
+                     alternatives=f_alts, is_ac=True))
+        out.append(q("I_H", "I_h", "Hat akımı I_h (R hattı)", "A", "main", i_h, scale_i,
+                     hint="Dengeli yükte tek faz eşdeğerini çözün; üçgende I_h = √3 · I_f.",
+                     sign_hint="İşaret ters; hat akımı fazörünün açısını kontrol edin.",
+                     alternatives=h_alts, is_ac=True))
+        for id_, lab, desc, unit, val in (
+                ("P", "P", "Toplam aktif güç P", "W", an.p),
+                ("Q", "Q", "Toplam reaktif güç Q", "VAR", an.q),
+                ("S", "S", "Toplam görünür güç S", "VA", an.s)):
+            out.append(q(id_, lab, desc, unit, "main", val, max(abs(an.s), 1e-9),
+                         hint="Dengelide P = √3·U_h·I_h·cos φ, Q = √3·U_h·I_h·sin φ, S = √3·U_h·I_h "
+                              "(etkin değerlerle).",
+                         sign_hint="İşaret ters; geri (endüktif) yükte Q pozitiftir.",
+                         alternatives=[(val / s3, "√3 çarpanını unutmuş olabilirsiniz (üç fazlı toplam).")]
+                         if val else []))
+        out.append(q("PF", "cos φ", "Güç katsayısı cos φ", "", "main", an.pf, 1.0,
+                     hint="cos φ = P / S = Re(Z) / |Z|.",
+                     sign_hint="Güç katsayısı pozitif yazılır; geri/ileri ayrıca söylenir."))
+    else:
+        for ph in PHASES:
+            out.append(q(f"I_{ph}", f"I_{ph}", f"{ph} hattının akımı I_{ph}", "A", "main",
+                         an.i_line[ph], scale_i,
+                         hint=("Her kolu ayrı çözün. 3 iletkenli yıldızda önce Millman ile V_N'N'i "
+                               "bulun; üçgende kol akımlarından KCL ile hat akımına geçin."),
+                         sign_hint="İşaret ters; hat akımı kaynaktan yüke doğru alınır.",
+                         is_ac=True))
+        if an.i_n is not None:
+            out.append(q("I_N", "I_N", "Nötr akımı I_N = I_R + I_S + I_T", "A", "main", an.i_n, scale_i,
+                         hint="Nötr akımı hat akımlarının FAZÖR toplamıdır (büyüklükleri toplamayın).",
+                         sign_hint="İşaret ters; I_N hat akımlarının toplamıdır.", is_ac=True))
+        out.append(q("P", "P", "Toplam aktif güç P (kolların toplamı)", "W", "main", an.p,
+                     max(abs(an.s), 1e-9),
+                     hint="Her kolun gücünü hesaplayıp toplayın: P = Σ Re(V_kol · I_kol*) (etkin).",
+                     sign_hint="Aktif güç pozitiftir (yük güç çeker)."))
+    if an.comp is not None and an.comp.applied:
+        out.append(q("C_Y", "C_Y", "Yıldız bağlı kompanzasyon kondansatörünün her kolu C_Y", "F", "extra",
+                     an.comp.c_y, an.comp.c_y,
+                     hint="Q_C = P (tan φ₁ − tan φ₂); C_Y = Q_C / (ω U_h²).",
+                     sign_hint="Sığa pozitiftir."))
+        out.append(q("C_D", "C_Δ", "Üçgen bağlı kompanzasyon kondansatörünün her kolu C_Δ", "F", "extra",
+                     an.comp.c_delta, an.comp.c_delta,
+                     hint="Üçgende kol hat gerilimini görür: C_Δ = C_Y / 3.",
+                     sign_hint="Sığa pozitiftir.",
+                     alternatives=[(an.comp.c_y, "Bu yıldız bağlı değer C_Y; üçgende C_Δ = C_Y / 3.")]))
     return out

@@ -229,6 +229,8 @@ async def analyze_circuit(
         power_summary=results.power_summary,
         resonance=results.resonance,
         transformer=results.transformer,
+        three_phase=results.three_phase,
+        wattmeters=results.wattmeters,
     )
 
 
@@ -280,7 +282,8 @@ async def parse_only(
                 "node_negative": e.node_negative,
                 "value": e.value,
                 "params": {
-                    k: str(v) if isinstance(v, complex) else v
+                    k: ([str(x) for x in v] if isinstance(v, list) else str(v))
+                    if isinstance(v, (complex, list)) else v
                     for k, v in e.params.items()
                 }
             }

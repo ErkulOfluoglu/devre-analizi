@@ -78,6 +78,18 @@ class ElementType(str, Enum):
     #   T1 p+ p- s+ s- IDEAL a            a = N₂/N₁ > 0   (V₂ = a·V₁, I₁ = a·I₂; I₂ s+ ucundan ÇIKAR)
     #   T1 p+ p- s+ s- COUPLED L1 L2 k    kuplajlı bobinler, M = k·√(L₁L₂); I₁ ve I₂ nokta uçlarından GİRER
     TRANSFORMER = "T"
+    # Üç faz (Faz 3 / v1.6). Çok uçlu elemanlar; node_positive/node_negative = R, S uçları,
+    # diğer uçlar params içindedir.
+    #   U1 R S T N 3PH_SOURCE Y|D LINE|PHASE <değer> <f> <faz°> RST|RTS [RMS]
+    #       params: t_node, n_node, connection, value_kind, frequency, phase, sequence,
+    #               amplitude (seçili gösterimde HAT ya da FAZ değeri), input_value, input_basis
+    #   Y1 R S T N 3PH_LOAD Y|D Z(a,b) Z(a,b) Z(a,b)
+    #       params: t_node, n_node, connection, z (3 empedans: Y'de Z_R,Z_S,Z_T; D'de Z_RS,Z_ST,Z_TR)
+    #   W1 I+ I- V+ V- WATTMETER   (akım bobini I+ → I−, gerilim bobini V+ / V−)
+    #       params: v_pos, v_neg
+    THREE_PHASE_SOURCE = "U3"
+    THREE_PHASE_LOAD = "Y3"
+    WATTMETER = "W"
 
 
 # ── Kaynak grupları (tüm modüller buradan kullanır) ──
@@ -317,6 +329,19 @@ _PATTERNS = {
         re.IGNORECASE
     ),
 
+    # ── Üç faz (Faz 3 / v1.6) ──
+    "three_phase_source": re.compile(
+        r"^(U\w*)\s+(\w+)\s+(\w+)\s+(\w+)\s+(\w+)\s+3PH_SOURCE\s+(Y|D)\s+(LINE|PHASE)\s+"
+        r"(\S+)\s+(\S+)\s+(\S+)\s+(RST|RTS)(?:\s+(RMS))?\s*$", re.IGNORECASE
+    ),
+    "three_phase_load": re.compile(
+        r"^(Y\w*)\s+(\w+)\s+(\w+)\s+(\w+)\s+(\w+)\s+3PH_LOAD\s+(Y|D)\s+"
+        r"Z\(([^)]*)\)\s+Z\(([^)]*)\)\s+Z\(([^)]*)\)\s*$", re.IGNORECASE
+    ),
+    "wattmeter": re.compile(
+        r"^(W\w*)\s+(\w+)\s+(\w+)\s+(\w+)\s+(\w+)\s+WATTMETER\s*$", re.IGNORECASE
+    ),
+
     # ── Ölçüm Probu (Yorum satırı) ──
     "probe": re.compile(
         r"^\*\s*PROBE\s+(\w+)\s+([VI])\(([^)]+)\)\s*$"
@@ -412,7 +437,7 @@ def apply_value_basis(circuit: ParsedCircuit, value_basis: str = "PEAK") -> Pars
 
     sqrt2 = math.sqrt(2.0)
     for elem in circuit.elements:
-        if elem.element_type not in SINE_SOURCES + PHASOR_SOURCES:
+        if elem.element_type not in SINE_SOURCES + PHASOR_SOURCES + (ElementType.THREE_PHASE_SOURCE,):
             continue
         in_val = float(elem.params.get("input_value", elem.params.get("amplitude", elem.value)))
         in_basis = str(elem.params.get("input_basis", "PEAK")).upper()
@@ -525,6 +550,14 @@ def _parse_element_line(
     m = _PATTERNS["ac_phasor"].match(line)
     if m:
         return _parse_ac_phasor(m)
+
+    # ── Üç faz: U1 … 3PH_SOURCE (RMS eki alabilir), Y1 … 3PH_LOAD, W1 … WATTMETER ──
+    if line[0].upper() == "U":
+        return _parse_three_phase_source(line, line_num, circuit)
+    if line[0].upper() == "Y":
+        return _parse_three_phase_load(line, line_num, circuit)
+    if line[0].upper() == "W":
+        return _parse_wattmeter(line, line_num, circuit)
 
     # Başka tür satırda RMS eki varsa Türkçe hata üret
     if re.search(r"\s+RMS\s*$", line, re.IGNORECASE):
@@ -710,6 +743,130 @@ def _parse_transformer(
         node_positive=pp, node_negative=pn, value=k,
         params={"kind": "COUPLED", "s_pos": sp, "s_neg": sn,
                 "l1": l1, "l2": l2, "k": k, "m": k * math.sqrt(l1 * l2)},
+    )
+
+
+def _parse_three_phase_source(
+    line: str, line_num: int, circuit: ParsedCircuit
+) -> Optional[ParsedElement]:
+    """
+    U1 R S T N 3PH_SOURCE Y|D LINE|PHASE <değer> <f> <faz°> RST|RTS [RMS]
+
+    node_positive = R, node_negative = S; T ve N uçları params["t_node"], params["n_node"].
+    value = amplitude = girilen hat ya da faz değeri (gösterim tabanına apply_value_basis çevirir).
+    """
+    m = _PATTERNS["three_phase_source"].match(line)
+    if not m:
+        _reject(circuit,
+                f"Satır {line_num}: Üç fazlı kaynak satırı anlaşılamadı → '{line}'. Beklenen biçim: "
+                "U1 <R> <S> <T> <N> 3PH_SOURCE Y|D LINE|PHASE <değer> <frekans> <faz°> RST|RTS [RMS].")
+        return None
+    uid, r, s, t, n = (m.group(i) for i in range(1, 6))
+    try:
+        value = parse_spice_value(m.group(8))
+        freq = parse_spice_value(m.group(9))
+        phase = float(m.group(10))
+    except ValueError:
+        _reject(circuit, f"Satır {line_num}: {uid} üç fazlı kaynağının değer, frekans ya da faz açısı "
+                         f"sayı olarak okunamadı → '{line}'.")
+        return None
+    if not all(math.isfinite(x) for x in (value, freq, phase)) or value <= 0:
+        _reject(circuit, f"Satır {line_num}: {uid} üç fazlı kaynağının gerilim değeri sıfırdan büyük olmalı.")
+        return None
+    if freq <= 0:
+        _reject(circuit, f"Satır {line_num}: {uid} üç fazlı kaynağının frekansı sıfırdan büyük olmalı.")
+        return None
+    if len({r, s, t}) < 3:
+        _reject(circuit, f"Satır {line_num}: {uid} üç fazlı kaynağının R, S ve T uçları üç farklı düğüme "
+                         "bağlı olmalı.")
+        return None
+    conn = m.group(6).upper()
+    if conn == "Y" and n in (r, s, t):
+        _reject(circuit, f"Satır {line_num}: {uid} yıldız kaynağının nötr ucu (N) bir faz ucuyla aynı "
+                         "düğüme bağlı olamaz.")
+        return None
+    return ParsedElement(
+        id=uid, element_type=ElementType.THREE_PHASE_SOURCE,
+        node_positive=r, node_negative=s, value=value,
+        params={"t_node": t, "n_node": n, "connection": conn, "value_kind": m.group(7).upper(),
+                "frequency": freq, "phase": phase, "sequence": m.group(11).upper(),
+                "amplitude": value, "input_value": value,
+                "input_basis": "RMS" if m.group(12) else "PEAK"},
+    )
+
+
+def _parse_three_phase_load(
+    line: str, line_num: int, circuit: ParsedCircuit
+) -> Optional[ParsedElement]:
+    """
+    Y1 R S T N 3PH_LOAD Y|D Z(a,b) Z(a,b) Z(a,b)
+
+    Y yükte Z_R, Z_S, Z_T; D yükte sırasıyla Z_RS, Z_ST, Z_TR. params["z"] = 3 karmaşık sayı.
+    """
+    m = _PATTERNS["three_phase_load"].match(line)
+    if not m:
+        _reject(circuit,
+                f"Satır {line_num}: Üç fazlı yük satırı anlaşılamadı → '{line}'. Beklenen biçim: "
+                "Y1 <R> <S> <T> <N> 3PH_LOAD Y|D Z(a,b) Z(a,b) Z(a,b).")
+        return None
+    yid, r, s, t, n = (m.group(i) for i in range(1, 6))
+    zs = []
+    for k in (7, 8, 9):
+        parts = [p for p in re.split(r"[,\s]+", m.group(k).strip()) if p]
+        try:
+            if len(parts) != 2:
+                raise ValueError
+            z = complex(parse_spice_value(parts[0]), parse_spice_value(parts[1]))
+        except ValueError:
+            _reject(circuit, f"Satır {line_num}: {yid} yükünün empedansı sayı olarak okunamadı → "
+                             f"'Z({m.group(k)})'. Biçim: Z(gerçek, sanal).")
+            return None
+        if not (math.isfinite(z.real) and math.isfinite(z.imag)):
+            _reject(circuit, f"Satır {line_num}: {yid} yükünün empedansı sonlu bir sayı olmalı.")
+            return None
+        if abs(z) == 0:
+            _reject(circuit, f"Satır {line_num}: {yid} yükünün bir empedansı sıfır (kısa devre); "
+                             "sıfırdan farklı bir empedans girin.")
+            return None
+        if z.real < 0:
+            _reject(circuit, f"Satır {line_num}: {yid} yükünün empedansının gerçek (direnç) kısmı "
+                             "negatif olamaz; pasif bir yükte R ≥ 0'dır.")
+            return None
+        zs.append(z)
+    if len({r, s, t}) < 3:
+        _reject(circuit, f"Satır {line_num}: {yid} üç fazlı yükünün R, S ve T uçları üç farklı düğüme "
+                         "bağlı olmalı.")
+        return None
+    conn = m.group(6).upper()
+    if conn == "Y" and n in (r, s, t):
+        _reject(circuit, f"Satır {line_num}: {yid} yıldız yükünün nötr ucu (N) bir faz ucuyla aynı "
+                         "düğüme bağlı olamaz.")
+        return None
+    return ParsedElement(
+        id=yid, element_type=ElementType.THREE_PHASE_LOAD,
+        node_positive=r, node_negative=s, value=0.0,
+        params={"t_node": t, "n_node": n, "connection": conn, "z": zs},
+    )
+
+
+def _parse_wattmeter(
+    line: str, line_num: int, circuit: ParsedCircuit
+) -> Optional[ParsedElement]:
+    """W1 I+ I- V+ V- WATTMETER: node_positive/negative = akım bobini (I+ → I−), params v_pos/v_neg."""
+    m = _PATTERNS["wattmeter"].match(line)
+    if not m:
+        _reject(circuit, f"Satır {line_num}: Wattmetre satırı anlaşılamadı → '{line}'. "
+                         "Beklenen biçim: W1 <I+> <I-> <V+> <V-> WATTMETER.")
+        return None
+    wid, ip, im, vp, vm = (m.group(i) for i in range(1, 6))
+    if ip == im:
+        _reject(circuit, f"Satır {line_num}: {wid} wattmetresinin akım bobini uçları aynı düğüme "
+                         f"(Düğüm {ip}) bağlı; akım bobini devreye seri ve iki farklı düğüm arasında olmalı.")
+        return None
+    return ParsedElement(
+        id=wid, element_type=ElementType.WATTMETER,
+        node_positive=ip, node_negative=im, value=0.0,
+        params={"v_pos": vp, "v_neg": vm},
     )
 
 
@@ -1010,6 +1167,9 @@ def circuit_at_time(circuit: ParsedCircuit, when: str) -> ParsedCircuit:
         if e.element_type == ElementType.TRANSFORMER:
             params["s_pos"] = rename(params["s_pos"])
             params["s_neg"] = rename(params["s_neg"])
+        for key in ("t_node", "n_node", "v_pos", "v_neg"):      # üç faz elemanları
+            if key in params:
+                params[key] = rename(params[key])
         new.elements.append(dataclasses.replace(
             e, node_positive=rename(e.node_positive), node_negative=rename(e.node_negative),
             params=params))
@@ -1034,6 +1194,10 @@ def element_nodes(elem: ParsedElement) -> Tuple[str, ...]:
         nodes.append(elem.params["pos2"])
     elif elem.element_type == ElementType.TRANSFORMER:
         nodes += [elem.params["s_pos"], elem.params["s_neg"]]
+    elif elem.element_type in (ElementType.THREE_PHASE_SOURCE, ElementType.THREE_PHASE_LOAD):
+        nodes += [elem.params["t_node"], elem.params["n_node"]]
+    elif elem.element_type == ElementType.WATTMETER:
+        nodes += [elem.params["v_pos"], elem.params["v_neg"]]
     return tuple(nodes)
 
 
@@ -1239,7 +1403,14 @@ def to_lcapy_netlist(circuit: ParsedCircuit, frequency: float = None) -> str:
             phase_deg = elem.params.get("phase", 0)
             phase_rad = math.radians(phase_deg)
 
-            if abs(phase_deg) < 0.001:
+            if "exact_rect" in elem.params:
+                # Üç fazlı kaynak açılımı: fazör dikdörtgensel, açı yuvarlaması olmadan
+                z = complex(elem.params["exact_rect"])
+                lines.append(
+                    f"{elem.id} {elem.node_positive} {elem.node_negative} "
+                    f"ac {{{abs(z)!r}*exp(j*{cmath.phase(z)!r})}}"
+                )
+            elif abs(phase_deg) < 0.001:
                 lines.append(
                     f"{elem.id} {elem.node_positive} {elem.node_negative} "
                     f"ac {{{amp}}}"

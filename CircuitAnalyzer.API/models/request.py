@@ -73,6 +73,9 @@ class AnalysisType(str, Enum):
     TRANSFORMER: Transformatör — ideal (V₂ = a·V₁) ya da kuplajlı (M = k·√(L₁L₂)) transformatörlü
               AC devre; sonuç 'transformer' alanında. Netlist'te transformatör varsa başka bir
               yöntem seçilse de devre çözülür ve anlatım bu yöntemle verilir
+    THREE_PHASE: Üç Faz — üç fazlı kaynak/yük (Y ya da D), dengeli ve dengesiz devre, hat/faz büyüklükleri,
+              güç, Aron ve kompanzasyon; sonuç 'three_phase' alanında. Üç fazlı eleman varsa başka
+              bir yöntem seçilse de anlatım bu yöntemle verilir
 
     Not: 'thevenin_terminals' alanı THEVENIN, NORTON ve SOURCE_TRANSFORM analizi için
     hedef port (terminal çifti) tanımlamasında ortak kullanılır.
@@ -88,13 +91,14 @@ class AnalysisType(str, Enum):
     POWER = "POWER"
     RESONANCE = "RESONANCE"
     TRANSFORMER = "TRANSFORMER"
+    THREE_PHASE = "THREE_PHASE"
 
     @classmethod
     def __get_pydantic_json_schema__(cls, core_schema, handler):
         schema = handler(core_schema)
         if "enum" in schema:
             schema["enum"] = [v for v in schema["enum"]
-                              if v not in ("POWER", "RESONANCE", "TRANSFORMER")]
+                              if v not in ("POWER", "RESONANCE", "TRANSFORMER", "THREE_PHASE")]
         return schema
 
 

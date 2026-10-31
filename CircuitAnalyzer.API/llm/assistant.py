@@ -14,7 +14,7 @@ Güvenlik katmanları:
 
 from typing import Dict, List, Optional, Sequence
 
-from explainer.formatting import eng, num, polar
+from explainer.formatting import eng, num, polar, rect
 from explainer.step_generator import _node_groups
 from llm import ollama
 from llm.numbers import KnownValues, check_answer_numbers, known_from
@@ -41,6 +41,7 @@ _METHOD_NAMES = {
     AnalysisType.POWER: "Güç ve güç katsayısı (P, Q, S, cos φ ve kompanzasyon)",
     AnalysisType.RESONANCE: "Rezonans (seri/paralel RLC: f₀, kalite faktörü Q, bant genişliği)",
     AnalysisType.TRANSFORMER: "Transformatör (ideal: V₂ = a·V₁; kuplajlı: M = k·√(L₁L₂), primer/sekonder gerilim ve akımlar)",
+    AnalysisType.THREE_PHASE: "Üç faz (Y/Δ kaynak ve yük, hat/faz büyüklükleri, nötr akımı, güç, Aron, kompanzasyon)",
 }
 
 _RULES = """Sen meslek yüksekokulu elektronik öğrencilerine devre analizi anlatan sabırlı bir öğretmensin.
@@ -109,6 +110,21 @@ def describe_element(e: ParsedElement, value_basis: str = "PEAK") -> str:
             return f"{e.id}: ideal transformatör, a = N₂/N₁ = {num(p['a'])}; {ends}"
         return (f"{e.id}: kuplajlı transformatör, L₁ = {eng(p['l1'], 'H')}, L₂ = {eng(p['l2'], 'H')}, "
                 f"k = {num(p['k'])}, M = {eng(p['m'], 'H')}; {ends}")
+    if t == ElementType.THREE_PHASE_SOURCE:
+        conn = "yıldız (Y)" if p["connection"] == "Y" else "üçgen (Δ)"
+        kind = "hat" if p["value_kind"] == "LINE" else "faz"
+        return (f"{e.id}: üç fazlı kaynak, {conn}, {kind} gerilimi {eng(p['amplitude'], 'V')} ({basis_label}), "
+                f"f = {num(p['frequency'])} Hz, faz sırası {p['sequence']}; uçlar R {_node(e.node_positive)}, "
+                f"S {_node(e.node_negative)}, T {_node(p['t_node'])}, N {_node(p['n_node'])}")
+    if t == ElementType.THREE_PHASE_LOAD:
+        conn = "yıldız (Y)" if p["connection"] == "Y" else "üçgen (Δ)"
+        zs = ", ".join(f"{k} = {rect(z, 'Ω')}" for k, z in zip(
+            ("Z_R", "Z_S", "Z_T") if p["connection"] == "Y" else ("Z_RS", "Z_ST", "Z_TR"), p["z"]))
+        return (f"{e.id}: üç fazlı yük, {conn}, {zs}; uçlar R {_node(e.node_positive)}, "
+                f"S {_node(e.node_negative)}, T {_node(p['t_node'])}, N {_node(p['n_node'])}")
+    if t == ElementType.WATTMETER:
+        return (f"{e.id}: wattmetre, akım bobini {_node(e.node_positive)} → {_node(e.node_negative)}, "
+                f"gerilim bobini {_node(p['v_pos'])} – {_node(p['v_neg'])}")
     if t == ElementType.SWITCH:
         kind = p.get("kind")
         if kind == "SPDT":
@@ -261,6 +277,8 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
         for key in ("amplitude", "input_value", "frequency", "phase"):
             if e.params.get(key) is not None:
                 values.append(e.params[key])
+        if e.element_type == ElementType.THREE_PHASE_LOAD:
+            values += list(e.params["z"])
     if frequency:
         values += [frequency, 2 * 3.141592653589793 * frequency]
 
@@ -306,6 +324,21 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
     if rs is not None:
         values += [rs.f0, rs.w0, rs.x, rs.q, rs.bw, rs.f1, rs.f2, rs.f1_exact, rs.f2_exact,
                    rs.z0, rs.i0, rs.v0]
+    tp = getattr(results, "three_phase", None)
+    if tp is not None:
+        values += [tp.u_line, tp.u_phase, tp.p, tp.q, tp.s, tp.pf]
+        values += [cn(v) for v in tp.line_currents.values()]
+        if tp.neutral_current is not None:
+            values.append(cn(tp.neutral_current))
+        if tp.load_phase_currents:
+            values += [cn(v) for v in tp.load_phase_currents.values()]
+        if tp.aron is not None:
+            values += [tp.aron.p_a, tp.aron.p_b]
+        if tp.compensation is not None:
+            values.append(tp.compensation.target_pf)
+            values += [v for v in (tp.compensation.q_c, tp.compensation.c_y, tp.compensation.c_delta)
+                       if v is not None]
+    values += [w.p for w in getattr(results, "wattmeters", [])]
     tr = getattr(results, "transformer", None)
     if tr is not None:
         values += [cn(tr.v1), cn(tr.v2), cn(tr.i1), cn(tr.i2)]

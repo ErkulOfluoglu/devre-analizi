@@ -34,6 +34,7 @@ from models.response import (
     NodeVoltage, ElementCurrent, ProbeResult, TheveninResult, NortonResult,
     ElementPower, PowerAnalysis, PowerCompensation, PowerSummary,
     ResonanceCurve, ResonanceSummary, TransformerSummary,
+    ThreePhaseSummary, ThreePhaseAron, ThreePhaseCompensation, WattmeterReading,
     SeriesParallelReduction, MeshInfo, SourceContribution,
 )
 from models.request import (
@@ -55,6 +56,10 @@ from solver.frequency_check import check_source_frequencies
 from solver.mesh import analyze_meshes
 from solver.resonance import ResonanceNotApplicable, analyze_resonance, verify_with_lcapy
 from solver.transformer import analyze_transformer
+from solver.three_phase import (
+    analyze_three_phase, expand_three_phase, has_three_phase, has_wattmeters,
+    wattmeter_readings,
+)
 from solver.superposition import solve_contributions
 from practice.questions import build_questions
 from practice.transient_questions import build_transient_questions
@@ -447,6 +452,9 @@ def solve_circuit(
     """
     if value_display is not None:
         parsed = apply_value_basis(parsed, value_display)
+    if (has_three_phase(parsed) or has_wattmeters(parsed)) and not parsed.errors:
+        return _solve_three_phase(parsed, mode, frequency, analysis_type, thevenin_terminals,
+                                  target_probes, warnings, power_factor_target)
     if analysis_type == AnalysisType.TRANSIENT and not has_transformers(parsed):
         return _solve_transient(parsed, mode, frequency, target_probes, warnings)
     if has_switches(parsed) and not parsed.errors:
@@ -461,6 +469,109 @@ def solve_circuit(
     return _solve_core(parsed, mode, frequency, analysis_type,
                        thevenin_terminals, target_probes, warnings,
                        power_factor_target=power_factor_target)
+
+
+def _solve_three_phase(
+    parsed: ParsedCircuit, mode: AnalysisMode, frequency: Optional[float],
+    analysis_type: AnalysisType, thevenin_terminals, target_probes, warnings,
+    power_factor_target: Optional[float],
+) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
+    """
+    Üç fazlı kaynak/yük ve wattmetre içeren devre: elemanlar sıradan elemanlara açılır
+    (solver.three_phase), açılmış devre mevcut çözücüyle çözülür; üç faz büyüklükleri,
+    anlatım ve alıştırma soruları çözülmüş devreden kurulur.
+    """
+    is_dc = mode == AnalysisMode.DC
+    three = has_three_phase(parsed)
+    if three and is_dc:
+        return AnalysisResults(), [], [
+            "⚠ Üç fazlı kaynak ve yük yalnızca AC devrelerde çalışır: DC'de sargılar arasında "
+            "faz farkı oluşmaz. Lütfen AC (fazör) modunu seçin."]
+    if power_factor_target is not None and (
+            isinstance(power_factor_target, bool) or not math.isfinite(power_factor_target)
+            or power_factor_target <= 0.0 or power_factor_target > 1.0):
+        return AnalysisResults(), [], [
+            "⚠ Hedef güç katsayısı (power_factor_target) 0 ile 1 arasında olmalıdır (0 < cos φ ≤ 1)."]
+
+    exp = expand_three_phase(parsed, is_dc, frequency)
+    freq = exp.frequency or frequency
+    core_type = (AnalysisType.NODAL if three or analysis_type in (
+        AnalysisType.THREE_PHASE, AnalysisType.TRANSFORMER) else analysis_type)
+    results, steps, errors = solve_circuit(
+        exp.flat, mode, freq, core_type, None if three else thevenin_terminals, target_probes,
+        warnings, power_factor_target=None if three else power_factor_target)
+    if any(m.startswith(UNSOLVABLE_PREFIX) for m in errors) or not results.node_voltages:
+        return results, steps, errors
+
+    is_rms = getattr(parsed, "value_basis", "PEAK") == "RMS"
+    readings = wattmeter_readings(results, exp, is_rms, is_dc)
+    results.wattmeters = [WattmeterReading(id=i, p=sig_round(p)) for i, p, _, _ in readings]
+    if not three:
+        _add_wattmeter_section(results, exp, readings, is_rms, is_dc)
+        return results, steps, errors
+
+    def verify(extra):
+        flat2 = copy.copy(exp.flat)
+        flat2.elements = list(exp.flat.elements) + list(extra)
+        flat2.node_count = len({n for e in flat2.elements for n in element_nodes(e)})
+        try:
+            r2, _, _ = solve_circuit(flat2, mode, freq, AnalysisType.NODAL, None, None, [])
+        except Exception:
+            return None
+        return r2 if r2.node_voltages else None
+
+    try:
+        an = analyze_three_phase(parsed, exp, results, freq, power_factor_target, verify)
+    except Exception as e:      # beklenmeyen hata: yanlış sonuç yerine dürüst yedek
+        errors.append(f"ℹ Üç faz büyüklükleri hesaplanamadı: {type(e).__name__}: {e}")
+        return results, steps, errors
+    if an is None:
+        errors.append("ℹ Üç fazlı kaynağın hat akımları okunamadı; üç faz özeti verilemedi.")
+        return results, steps, errors
+    results.three_phase = _three_phase_summary(an)
+    from explainer.three_phase_narrative import build_three_phase_sections
+    try:
+        results.explanation = [s.build() for s in build_three_phase_sections(
+            an, analysis_type, transformer=bool(results.transformer)) if s.blocks]
+    except Exception as e:
+        errors.append(f"ℹ Anlatım oluşturulamadı: {str(e)}")
+    try:
+        from practice.questions import build_three_phase_questions
+        results.practice = build_three_phase_questions(an, make_complex_number)
+    except Exception as e:
+        errors.append(f"ℹ Alıştırma soruları oluşturulamadı: {str(e)}")
+    return results, steps, errors
+
+
+def _add_wattmeter_section(results, exp, readings, is_rms: bool, is_dc: bool) -> None:
+    """Üç fazsız devrede (tek fazlı AC ya da DC) wattmetre okumalarını anlatımın sonuna ekler."""
+    if not readings:
+        return
+    from explainer.three_phase_narrative import wattmeter_section
+    results.explanation.append(wattmeter_section(readings, is_rms, is_dc).build())
+
+
+def _three_phase_summary(an) -> ThreePhaseSummary:
+    comp = None
+    if an.comp is not None:
+        c = an.comp
+        comp = ThreePhaseCompensation(
+            target_pf=c.target, applied=c.applied, reason=c.reason,
+            q_c=sig_round(c.q_c) if c.applied else None,
+            c_y=sig_round(c.c_y) if c.applied else None,
+            c_delta=sig_round(c.c_delta) if c.applied else None)
+    return ThreePhaseSummary(
+        source=an.conn_s, load=an.conn_l, wires=an.wires, balanced=an.balanced,
+        u_line=sig_round(an.uh), u_phase=sig_round(an.uf),
+        line_currents={k: make_complex_number(v) for k, v in an.i_line.items()},
+        neutral_current=make_complex_number(an.i_n) if an.i_n is not None else None,
+        load_phase_currents=({k: make_complex_number(v) for k, v in an.i_phase.items()}
+                             if an.i_phase else None),
+        p=sig_round(an.p), q=sig_round(an.q), s=sig_round(an.s), pf=sig_round(an.pf),
+        pf_type=an.pf_type,
+        aron=(ThreePhaseAron(p_a=sig_round(an.aron[0]), p_b=sig_round(an.aron[1]))
+              if an.aron is not None else None),
+        compensation=comp)
 
 
 def _solve_transient(

@@ -624,6 +624,54 @@ class TransformerSummary(BaseModel):
                      "verilir (çözüm netlistinde alt uç yalnızca hesap için 0'a bağlanır)"))
 
 
+class ThreePhaseCompensation(BaseModel):
+    """Üç fazlı kompanzasyon (hedef cos φ verildiyse). Uygulanamadıysa applied=false ve reason dolu."""
+    target_pf: float = Field(..., description="Hedef güç katsayısı cos φ₂")
+    q_c: Optional[float] = Field(default=None, description="Toplam gerekli kapasitif reaktif güç Q_C (VAR)")
+    c_y: Optional[float] = Field(default=None, description="Yıldız bağlı kondansatörün her kolu için C_Y (F)")
+    c_delta: Optional[float] = Field(default=None, description="Üçgen bağlı kondansatörün her kolu için C_Δ = C_Y/3 (F)")
+    applied: bool = Field(..., description="Hesap uygulandı ve çözücüyle doğrulandı mı")
+    reason: Optional[str] = Field(default=None, description="Uygulanamadıysa Türkçe sebebi")
+
+
+class ThreePhaseAron(BaseModel):
+    """İki wattmetre (Aron) yöntemi okumaları: P_A = Re(V_RS·I_R*), P_B = Re(V_TS·I_T*) (etkin tabanda)."""
+    p_a: float = Field(..., description="Birinci wattmetre okuması (W)")
+    p_b: float = Field(..., description="İkinci wattmetre okuması (W)")
+
+
+class ThreePhaseSummary(BaseModel):
+    """
+    Üç faz (THREE_PHASE) yöntemi özeti. Değerler seçili gösterimde (tepe ya da etkin);
+    güçler (P, Q, S) her iki tabanda da gerçek güçtür.
+    """
+    source: Literal["Y", "D"] = Field(..., description="Kaynak bağlantısı")
+    load: Optional[Literal["Y", "D"]] = Field(default=None, description="Yük bağlantısı; üç fazlı yük yoksa null")
+    wires: int = Field(..., description="İletken sayısı: 3 ya da 4 (nötr iletkeni var mı)")
+    balanced: bool = Field(..., description="Dengeli mi: üç empedans eşit ve kaynak simetrik")
+    u_line: float = Field(..., description="Hat gerilimi U_h")
+    u_phase: float = Field(..., description="Faz gerilimi U_f = U_h/√3 (hat–nötr)")
+    line_currents: Dict[str, ComplexNumber] = Field(..., description="Hat akımları I_R, I_S, I_T (anahtarlar R, S, T)")
+    neutral_current: Optional[ComplexNumber] = Field(
+        default=None, description="Nötr akımı I_N = I_R + I_S + I_T; 4 iletkenli değilse null")
+    load_phase_currents: Optional[Dict[str, ComplexNumber]] = Field(
+        default=None, description="Üçgen yükün faz akımları (RS, ST, TR); yıldız ya da yüksüzde null")
+    p: float = Field(..., description="Toplam aktif güç P (W)")
+    q: float = Field(..., description="Toplam reaktif güç Q (VAR)")
+    s: float = Field(..., description="Toplam görünür güç S (VA)")
+    pf: float = Field(..., description="Güç katsayısı cos φ = P/S")
+    pf_type: Literal["lagging", "leading", "unity"] = Field(..., description="Geri / ileri / birim")
+    aron: Optional[ThreePhaseAron] = Field(default=None, description="3 iletkenli devrede Aron okumaları, değilse null")
+    compensation: Optional[ThreePhaseCompensation] = Field(
+        default=None, description="Hedef cos φ verildiyse kompanzasyon, verilmediyse null")
+
+
+class WattmeterReading(BaseModel):
+    """Wattmetre okuması P = Re(V·I*) (etkin tabanda; tepe tabanda ½·Re(V·I*))."""
+    id: str = Field(..., description="Wattmetre kimliği (ör: W1)")
+    p: float = Field(..., description="Okunan aktif güç (W)")
+
+
 class AnalysisResults(BaseModel):
     """Tüm analiz sonuçlarını birleştiren konteyner."""
     node_voltages: Dict[str, NodeVoltage] = Field(
@@ -673,6 +721,12 @@ class AnalysisResults(BaseModel):
     transformer: SkipJsonSchema[Optional[TransformerSummary]] = Field(
         default=None,
         description="Transformatör (TRANSFORMER) yöntemi sonucu; yalnızca transformatörlü çözümde dolu, aksi hâlde null")
+    three_phase: SkipJsonSchema[Optional[ThreePhaseSummary]] = Field(
+        default=None,
+        description="Üç faz (THREE_PHASE) yöntemi sonucu; yalnızca üç fazlı çözümde dolu, aksi hâlde null")
+    wattmeters: SkipJsonSchema[List[WattmeterReading]] = Field(
+        default_factory=list, exclude=True,
+        description="İç kullanım: wattmetre okumaları; API yanıtına AnalysisResponse.wattmeters olarak taşınır")
 
 
 # ═══════════════════════════════════════════════════════
@@ -729,6 +783,14 @@ class AnalysisResponse(BaseModel):
         description=(
             "Transformatör (TRANSFORMER) yöntemi özeti: V₁, V₂, I₁, I₂ (seçili gösterimde), "
             "a ya da k ve M. Yalnızca transformatörlü devre çözüldüyse dolu, aksi hâlde null"))
+    three_phase: SkipJsonSchema[Optional[ThreePhaseSummary]] = Field(
+        default=None,
+        description=(
+            "Üç faz (THREE_PHASE) yöntemi özeti: hat/faz akımları, nötr akımı, P, Q, S, cos φ, Aron ve "
+            "kompanzasyon. Yalnızca üç fazlı devre çözüldüyse dolu, aksi hâlde null"))
+    wattmeters: SkipJsonSchema[List[WattmeterReading]] = Field(
+        default_factory=list,
+        description="Devredeki wattmetrelerin okumaları (yalnızca AC çözümde ve wattmetre varsa dolu)")
     warnings: List[str] = Field(
         default_factory=list,
         description=(
