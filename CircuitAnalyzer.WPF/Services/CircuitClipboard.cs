@@ -380,6 +380,7 @@ namespace CircuitAnalyzer.WPF.Services
             GroundElement => "GND",
             SwitchElement => "S",
             SpdtSwitch => "S",
+            TransformerElement => "T",
             TestProbe => "VP",
             JunctionElement => "J",
             _ => "X",

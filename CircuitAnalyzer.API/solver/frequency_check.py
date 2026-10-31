@@ -199,7 +199,9 @@ def check_source_frequencies(
     # ── Frekans hiç belirlenemedi ──
     if frequency is None:
         reactive = [e.id for e in parsed.elements if e.element_type in (
-            ElementType.CAPACITOR, ElementType.INDUCTOR)]
+            ElementType.CAPACITOR, ElementType.INDUCTOR)
+            or (e.element_type == ElementType.TRANSFORMER
+                and e.params.get("kind") == "COUPLED")]
         if reactive:
             check.errors.append(
                 "⚠ AC analiz için frekans gerekli: istekte 'frequency' "

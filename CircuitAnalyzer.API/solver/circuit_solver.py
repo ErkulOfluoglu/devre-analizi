@@ -33,7 +33,7 @@ from models.response import (
     ExplanationBlock, ExplanationSection, TransientQuantityResult, TransientResult,
     NodeVoltage, ElementCurrent, ProbeResult, TheveninResult, NortonResult,
     ElementPower, PowerAnalysis, PowerCompensation, PowerSummary,
-    ResonanceCurve, ResonanceSummary,
+    ResonanceCurve, ResonanceSummary, TransformerSummary,
     SeriesParallelReduction, MeshInfo, SourceContribution,
 )
 from models.request import (
@@ -45,6 +45,8 @@ from parser.netlist_parser import (
     ALL_SOURCES, CURRENT_SOURCES, DC_SOURCES, SINE_SOURCES, PHASOR_SOURCES,
     DEPENDENT_SOURCES, DEPENDENT_CURRENT_OUTPUT, VOLTAGE_SOURCES,
     SWITCH_NOTE, circuit_at_time, has_switches, apply_value_basis,
+    element_nodes, has_transformers, without_transformers, transformers,
+    transformer_floating_ties, lcapy_transformer_map,
 )
 from explainer.step_generator import generate_solution_steps
 from explainer.topology import generate_topology_step
@@ -52,6 +54,7 @@ from explainer.narrative import PortExtras, build_explanation, port_is_dead
 from solver.frequency_check import check_source_frequencies
 from solver.mesh import analyze_meshes
 from solver.resonance import ResonanceNotApplicable, analyze_resonance, verify_with_lcapy
+from solver.transformer import analyze_transformer
 from solver.superposition import solve_contributions
 from practice.questions import build_questions
 from practice.transient_questions import build_transient_questions
@@ -444,7 +447,7 @@ def solve_circuit(
     """
     if value_display is not None:
         parsed = apply_value_basis(parsed, value_display)
-    if analysis_type == AnalysisType.TRANSIENT:
+    if analysis_type == AnalysisType.TRANSIENT and not has_transformers(parsed):
         return _solve_transient(parsed, mode, frequency, target_probes, warnings)
     if has_switches(parsed) and not parsed.errors:
         results, steps, errors = _solve_core(
@@ -584,6 +587,17 @@ def _solve_core(
             "Lütfen devreye bir GND elemanı ekleyin."
         )
 
+    # ── Transformatör: AC değilse / AC kaynak yoksa mevcut yöntemle devam, aksi hâlde TRANSFORMER ──
+    requested_type = analysis_type
+    trafo = has_transformers(parsed)
+    if trafo:
+        why_not = _transformer_unavailable_reason(parsed, mode)
+        if why_not:
+            return _solve_transformer_fallback(
+                parsed, mode, frequency, requested_type, thevenin_terminals,
+                target_probes, warnings, power_factor_target, why_not)
+        analysis_type = AnalysisType.TRANSFORMER
+
     # ── Adım 1: Topoloji ──
     elem_summary = ", ".join(
         f"{e.id}({e.element_type.value})" for e in parsed.elements
@@ -651,6 +665,18 @@ def _solve_core(
                 "gizli düğümler (_s_…) eklendi; bunlar yalnızca çözücünün iç modelidir "
                 "ve sonuçlarda görünmez."
             )
+        if trafo:
+            model_note += (
+                "\nTransformatör için her uca 0 V'luk iç ölçüm kaynağı (Vsense_…) ve gizli düğümler "
+                "(_tp_…, _ts_…) eklendi; ideal transformatör lcapy'nin TF elemanıyla, kuplajlı "
+                "transformatör iki bobin ve bir K (kuplaj) satırıyla modellendi."
+            )
+            if transformer_floating_ties(parsed):
+                model_note += (
+                    "\nSekonder (ya da primer) toprağa bağlı değil: lcapy ayrık devre grafını "
+                    "çözemediği için o tarafın alt ucu YALNIZCA bu çözüm netlistinde 0 düğümüne "
+                    "bağlandı; sonuçları etkilemez, gerilimler o tarafın alt ucuna göre verilir."
+                )
 
         steps.append(SolutionStep(
             step_number=2,
@@ -691,49 +717,52 @@ def _solve_core(
         return results, steps, errors
 
     # ── Adım 2.4: Seri/Paralel tanıma (topoloji) ──
-    try:
-        pinned = set()
-        if thevenin_terminals is not None:
-            pinned = {thevenin_terminals.node_positive,
-                      thevenin_terminals.node_negative}
-        topo_step, reductions = generate_topology_step(
-            parsed, is_dc, frequency, pinned
-        )
-        if topo_step:
-            topo_step.step_number = len(steps) + 1
-            steps.append(topo_step)
-        results.reductions = [
-            SeriesParallelReduction(
-                type=r.kind,
-                elements=list(r.elements),
-                result_name=r.result_name,
-                nodes=list(r.nodes),
-                formula=r.formula,
-                latex=r.latex,
-                impedance=(make_complex_number(r.impedance)
-                           if r.impedance is not None else None),
-                original_elements=r.members,
+    # (Transformatörlü devrede bu eğitici adımlar atlanır: iki uçlu eleman varsayarlar;
+    #  anlatımı TRANSFORMER bölümleri kurar.)
+    if not trafo:
+        try:
+            pinned = set()
+            if thevenin_terminals is not None:
+                pinned = {thevenin_terminals.node_positive,
+                          thevenin_terminals.node_negative}
+            topo_step, reductions = generate_topology_step(
+                parsed, is_dc, frequency, pinned
             )
-            for r in reductions
-        ]
-    except Exception as e:
-        errors.append(f"ℹ Seri/paralel analizi yapılamadı: {str(e)}")
+            if topo_step:
+                topo_step.step_number = len(steps) + 1
+                steps.append(topo_step)
+            results.reductions = [
+                SeriesParallelReduction(
+                    type=r.kind,
+                    elements=list(r.elements),
+                    result_name=r.result_name,
+                    nodes=list(r.nodes),
+                    formula=r.formula,
+                    latex=r.latex,
+                    impedance=(make_complex_number(r.impedance)
+                               if r.impedance is not None else None),
+                    original_elements=r.members,
+                )
+                for r in reductions
+            ]
+        except Exception as e:
+            errors.append(f"ℹ Seri/paralel analizi yapılamadı: {str(e)}")
 
-    # ── Adım 2.5: Eğitici adımlar (Empedans / KVL / KCL) ──
-    try:
-        edu_steps = generate_solution_steps(
-            parsed=parsed,
-            frequency=frequency,
-            is_dc=is_dc
-        )
-        if edu_steps:
-            # Adım numaralarını mevcut adımların devamı olarak ata
-            base_num = len(steps)
-            for i, es in enumerate(edu_steps):
-                es.step_number = base_num + i + 1
-            steps.extend(edu_steps)
-    except Exception as e:
-        errors.append(f"ℹ Eğitici adımlar oluşturulamadı: {str(e)}")
+        # ── Adım 2.5: Eğitici adımlar (Empedans / KVL / KCL) ──
+        try:
+            edu_steps = generate_solution_steps(
+                parsed=parsed,
+                frequency=frequency,
+                is_dc=is_dc
+            )
+            if edu_steps:
+                # Adım numaralarını mevcut adımların devamı olarak ata
+                base_num = len(steps)
+                for i, es in enumerate(edu_steps):
+                    es.step_number = base_num + i + 1
+                steps.extend(edu_steps)
+        except Exception as e:
+            errors.append(f"ℹ Eğitici adımlar oluşturulamadı: {str(e)}")
 
     # ── Adım 3: Düğüm gerilimleri ──
     raw_nodes = {"0": 0.0}
@@ -749,9 +778,17 @@ def _solve_core(
     )
     results.element_currents = element_currents
 
+    # ── Adım 4.2: Transformatör uç akımları (I₁, I₂) ──
+    trafo_ports = []
+    power_parsed = parsed
+    if trafo:
+        trafo_ports = _solve_transformer_ports(
+            cct, parsed, is_dc, frequency, raw_nodes, raw_currents, element_currents, errors)
+        power_parsed = _power_view(parsed)
+
     # ── Adım 4.5: Güç analizi (P, Q, S, cos φ) ──
     results.power = _compute_power(
-        parsed, raw_nodes, raw_currents, is_dc, steps, errors
+        power_parsed, raw_nodes, raw_currents, is_dc, steps, errors
     )
 
     # ── Adım 5: Prob sonuçları ──
@@ -879,6 +916,19 @@ def _solve_core(
         except Exception as e:
             errors.append(f"ℹ Kısa devre/test kaynağı hesabı yapılamadı: {str(e)}")
 
+    # ── Adım 6.8: Transformatör (TRANSFORMER yöntemi) — sonuç özeti ve elle türetme ──
+    transformer_analysis = None
+    if trafo and trafo_ports:
+        omega = None if is_dc or not frequency else 2 * math.pi * frequency
+        first = trafo_ports[0]
+        results.transformer = _transformer_summary(*first, bool(transformer_floating_ties(parsed)))
+        try:
+            transformer_analysis = analyze_transformer(
+                parsed, omega, getattr(parsed, "value_basis", "PEAK") == "RMS",
+                raw_currents, *first[1:], transformer_floating_ties(parsed))
+        except Exception as e:      # beklenmeyen hata: yanlış sonuç yerine dürüst yedek
+            errors.append(f"ℹ Transformatör türetmesi hazırlanamadı: {type(e).__name__}: {e}")
+
     # ── Adım 7: Öğrenci için Türkçe anlatım (kalıp tabanlı) ──
     try:
         results.explanation = build_explanation(
@@ -887,6 +937,8 @@ def _solve_core(
             port_extras, power_inapplicable_reason=power_inapplicable_reason,
             resonance_analysis=resonance_analysis,
             resonance_inapplicable_reason=resonance_inapplicable_reason,
+            transformer_analysis=transformer_analysis,
+            requested_type=requested_type,
         )
     except Exception as e:
         errors.append(f"ℹ Anlatım oluşturulamadı: {str(e)}")
@@ -940,7 +992,7 @@ def _unsolvable_reason(cct, parsed: ParsedCircuit, is_dc: bool,
     çözülebiliyorsa None. lcapy tekil sistemde "MNA A matrix is not invertible" verir.
     """
     nodes = sorted({n for e in parsed.elements
-                    for n in (e.node_positive, e.node_negative)} - {"0"})
+                    for n in element_nodes(e)} - {"0"})
     if not nodes:
         return None
     try:
@@ -992,8 +1044,7 @@ def _solve_node_voltages(
     # Tüm düğümleri topla (0 dahil)
     all_nodes = set()
     for elem in parsed.elements:
-        all_nodes.add(elem.node_positive)
-        all_nodes.add(elem.node_negative)
+        all_nodes.update(element_nodes(elem))
 
     # Node 0 = GND = 0V
     node_voltages["0"] = NodeVoltage(value=0.0, unit="V", label="GND")
@@ -1098,6 +1149,8 @@ def _solve_element_currents(
     sense = lcapy_sense_map(parsed)
 
     for elem in parsed.elements:
+        if elem.element_type == ElementType.TRANSFORMER:
+            continue        # akımları _solve_transformer_ports hesaplar (I₁, I₂)
         try:
             i_val = lcapy_element_current(cct, elem, sense, is_dc, frequency)
             if raw_out is not None:
@@ -1955,6 +2008,118 @@ def _solve_power_method(
         compensation=comp_result,
     )
     return summary, None
+
+
+# ═══════════════════════════════════════════════════════
+#  TRANSFORMATÖR (TRANSFORMER yöntemi)
+# ═══════════════════════════════════════════════════════
+
+def _transformer_unavailable_reason(parsed: ParsedCircuit, mode: AnalysisMode) -> Optional[str]:
+    """Transformatörlü çözüm uygulanamıyorsa Türkçe sebep, uygulanabiliyorsa None."""
+    if mode == AnalysisMode.DC:
+        return ("Transformatör yalnızca AC devrelerde çalışır: DC'de akı değişmediğinden sargılar "
+                "arasında gerilim ya da akım aktarılmaz.")
+    if not any(e.element_type in SINE_SOURCES + PHASOR_SOURCES for e in parsed.elements):
+        return ("Devrede bağımsız bir AC kaynak yok; kaynaksız devrede transformatörün "
+                "aktaracağı bir gerilim ya da akım bulunmaz.")
+    return None
+
+
+def _solve_transformer_fallback(
+    parsed: ParsedCircuit, mode: AnalysisMode, frequency: Optional[float],
+    requested_type: AnalysisType, thevenin_terminals, target_probes, warnings,
+    power_factor_target, why_not: str,
+):
+    """
+    Transformatör çözümü uygulanamıyor (DC ya da kaynak yok): sebebi söylenir; transformatör
+    sargıları açık devre sayılıp kalan devre istenen yöntemle (yoksa düğüm gerilimleriyle) çözülür.
+    """
+    reduced = without_transformers(parsed)
+    fb_type = (AnalysisType.NODAL
+               if requested_type in (AnalysisType.TRANSFORMER, AnalysisType.TRANSIENT)
+               else requested_type)
+    results, steps, errors = _solve_core(
+        reduced, mode, frequency, fb_type, thevenin_terminals, target_probes, warnings,
+        power_factor_target=power_factor_target)
+    ids = ", ".join(t.id for t in transformers(parsed))
+    note = (f"Bu devrede transformatör ({ids}) var ama Transformatör yöntemi uygulanamadı: {why_not} "
+            "Transformatörün sargıları açık devre sayılarak kalan devre çözüldü.")
+    results.explanation.insert(0, ExplanationSection(
+        title="Transformatör", blocks=[ExplanationBlock(kind="note", text=note)]))
+    errors.append(f"ℹ Transformatör yöntemi uygulanamadı: {why_not}")
+    return results, steps, errors
+
+
+def _solve_transformer_ports(
+    cct, parsed: ParsedCircuit, is_dc: bool, frequency: Optional[float],
+    raw_nodes: dict, raw_currents: dict, element_currents: dict, errors: List[str],
+) -> list:
+    """
+    Her transformatörün uç akımlarını (0 V'luk ölçüm kaynaklarından) bulur.
+    raw_currents / element_currents'a iki kayıt yazılır (ikisi de uca GİREN akım, pasif işaret
+    kuralı): "T1" = primer sargı (p+ → p−), "T1_s" = sekonder sargı (s+ → s−).
+
+    Dönüş: [(t, V₁, V₂, I₁, I₂)] — kitap gösterimi: I₁ p+ ucundan girer; ideal transformatörde
+    I₂ s+ ucundan ÇIKAR (= −sekonder uca giren akım), kuplajlıda GİRER.
+    """
+    tmap = lcapy_transformer_map(parsed)
+    ports = []
+    for t in transformers(parsed):
+        names = tmap[t.id]
+        s_pos, s_neg = t.params["s_pos"], t.params["s_neg"]
+        try:
+            i_p = complex(_extract_numeric(cct[names["vp"]].I, is_dc, frequency))
+            i_s = complex(_extract_numeric(cct[names["vs"]].I, is_dc, frequency))
+        except Exception as e:
+            errors.append(f"ℹ {t.id} akımları hesaplanamadı: {str(e)}")
+            continue
+        vals = [raw_nodes.get(n) for n in (t.node_positive, t.node_negative, s_pos, s_neg)]
+        if any(v is None for v in vals):
+            continue
+        v1 = complex(vals[0]) - complex(vals[1])
+        v2 = complex(vals[2]) - complex(vals[3])
+
+        raw_currents[t.id] = i_p
+        raw_currents[f"{t.id}_s"] = i_s
+        element_currents[t.id] = ElementCurrent(
+            value=make_complex_number(i_p), unit="A",
+            direction=f"{t.node_positive}→{t.node_negative}")
+        element_currents[f"{t.id}_s"] = ElementCurrent(
+            value=make_complex_number(i_s), unit="A", direction=f"{s_pos}→{s_neg}")
+
+        i2 = -i_s if t.params["kind"] == "IDEAL" else i_s
+        ports.append((t, v1, v2, i_p, i2))
+    return ports
+
+
+def _power_view(parsed: ParsedCircuit) -> ParsedCircuit:
+    """
+    Güç hesabı için görünüm: her transformatörün sekonder sargısı ayrı bir (yük gibi) iki uçlu
+    eleman olarak eklenir ("T1_s": s+ → s−); primer sargı "T1" olarak kalır. İdeal
+    transformatörde S₁ + S₂ = 0, kuplajlıda sargıların depoladığı reaktif güç kalır.
+    """
+    view = copy.copy(parsed)
+    view.elements = list(parsed.elements)
+    for t in transformers(parsed):
+        view.elements.append(ParsedElement(
+            id=f"{t.id}_s", element_type=ElementType.INDUCTOR,
+            node_positive=t.params["s_pos"], node_negative=t.params["s_neg"], value=0.0))
+    return view
+
+
+def _transformer_summary(t: ParsedElement, v1, v2, i1, i2, floating: bool) -> TransformerSummary:
+    """Çözücü sonuçları → API yanıtındaki `transformer` alanı (seçili gösterimde)."""
+    p = t.params
+    ideal = p["kind"] == "IDEAL"
+    return TransformerSummary(
+        kind="ideal" if ideal else "coupled", id=t.id,
+        a=sig_round(float(p["a"])) if ideal else None,
+        k=None if ideal else sig_round(float(p["k"])),
+        m=None if ideal else sig_round(float(p["m"])),
+        v1=make_complex_number(complex(v1)), v2=make_complex_number(complex(v2)),
+        i1=make_complex_number(complex(i1)), i2=make_complex_number(complex(i2)),
+        floating_secondary=floating,
+    )
 
 
 def _resonance_summary(a) -> ResonanceSummary:

@@ -159,3 +159,50 @@ def exact_fmt(fmt: Callable[[complex], str]) -> Callable[[complex], str]:
             return f"{MINUS}{-r}" if r < 0 else str(int(r))
         return fmt(z)
     return f
+
+
+# ═══════════════════════════════════════════════════════
+#  2×2 Cramer (iki çevreli devreler, ör. kuplajlı transformatör)
+# ═══════════════════════════════════════════════════════
+
+def det2(symbol: str, M, fmt: Callable[[complex], str]) -> Tuple[str, complex]:
+    """
+    2×2 determinantın açılımı: (çok satırlı metin, değer).
+
+          | a  b |
+      Δ = | c  d | = a·d − b·c
+    """
+    m = [[complex(M[r][c]) for c in range(2)] for r in range(2)]
+    cells = [[fmt(m[r][c]) for c in range(2)] for r in range(2)]
+    widths = [max(len(cells[r][c]) for r in range(2)) for c in range(2)]
+    prefix = f"{symbol} = "
+    pad = " " * len(prefix)
+    lines = []
+    for r in range(2):
+        row = " ".join(cells[r][c].rjust(widths[c]) for c in range(2))
+        lines.append(f"{prefix if r == 0 else pad}| {row} |")
+    p1, p2 = m[0][0] * m[1][1], m[0][1] * m[1][0]
+    det = p1 - p2
+    def wrap(z) -> str:
+        t = fmt(z)
+        return t if (t.startswith("(") and t.endswith(")") and t.count("(") == 1) else f"({t})"
+
+    lines.append(f"{pad}= {wrap(m[0][0])} · {wrap(m[1][1])} {MINUS} {wrap(m[0][1])} · {wrap(m[1][0])}"
+                 f" = {fmt(det)}")
+    return "\n".join(lines), det
+
+
+def cramer2(A, b, fmt: Callable[[complex], str]) -> List[Tuple[str, str, complex]]:
+    """
+    İki bilinmeyenli A·x = b sistemi için [(sembol, açılım metni, değer)]:
+    önce Δ, sonra Δ₁ ve Δ₂ (k. sütun yerine b). xₖ = Δₖ / Δ.
+    """
+    out = []
+    text, det = det2("Δ", A, fmt)
+    out.append(("Δ", text, det))
+    for k in range(2):
+        Mk = [[complex(b[r]) if c == k else complex(A[r][c]) for c in range(2)] for r in range(2)]
+        symbol = "Δ" + str(k + 1).translate(_SUB)
+        text, dk = det2(symbol, Mk, fmt)
+        out.append((symbol, text, dk))
+    return out

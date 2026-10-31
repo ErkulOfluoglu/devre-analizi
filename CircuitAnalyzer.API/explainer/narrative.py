@@ -235,6 +235,8 @@ def build_explanation(
     power_inapplicable_reason: Optional[str] = None,
     resonance_analysis=None,
     resonance_inapplicable_reason: Optional[str] = None,
+    transformer_analysis=None,
+    requested_type: Optional[AnalysisType] = None,
 ) -> List[ExplanationSection]:
     """
     Çözümün Türkçe anlatımını üretir. Çözüm başarısızsa boş liste döner.
@@ -259,6 +261,14 @@ def build_explanation(
         v=nodes, i={k: complex(v) for k, v in raw_currents.items()},
         results=results, port=port_extras,
     )
+    if analysis_type == AnalysisType.TRANSFORMER:
+        if transformer_analysis is None:
+            return []
+        # Transformatörlü devre: düğüm/çevre anlatımı transformatörü yazamaz (iki uçlu eleman
+        # varsayar); başka yöntem seçilmiş olsa da anlatım Transformatör yöntemiyle verilir
+        from explainer.transformer_narrative import build_transformer_sections
+        return [s.build() for s in
+                build_transformer_sections(ctx, transformer_analysis, requested_type) if s.blocks]
     if ctx.has_dependent and analysis_type == AnalysisType.SUPERPOSITION:
         # Toplam sonuçlar süperpozisyon bölümündedir; bağımlı kaynaklar her adımda aktif
         return _build_dependent_explanation(ctx, superposition)

@@ -40,6 +40,7 @@ _METHOD_NAMES = {
     AnalysisType.TRANSIENT: "Geçici durum (anahtarlı RC / RL devresi, zaman sabitesi τ)",
     AnalysisType.POWER: "Güç ve güç katsayısı (P, Q, S, cos φ ve kompanzasyon)",
     AnalysisType.RESONANCE: "Rezonans (seri/paralel RLC: f₀, kalite faktörü Q, bant genişliği)",
+    AnalysisType.TRANSFORMER: "Transformatör (ideal: V₂ = a·V₁; kuplajlı: M = k·√(L₁L₂), primer/sekonder gerilim ve akımlar)",
 }
 
 _RULES = """Sen meslek yüksekokulu elektronik öğrencilerine devre analizi anlatan sabırlı bir öğretmensin.
@@ -101,6 +102,13 @@ def describe_element(e: ParsedElement, value_basis: str = "PEAK") -> str:
         f_txt = f", f = {num(freq)} Hz" if freq else ""
         return (f"{e.id}: AC akım kaynağı, genlik ({basis_label}) {eng(amp, 'A')}, faz {num(p.get('phase', 0))}°{f_txt}, "
                 f"akım kaynak içinde {_node(e.node_positive)} → {_node(e.node_negative)} yönünde")
+    if t == ElementType.TRANSFORMER:
+        ends = (f"primer {_node(e.node_positive)} (p+, nokta) – {_node(e.node_negative)} (p−), "
+                f"sekonder {_node(p['s_pos'])} (s+, nokta) – {_node(p['s_neg'])} (s−)")
+        if p["kind"] == "IDEAL":
+            return f"{e.id}: ideal transformatör, a = N₂/N₁ = {num(p['a'])}; {ends}"
+        return (f"{e.id}: kuplajlı transformatör, L₁ = {eng(p['l1'], 'H')}, L₂ = {eng(p['l2'], 'H')}, "
+                f"k = {num(p['k'])}, M = {eng(p['m'], 'H')}; {ends}")
     if t == ElementType.SWITCH:
         kind = p.get("kind")
         if kind == "SPDT":
@@ -298,6 +306,10 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
     if rs is not None:
         values += [rs.f0, rs.w0, rs.x, rs.q, rs.bw, rs.f1, rs.f2, rs.f1_exact, rs.f2_exact,
                    rs.z0, rs.i0, rs.v0]
+    tr = getattr(results, "transformer", None)
+    if tr is not None:
+        values += [cn(tr.v1), cn(tr.v2), cn(tr.i1), cn(tr.i2)]
+        values += [v for v in (tr.a, tr.k, tr.m) if v is not None]
     return known_from(values, texts)
 
 

@@ -415,7 +415,7 @@ class PracticeQuestion(BaseModel):
     id: str = Field(..., description="Soru kimliği (ör: V2, I_R1, MESH1, VTH, RTH)")
     label: str = Field(..., description="Gösterim sembolü (ör: V₂, I_R1, I₁, Vth)")
     description: str = Field(..., description="Türkçe soru metni")
-    unit: Literal["V", "A", "Ω", "W", "VAR", "VA", "F", "s", "Hz", ""] = Field(
+    unit: Literal["V", "A", "Ω", "W", "VAR", "VA", "F", "H", "s", "Hz", ""] = Field(
         ..., description=("Beklenen birim (s: saniye — geçici durum sorularında zaman sabitesi / süre; "
                           "Hz: rezonans sorularında frekans)"))
     group: Literal["main", "extra"] = Field(
@@ -599,6 +599,31 @@ class ResonanceSummary(BaseModel):
                      "v0 = V_x); eğri dönüştürülmüş devrenin |Z|(f) değeridir"))
 
 
+class TransformerSummary(BaseModel):
+    """
+    Transformatör (TRANSFORMER) yöntemi özeti — ideal ya da kuplajlı.
+
+    Kitap gösterimi: V₁ = V(p+) − V(p−), V₂ = V(s+) − V(s−); I₁ p+ ucundan GİRER.
+    İdeal:    V₂ = a·V₁, I₂ s+ ucundan ÇIKAR, I₁ = a·I₂.
+    Kuplajlı: I₁ p+'dan, I₂ s+'dan GİRER; V₁ = jωL₁I₁ + jωM·I₂, V₂ = jωM·I₁ + jωL₂I₂.
+    Değerler seçili gösterimde (tepe ya da etkin).
+    """
+    kind: Literal["ideal", "coupled"] = Field(..., description="Transformatör türü")
+    id: str = Field(..., description="Transformatörün kimliği (ör: T1)")
+    a: Optional[float] = Field(default=None, description="İdeal: dönüştürme oranı a = N₂/N₁; kuplajlıda null")
+    k: Optional[float] = Field(default=None, description="Kuplajlı: kuplaj katsayısı k; idealde null")
+    m: Optional[float] = Field(default=None, description="Kuplajlı: ortak endüktans M = k·√(L₁L₂) (H); idealde null")
+    v1: ComplexNumber = Field(..., description="Primer gerilimi V₁ = V(p+) − V(p−)")
+    v2: ComplexNumber = Field(..., description="Sekonder gerilimi V₂ = V(s+) − V(s−)")
+    i1: ComplexNumber = Field(..., description="Primer akımı I₁ (p+ ucundan girer)")
+    i2: ComplexNumber = Field(
+        ..., description="Sekonder akımı I₂ (idealde s+ ucundan ÇIKAR, kuplajlıda s+ ucundan GİRER)")
+    floating_secondary: bool = Field(
+        default=False,
+        description=("True: sekonder (ya da primer) toprağa bağlı değil; gerilimler kendi alt uçlarına göre "
+                     "verilir (çözüm netlistinde alt uç yalnızca hesap için 0'a bağlanır)"))
+
+
 class AnalysisResults(BaseModel):
     """Tüm analiz sonuçlarını birleştiren konteyner."""
     node_voltages: Dict[str, NodeVoltage] = Field(
@@ -645,6 +670,9 @@ class AnalysisResults(BaseModel):
     resonance: Optional[ResonanceSummary] = Field(
         default=None, exclude=True,
         description="İç kullanım: RESONANCE yöntemi sonucu; API yanıtına AnalysisResponse.resonance olarak taşınır")
+    transformer: SkipJsonSchema[Optional[TransformerSummary]] = Field(
+        default=None,
+        description="Transformatör (TRANSFORMER) yöntemi sonucu; yalnızca transformatörlü çözümde dolu, aksi hâlde null")
 
 
 # ═══════════════════════════════════════════════════════
@@ -696,6 +724,11 @@ class AnalysisResponse(BaseModel):
         description=(
             "Rezonans (RESONANCE) yöntemi özeti: f₀, Q, bant genişliği ve rezonans eğrisi. "
             "Yalnızca RESONANCE başarılıysa dolu, aksi hâlde null"))
+    transformer: SkipJsonSchema[Optional[TransformerSummary]] = Field(
+        default=None,
+        description=(
+            "Transformatör (TRANSFORMER) yöntemi özeti: V₁, V₂, I₁, I₂ (seçili gösterimde), "
+            "a ya da k ve M. Yalnızca transformatörlü devre çözüldüyse dolu, aksi hâlde null"))
     warnings: List[str] = Field(
         default_factory=list,
         description=(

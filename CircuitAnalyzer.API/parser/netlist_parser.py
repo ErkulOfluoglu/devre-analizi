@@ -73,6 +73,11 @@ class ElementType(str, Enum):
     #   S1 c a b SPDT      t < 0 c–a bağlı (konum 1), t ≥ 0 c–b bağlı (konum 2)
     # Kapalı anahtar ideal kısa devre, açık anahtar ideal açık devredir.
     SWITCH = "S"
+    # Transformatör (çok uçlu: 4 düğüm). node_positive/node_negative = primer (p+, p−);
+    # sekonder uçları params["s_pos"], params["s_neg"] içindedir. Nokta işaretleri p+ ve s+ uçlarında.
+    #   T1 p+ p- s+ s- IDEAL a            a = N₂/N₁ > 0   (V₂ = a·V₁, I₁ = a·I₂; I₂ s+ ucundan ÇIKAR)
+    #   T1 p+ p- s+ s- COUPLED L1 L2 k    kuplajlı bobinler, M = k·√(L₁L₂); I₁ ve I₂ nokta uçlarından GİRER
+    TRANSFORMER = "T"
 
 
 # ── Kaynak grupları (tüm modüller buradan kullanır) ──
@@ -302,6 +307,16 @@ _PATTERNS = {
         r"^(S\w*)\s+(\w+)\s+(\w+)\s+(\w+)\s+SPDT\s*$", re.IGNORECASE
     ),
 
+    # ── Transformatör ──
+    # T1 p+ p- s+ s- IDEAL a   /   T1 p+ p- s+ s- COUPLED L1 L2 k
+    "transformer_ideal": re.compile(
+        r"^(T\w*)\s+(\w+)\s+(\w+)\s+(\w+)\s+(\w+)\s+IDEAL\s+([\w.eE+-]+)\s*$", re.IGNORECASE
+    ),
+    "transformer_coupled": re.compile(
+        r"^(T\w*)\s+(\w+)\s+(\w+)\s+(\w+)\s+(\w+)\s+COUPLED\s+([\w.eE+-]+)\s+([\w.eE+-]+)\s+([\w.eE+-]+)\s*$",
+        re.IGNORECASE
+    ),
+
     # ── Ölçüm Probu (Yorum satırı) ──
     "probe": re.compile(
         r"^\*\s*PROBE\s+(\w+)\s+([VI])\(([^)]+)\)\s*$"
@@ -374,10 +389,7 @@ def parse_netlist(netlist_text: str, value_basis: str = "PEAK") -> ParsedCircuit
     _validate_dependents(circuit)
 
     for element in circuit.elements:
-        all_nodes.add(element.node_positive)
-        all_nodes.add(element.node_negative)
-        if element.element_type == ElementType.SWITCH and element.params.get("pos2"):
-            all_nodes.add(element.params["pos2"])
+        all_nodes.update(element_nodes(element))
     circuit.node_count = len(all_nodes)
     apply_value_basis(circuit, value_basis)
     return circuit
@@ -542,6 +554,10 @@ def _parse_element_line(
     if line[0].upper() == "S":
         return _parse_switch(line, line_num, circuit)
 
+    # ── Transformatör: T1 1 0 2 0 IDEAL 0.5  /  T1 1 0 2 0 COUPLED 0.1 0.1 0.5 ──
+    if line[0].upper() == "T":
+        return _parse_transformer(line, line_num, circuit)
+
     # E/F/G/H ile başlayan ama biçimi bozuk satır: sessizce atlanırsa devre
     # kaynaksız çözülür ve yanlış sonuç çıkar → hata olarak bildir.
     if line[0].upper() in "EFGH":
@@ -614,6 +630,89 @@ def _parse_switch(
     return None
 
 
+def _parse_transformer(
+    line: str, line_num: int, circuit: ParsedCircuit
+) -> Optional[ParsedElement]:
+    """
+    Transformatör satırını ayrıştırır.
+
+    T1 p+ p- s+ s- IDEAL a           → params: kind="IDEAL", s_pos, s_neg, a (= N₂/N₁ > 0)
+    T1 p+ p- s+ s- COUPLED L1 L2 k   → params: kind="COUPLED", s_pos, s_neg, l1, l2, k, m
+                                       (M = k·√(L₁L₂), 0 < k ≤ 1, henri)
+
+    node_positive / node_negative = primer uçları (p+, p−); value = a (ideal) ya da k
+    (kuplajlı). Nokta işaretleri p+ ve s+ uçlarındadır. Geçersiz satır Türkçe hatayla reddedilir.
+    """
+    expected = ("Beklenen biçim: T1 <p+> <p-> <s+> <s-> IDEAL <a>  (a = N2/N1 > 0)  ya da  "
+                "T1 <p+> <p-> <s+> <s-> COUPLED <L1> <L2> <k>  (0 < k ≤ 1).")
+    m = _PATTERNS["transformer_ideal"].match(line)
+    mc = None if m else _PATTERNS["transformer_coupled"].match(line)
+    if not m and not mc:
+        _reject(circuit, f"Satır {line_num}: Transformatör satırı anlaşılamadı → '{line}'. {expected}")
+        return None
+
+    mm = m or mc
+    tid, pp, pn, sp, sn = (mm.group(i) for i in range(1, 6))
+    if pp == pn:
+        _reject(circuit,
+                f"Satır {line_num}: {tid} transformatörünün primer uçları aynı düğüme (Düğüm {pp}) "
+                "bağlı; primer sargının iki ucu farklı düğümlerde olmalı.")
+        return None
+    if sp == sn:
+        _reject(circuit,
+                f"Satır {line_num}: {tid} transformatörünün sekonder uçları aynı düğüme (Düğüm {sp}) "
+                "bağlı; sekonder sargının iki ucu farklı düğümlerde olmalı.")
+        return None
+
+    def number(text: str, what: str) -> Optional[float]:
+        try:
+            x = parse_spice_value(text)
+        except ValueError:
+            x = None
+        if x is None or not math.isfinite(x):
+            _reject(circuit, f"Satır {line_num}: {tid} için {what} sayı olarak okunamadı → '{text}'.")
+            return None
+        return x
+
+    if m:
+        a = number(m.group(6), "dönüştürme oranı a")
+        if a is None:
+            return None
+        if a <= 0:
+            _reject(circuit,
+                    f"Satır {line_num}: {tid} transformatörünün dönüştürme oranı a = N₂/N₁ sıfırdan "
+                    f"büyük olmalı (verilen: {m.group(6)}). Ters bağlantı için sekonder uçlarını "
+                    "(s+ ve s−) yer değiştirin.")
+            return None
+        return ParsedElement(
+            id=tid, element_type=ElementType.TRANSFORMER,
+            node_positive=pp, node_negative=pn, value=a,
+            params={"kind": "IDEAL", "s_pos": sp, "s_neg": sn, "a": a},
+        )
+
+    l1 = number(mc.group(6), "birinci sargının endüktansı L1")
+    l2 = number(mc.group(7), "ikinci sargının endüktansı L2")
+    k = number(mc.group(8), "kuplaj katsayısı k")
+    if l1 is None or l2 is None or k is None:
+        return None
+    if l1 <= 0 or l2 <= 0:
+        _reject(circuit,
+                f"Satır {line_num}: {tid} transformatörünün sargı endüktansları (L1 ve L2) sıfırdan "
+                "büyük olmalı.")
+        return None
+    if not (0.0 < k <= 1.0):
+        _reject(circuit,
+                f"Satır {line_num}: {tid} transformatörünün kuplaj katsayısı k, 0 < k ≤ 1 aralığında "
+                f"olmalı (verilen: {mc.group(8)}).")
+        return None
+    return ParsedElement(
+        id=tid, element_type=ElementType.TRANSFORMER,
+        node_positive=pp, node_negative=pn, value=k,
+        params={"kind": "COUPLED", "s_pos": sp, "s_neg": sn,
+                "l1": l1, "l2": l2, "k": k, "m": k * math.sqrt(l1 * l2)},
+    )
+
+
 def _parse_dependent(
     m: re.Match, line_num: int, circuit: ParsedCircuit
 ) -> Optional[ParsedElement]:
@@ -682,6 +781,9 @@ def _validate_dependents(circuit: ParsedCircuit) -> None:
             elif ctrl is None:
                 bad = (e, f"{e.id} bağımlı kaynağının kontrol elemanı '{ref}' devrede "
                           "bulunamadı. Kontrol elemanının numarasını (Id) kontrol edin.")
+            elif ctrl.element_type == ElementType.TRANSFORMER:
+                bad = (e, f"{e.id} bağımlı kaynağı bir transformatörü ({ctrl.id}) kontrol "
+                          "edemez; kontrol elemanı olarak iki uçlu bir eleman seçin.")
             else:
                 e.params["control_id"] = ctrl.id    # büyük/küçük harfi eleman kimliğine uydur
             if bad:
@@ -904,17 +1006,157 @@ def circuit_at_time(circuit: ParsedCircuit, when: str) -> ParsedCircuit:
     for e in circuit.elements:
         if e.element_type == ElementType.SWITCH:
             continue
+        params = dict(e.params)
+        if e.element_type == ElementType.TRANSFORMER:
+            params["s_pos"] = rename(params["s_pos"])
+            params["s_neg"] = rename(params["s_neg"])
         new.elements.append(dataclasses.replace(
             e, node_positive=rename(e.node_positive), node_negative=rename(e.node_negative),
-            params=dict(e.params)))
+            params=params))
     for p in circuit.probes:
         new.probes.append(ParsedProbe(
             id=p.id, probe_type=p.probe_type,
             target=rename(p.target) if p.probe_type == "V" else p.target))
     for n, xy in circuit.node_positions.items():
         new.node_positions.setdefault(rename(n), xy)
-    new.node_count = len({n for e in new.elements for n in (e.node_positive, e.node_negative)})
+    new.node_count = len({n for e in new.elements for n in element_nodes(e)})
     return new
+
+
+# ═══════════════════════════════════════════════════════
+#  ÇOK UÇLU ELEMANLAR VE TRANSFORMATÖR
+# ═══════════════════════════════════════════════════════
+
+def element_nodes(elem: ParsedElement) -> Tuple[str, ...]:
+    """Elemanın bağlı olduğu TÜM düğümler (anahtar: 3, transformatör: 4, diğerleri: 2)."""
+    nodes = [elem.node_positive, elem.node_negative]
+    if elem.element_type == ElementType.SWITCH and elem.params.get("pos2"):
+        nodes.append(elem.params["pos2"])
+    elif elem.element_type == ElementType.TRANSFORMER:
+        nodes += [elem.params["s_pos"], elem.params["s_neg"]]
+    return tuple(nodes)
+
+
+def transformers(circuit: ParsedCircuit) -> List[ParsedElement]:
+    return [e for e in circuit.elements if e.element_type == ElementType.TRANSFORMER]
+
+
+def has_transformers(circuit: ParsedCircuit) -> bool:
+    """Devrede en az bir transformatör var mı?"""
+    return any(e.element_type == ElementType.TRANSFORMER for e in circuit.elements)
+
+
+def without_transformers(circuit: ParsedCircuit) -> ParsedCircuit:
+    """Transformatörler çıkarılmış devre kopyası (sargılar açık devre sayılır)."""
+    new = dataclasses.replace(
+        circuit, elements=[e for e in circuit.elements
+                           if e.element_type != ElementType.TRANSFORMER],
+        probes=list(circuit.probes), warnings=list(circuit.warnings),
+        errors=list(circuit.errors), node_positions=dict(circuit.node_positions))
+    new.node_count = len({n for e in new.elements for n in element_nodes(e)})
+    return new
+
+
+def transformer_floating_ties(circuit: ParsedCircuit) -> List[str]:
+    """
+    Transformatörü "kırık" sayınca GND'ye (düğüm 0) yolu olmayan düğüm kümeleri için, çözüm
+    netlistinde 0 ile birleştirilecek düğümler (lcapy ayrık grafı çözemez).
+
+    Her yüzen küme için transformatörün o kümedeki uçlarından alt uç seçilir
+    (önce s−, sonra p−, sonra s+, p+). Birleştirme sonuçları etkilemez: yüzen kümenin
+    gerilimleri kendi alt ucuna göre verilmiş olur.
+    """
+    parent: Dict[str, str] = {}
+
+    def find(n: str) -> str:
+        parent.setdefault(n, n)
+        while parent[n] != n:
+            parent[n] = parent[parent[n]]
+            n = parent[n]
+        return n
+
+    def union(a: str, b: str) -> None:
+        parent[find(a)] = find(b)
+
+    find("0")
+    for e in circuit.elements:
+        if e.element_type == ElementType.TRANSFORMER:
+            # Her sargı (primer, sekonder) kendi iki ucunu bağlar; iki taraf birbirine bağlanmaz
+            union(e.node_positive, e.node_negative)
+            union(e.params["s_pos"], e.params["s_neg"])
+            continue
+        ns = element_nodes(e)
+        for n in ns[1:]:
+            union(ns[0], n)
+
+    ties: List[str] = []
+    for t in transformers(circuit):
+        for node in (t.params["s_neg"], t.node_negative, t.params["s_pos"], t.node_positive):
+            if find(node) != find("0"):
+                ties.append(node)
+                union(node, "0")
+    return ties
+
+
+def lcapy_transformer_map(circuit: ParsedCircuit) -> Dict[str, Dict[str, str]]:
+    """
+    Transformatör başına lcapy'deki yardımcı adlar. Her uca 0 V'luk bir ölçüm kaynağı
+    konur: I(ölçüm) = o uçtan transformatöre GİREN akım (I₁ ve kuplajlı I₂).
+
+        tf          : ideal transformatör satırı adı (TF…)
+        l1, l2, k   : kuplajlı bobin ve kuplaj satırı adları
+        vp, vs      : primer / sekonder ölçüm kaynağı adları
+        hp, hs      : gizli düğümler (transformatörün gerçek p+ ve s+ uçları)
+    """
+    used_ids = {e.id.upper() for e in circuit.elements}
+    used_nodes = {n for e in circuit.elements for n in element_nodes(e)}
+
+    def uniq_id(name: str) -> str:
+        while name.upper() in used_ids:
+            name += "_"
+        used_ids.add(name.upper())
+        return name
+
+    def uniq_node(name: str) -> str:
+        while name in used_nodes:
+            name += "_"
+        used_nodes.add(name)
+        return name
+
+    out: Dict[str, Dict[str, str]] = {}
+    for t in transformers(circuit):
+        out[t.id] = {
+            "tf": uniq_id(f"TF_{t.id}"),
+            "l1": uniq_id(f"L_{t.id}_1"), "l2": uniq_id(f"L_{t.id}_2"), "k": uniq_id(f"K_{t.id}"),
+            "vp": uniq_id(f"Vsense_{t.id}_p"), "vs": uniq_id(f"Vsense_{t.id}_s"),
+            "hp": uniq_node(f"_tp_{t.id}"), "hs": uniq_node(f"_ts_{t.id}"),
+        }
+    return out
+
+
+def _transformer_lcapy_lines(elem: ParsedElement, names: Dict[str, str]) -> List[str]:
+    """
+    Transformatörün lcapy satırları (ölçüm kaynakları dahil; bkz. lcapy_transformer_map).
+
+    İdeal:   TF s+ s- p+ p- a        V(s+)−V(s−) = a·(V(p+)−V(p−))   (lcapy'de denendi)
+    Kuplajlı: iki bobin + K satırı; bobinler (p+ → p−) ve (s+ → s−) yazılır, böylece
+             nokta uçları p+ ve s+ olur ve M, her iki akım nokta ucundan girerken pozitiftir.
+    """
+    p = elem.params
+    hp, hs = names["hp"], names["hs"]
+    lines = [
+        f"{names['vp']} {elem.node_positive} {hp} {{0}}",
+        f"{names['vs']} {p['s_pos']} {hs} {{0}}",
+    ]
+    if p["kind"] == "IDEAL":
+        lines.append(f"{names['tf']} {hs} {p['s_neg']} {hp} {elem.node_negative} {{{p['a']}}}")
+    else:
+        lines += [
+            f"{names['l1']} {hp} {elem.node_negative} {{{p['l1']}}}",
+            f"{names['l2']} {hs} {p['s_neg']} {{{p['l2']}}}",
+            f"{names['k']} {names['l1']} {names['l2']} {{{p['k']}}}",
+        ]
+    return lines
 
 
 # ═══════════════════════════════════════════════════════
@@ -954,9 +1196,13 @@ def to_lcapy_netlist(circuit: ParsedCircuit, frequency: float = None) -> str:
     lines = []
     sense = lcapy_sense_map(circuit)
     by_id = {e.id: e for e in circuit.elements}
+    tmap = lcapy_transformer_map(circuit)
 
     for orig in circuit.elements:
         elem = orig
+        if elem.element_type == ElementType.TRANSFORMER:
+            lines.extend(_transformer_lcapy_lines(elem, tmap[elem.id]))
+            continue
         if orig.id in sense:
             # n− ucu gizli düğüme taşınır; 0 V'luk ölçüm kaynağı gizli düğümle
             # gerçek n− arasına girer: I(ölçüm) = eleman içinden n+ → n− akım
@@ -1058,6 +1304,16 @@ def to_lcapy_netlist(circuit: ParsedCircuit, frequency: float = None) -> str:
             sense_name, hidden = sense[orig.id]
             lines.append(f"{sense_name} {hidden} {orig.node_negative} {{0}}")
 
+    # Sekonder (ya da primer) toprağa bağlı değilse lcapy "devre grafı ayrık" der:
+    # yüzen kümenin alt ucu YALNIZCA bu çözüm netlistinde 0 ile birleştirilir
+    used_ids = {e.id.upper() for e in circuit.elements}
+    for idx, node in enumerate(transformer_floating_ties(circuit), 1):
+        name = f"W_tie{idx}"
+        while name.upper() in used_ids:
+            name += "_"
+        used_ids.add(name.upper())
+        lines.append(f"{name} {node} 0")
+
     return "\n".join(lines)
 
 
@@ -1087,7 +1343,7 @@ def lcapy_sense_map(circuit: ParsedCircuit) -> Dict[str, Tuple[str, str]]:
                 wanted.append(ctrl.id)
 
     used_ids = {e.id.upper() for e in circuit.elements}
-    used_nodes = {n for e in circuit.elements for n in (e.node_positive, e.node_negative)}
+    used_nodes = {n for e in circuit.elements for n in element_nodes(e)}
     result: Dict[str, Tuple[str, str]] = {}
     for eid in wanted:
         name, node = f"Vsense_{eid}", f"_s_{eid}"

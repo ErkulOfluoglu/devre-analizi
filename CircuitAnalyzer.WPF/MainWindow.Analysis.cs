@@ -437,6 +437,7 @@ namespace CircuitAnalyzer.WPF
             _capacitorCounter = Max("C");
             _inductorCounter = Max("L");
             _impedanceCounter = Max("Z");
+            _transformerCounter = Max("T");
             _acSourceCounter = Max("VAC");
             _voltageSourceCounter = _elements.OfType<VoltageSource>()
                 .Select(e => int.TryParse(e.Id[1..], out int n) ? n : 0)

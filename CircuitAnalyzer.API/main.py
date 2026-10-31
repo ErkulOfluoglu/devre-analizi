@@ -228,6 +228,7 @@ async def analyze_circuit(
         transient=results.transient,
         power_summary=results.power_summary,
         resonance=results.resonance,
+        transformer=results.transformer,
     )
 
 

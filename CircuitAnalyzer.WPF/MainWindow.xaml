@@ -126,6 +126,15 @@
                             </StackPanel>
                         </Button>
 
+                        <Button x:Name="BtnAddTransformer"
+                                Style="{DynamicResource Button.Nav}"
+                                Click="BtnAddTransformer_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <controls:Icon Data="{DynamicResource Icon.Transformer}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                <TextBlock Text="Transformatör" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
                         <!-- Grup 2: Kaynaklar (18px grup aralığı) -->
                         <TextBlock Text="Kaynaklar"
                                    Style="{DynamicResource Text.Overline}"

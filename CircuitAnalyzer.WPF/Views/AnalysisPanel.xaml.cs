@@ -281,6 +281,10 @@ public partial class AnalysisPanel : UserControl
         {
             CmbAnalysisType.SelectedIndex = 9;
         }
+        else if (string.Equals(analysisType, AnalysisTypes.Transformer, StringComparison.OrdinalIgnoreCase))
+        {
+            CmbAnalysisType.SelectedIndex = 10;
+        }
         else
         {
             CmbAnalysisType.SelectedIndex = 0;
@@ -440,6 +444,8 @@ public partial class AnalysisPanel : UserControl
             return AnalysisTypes.Power;
         if (selectedText.Contains("Rezonans", StringComparison.OrdinalIgnoreCase))
             return AnalysisTypes.Resonance;
+        if (selectedText.Contains("Transformatör", StringComparison.OrdinalIgnoreCase))
+            return AnalysisTypes.Transformer;
         return AnalysisTypes.Nodal;
     }
 

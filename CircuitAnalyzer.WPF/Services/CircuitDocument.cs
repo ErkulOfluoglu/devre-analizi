@@ -66,6 +66,16 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("gain")] public double? Gain { get; set; }
             [JsonPropertyName("control")] public string? Control { get; set; }
             [JsonPropertyName("control_reversed")] public bool? ControlReversed { get; set; }
+
+            // ── Transformatör ("T"): mod, oran, sarımlar, L1, L2, k, kuplaj girişi ──
+            [JsonPropertyName("mode")] public string? Mode { get; set; }
+            [JsonPropertyName("ratio")] public double? Ratio { get; set; }
+            [JsonPropertyName("n1")] public double? N1 { get; set; }
+            [JsonPropertyName("n2")] public double? N2 { get; set; }
+            [JsonPropertyName("l1")] public double? L1 { get; set; }
+            [JsonPropertyName("l2")] public double? L2 { get; set; }
+            [JsonPropertyName("k")] public double? K { get; set; }
+            [JsonPropertyName("coupling_input")] public string? CouplingInput { get; set; }
         }
 
         public sealed class WireData
@@ -173,6 +183,17 @@ namespace CircuitAnalyzer.WPF.Services
                     break;
                 case SpdtSwitch:
                     d.Type = "SPDT";
+                    break;
+                case TransformerElement t:
+                    d.Type = "T";
+                    d.Mode = t.Mode == TransformerMode.Ideal ? "ideal" : "coupled";
+                    d.Ratio = t.Ratio;
+                    d.N1 = t.N1;
+                    d.N2 = t.N2;
+                    d.L1 = t.L1;
+                    d.L2 = t.L2;
+                    d.K = t.K;
+                    d.CouplingInput = t.CouplingInput == CouplingInput.M ? "M" : "K";
                     break;
                 default:
                     throw new NotSupportedException($"Kaydedilemeyen eleman türü: {e.GetType().Name}");
@@ -324,6 +345,26 @@ namespace CircuitAnalyzer.WPF.Services
                     }
                 case "SPDT":
                     return new SpdtSwitch();
+                case "T":
+                    {
+                        var mode = string.Equals(d.Mode, "coupled", StringComparison.OrdinalIgnoreCase)
+                            ? TransformerMode.Coupled
+                            : TransformerMode.Ideal;
+                        var couplingInput = string.Equals(d.CouplingInput, "M", StringComparison.OrdinalIgnoreCase)
+                            ? CouplingInput.M
+                            : CouplingInput.K;
+                        return new TransformerElement
+                        {
+                            Mode = mode,
+                            Ratio = d.Ratio is { } r && r > 0 ? r : 1.0,
+                            N1 = d.N1,
+                            N2 = d.N2,
+                            L1 = d.L1 is { } l1 && l1 > 0 ? l1 : 0.1,
+                            L2 = d.L2 is { } l2 && l2 > 0 ? l2 : 0.1,
+                            K = d.K is { } k && k > 0 && k <= 1.0 ? k : 1.0,
+                            CouplingInput = couplingInput,
+                        };
+                    }
                 default:
                     throw new CircuitFileException($"Tanınmayan eleman türü: “{d.Type}”. Dosya daha yeni bir sürümle kaydedilmiş olabilir.");
             }

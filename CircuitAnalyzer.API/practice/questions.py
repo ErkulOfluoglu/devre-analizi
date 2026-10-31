@@ -10,6 +10,8 @@ Seçilen yönteme göre öğrenciye sorulacak büyüklükler:
     SUPERPOSITION  asıl: her kaynağın katkısı ve toplam (bilinmeyen düğümlerde)
     POWER          asıl: toplam P, Q, S, cos φ (ve kompanzasyon varsa Q_C, C)
     RESONANCE      asıl: f₀, Q, BW, rezonanstaki akım (seri) / empedans (paralel)   ek: f₁, f₂
+    TRANSFORMER    ideal: V₂, I₁, I₂, yansıyan empedans Z₁   kuplajlı: M, I₁, I₂
+                   (transformatörlü devrede yöntem ne seçilirse seçilsin bu sorular sorulur)
 
 Doğru değerler çözücünün sonuçlarından alınır (anlatımla aynı sayılar).
 İpuçları cevabı vermez; yalnızca yöntemi hatırlatır.
@@ -119,7 +121,8 @@ def build_questions(
     freq = None if is_dc else frequency
     v_scale = max((abs(v) for v in nodes.values()), default=1.0) or 1.0
     i_scale = max((abs(i) for i in currents.values()), default=1.0) or 1.0
-    known, _, _ = _node_groups(parsed, is_dc)
+    # Transformatörlü devrede düğüm denklemi soruları iki uçlu eleman varsayar: atlanır
+    known, _, _ = (_node_groups(parsed, is_dc) if results.transformer is None else ({}, None, None))
     unknown_nodes = sorted((n for n in nodes if n != "0" and n not in known), key=_node_key)
 
     def q(id_, label, description, unit, group, expected, scale, hint, sign_hint,
@@ -132,6 +135,9 @@ def build_questions(
             is_ac=is_ac, frequency=frequency if is_ac else None, expected=to_cn(exp), scale=scale,
             hint=hint, sign_hint=sign_hint, alternatives=alts,
         )
+
+    if results.transformer is not None:
+        return _transformer_questions(q, results.transformer)
 
     # ── Ortak soru üreticileri ──
     def node_hint(n: str) -> str:
@@ -581,6 +587,85 @@ def _resonance_questions(q, parsed: ParsedCircuit, rs, to_cn) -> List[PracticeQu
                 accepted=True,
             ))
         out.append(question)
+    return out
+
+
+def _cplx(c: ComplexNumber) -> complex:
+    return complex(c.real, c.imaginary)
+
+
+def _transformer_questions(q, tr) -> List[PracticeQuestion]:
+    """
+    TRANSFORMER yönteminde alıştırma soruları (çözücünün seçili gösterimdeki sayıları).
+    İdeal: V₂, I₁, I₂, yansıyan empedans Z₁ = V₁/I₁ (= Z₂/a²). Kuplajlı: M, I₁, I₂.
+    """
+    v1, v2, i1, i2 = _cplx(tr.v1), _cplx(tr.v2), _cplx(tr.i1), _cplx(tr.i2)
+    v_scale = max(abs(v1), abs(v2), 1e-12)
+    i_scale = max(abs(i1), abs(i2), 1e-12)
+    out: List[PracticeQuestion] = []
+
+    if tr.kind == "ideal":
+        a = tr.a
+        out.append(q(
+            "V2", "V₂", "Sekonder gerilimi V₂ = V(s+) − V(s−)", "V", "main", v2, v_scale,
+            hint=("İdeal transformatörde V₂ = a·V₁ (a = N₂/N₁). Önce primere indirgenmiş devreden "
+                  "V₁'i bulun: yük empedansı primere Z₁ = Z₂/a² olarak yansır."),
+            sign_hint=("İşaret ters. İdeal transformatörde V₂ = a·V₁ ve a > 0'dır: nokta uçları "
+                       "(p+ ve s+) aynı fazdadır."),
+            alternatives=[
+                (v1, "Bu primer gerilimi V₁. Sekonder gerilimi V₂ = a·V₁ soruluyor."),
+                (v1 / a, "Oranı ters uygulamış olabilirsiniz: V₂ = a·V₁ (V₁/a değil)."),
+            ]))
+        out.append(q(
+            "I1", "I₁", "Primer akımı I₁ (p+ ucundan girer)", "A", "main", i1, i_scale,
+            hint=("Sekonder yükü primere yansıtın (Z₁ = Z₂/a²), primerdeki seri empedansla toplayıp "
+                  "I₁ = V / Z_toplam bulun."),
+            sign_hint="İşaret ters. I₁ primerin nokta ucundan (p+) içeri girer.",
+            alternatives=[
+                (i2, "Bu sekonder akımı I₂. Primer akımı I₁ = a·I₂ soruluyor."),
+                (i2 * a * a, "Oran karışmış olabilir: I₁ = a·I₂ (a² değil)."),
+            ]))
+        out.append(q(
+            "I2", "I₂", "Sekonder akımı I₂ (s+ ucundan çıkar)", "A", "main", i2, i_scale,
+            hint="İdeal transformatörde güç korunur: I₁ = a·I₂ → I₂ = I₁/a. Ya da I₂ = V₂/Z₂.",
+            sign_hint="İşaret ters. İdeal transformatörde I₂ sekonderin nokta ucundan (s+) ÇIKAR.",
+            alternatives=[
+                (i1, "Bu primer akımı I₁. Sekonder akımı I₂ = I₁/a soruluyor."),
+                (i1 * a, "Oranı ters uygulamış olabilirsiniz: I₂ = I₁/a (I₁·a değil)."),
+            ]))
+        if abs(i1) > 1e-15:
+            z1 = v1 / i1
+            z2 = v2 / i2 if abs(i2) > 1e-15 else z1 * a * a
+            out.append(q(
+                "Z1", "Z₁", "Yansıyan empedans: sekonder yükünün primere indirgenmiş değeri",
+                "Ω", "extra", z1, max(abs(z1), 1.0),
+                hint="Yansıyan empedans Z₁ = Z₂ / a²; Z₂ sekonderdeki toplam yük empedansıdır.",
+                sign_hint="Pasif bir yükün yansıyan empedansının gerçek kısmı pozitiftir.",
+                alternatives=[
+                    (z2, "Bu sekonder yükü Z₂. Primere yansıyan Z₁ = Z₂/a² soruluyor."),
+                    (z2 * a * a, "Oranı ters uygulamış olabilirsiniz: Z₁ = Z₂/a² (Z₂·a² değil)."),
+                ]))
+    else:
+        out.append(q(
+            "M", "M", "Ortak endüktans M = k·√(L₁·L₂)", "H", "main", tr.m, tr.m,
+            hint=("M = k·√(L₁L₂). L'leri henri (H) cinsinden yazın; k birimsizdir ve 0 < k ≤ 1."),
+            sign_hint="Ortak endüktansın büyüklüğü soruluyor; pozitif yazın.",
+            alternatives=[(tr.k, "Bu kuplaj katsayısı k. Ortak endüktans M = k·√(L₁L₂) (H) soruluyor.")],
+            is_ac=False))
+        out.append(q(
+            "I1", "I₁", "Primer akımı I₁ (p+ ucundan girer)", "A", "main", i1, i_scale,
+            hint=("Primer ve sekonder için KVL yazın: V = (Z_seri + jωL₁)·I₁ + jωM·I₂ ve "
+                  "0 = jωM·I₁ + (Z_yük + jωL₂)·I₂. İki denklemi birlikte çözün (Cramer)."),
+            sign_hint="İşaret ters. I₁ primerin nokta ucundan (p+) içeri girer.",
+            alternatives=[(i2, "Bu sekonder akımı I₂. Primer akımı I₁ soruluyor.")]))
+        out.append(q(
+            "I2", "I₂", "Sekonder akımı I₂ (s+ ucundan girer)", "A", "main", i2, i_scale,
+            hint=("Kuplajlı transformatörde I₂ de sekonderin nokta ucundan (s+) GİRER: "
+                  "0 = jωM·I₁ + (Z_yük + jωL₂)·I₂ → I₂ = −jωM·I₁ / (Z_yük + jωL₂)."),
+            sign_hint=("İşaret ters. I₂ sekonderin nokta ucundan içeri girer; yüke giden akım "
+                       "(−I₂) olduğundan I₂ genellikle I₁'e göre ters yönlüdür."),
+            alternatives=[(i1, "Bu primer akımı I₁. Sekonder akımı I₂ soruluyor."),
+                          (-i2, "Akım yönünü ters almış olabilirsiniz: I₂ s+ ucundan GİREN akımdır.")]))
     return out
 
 

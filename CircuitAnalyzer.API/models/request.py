@@ -70,6 +70,9 @@ class AnalysisType(str, Enum):
     POWER:    Güç ve Güç Katsayısı — P, Q, S, cos φ, güç üçgeni ve isteğe bağlı kompanzasyon
     RESONANCE: Rezonans — seri ya da paralel RLC devresinde f₀, Q, bant genişliği;
               kaynağın frekansı kullanılmaz, devre f₀'da çözülür; sonuç 'resonance' alanında
+    TRANSFORMER: Transformatör — ideal (V₂ = a·V₁) ya da kuplajlı (M = k·√(L₁L₂)) transformatörlü
+              AC devre; sonuç 'transformer' alanında. Netlist'te transformatör varsa başka bir
+              yöntem seçilse de devre çözülür ve anlatım bu yöntemle verilir
 
     Not: 'thevenin_terminals' alanı THEVENIN, NORTON ve SOURCE_TRANSFORM analizi için
     hedef port (terminal çifti) tanımlamasında ortak kullanılır.
@@ -84,12 +87,14 @@ class AnalysisType(str, Enum):
     TRANSIENT = "TRANSIENT"
     POWER = "POWER"
     RESONANCE = "RESONANCE"
+    TRANSFORMER = "TRANSFORMER"
 
     @classmethod
     def __get_pydantic_json_schema__(cls, core_schema, handler):
         schema = handler(core_schema)
         if "enum" in schema:
-            schema["enum"] = [v for v in schema["enum"] if v not in ("POWER", "RESONANCE")]
+            schema["enum"] = [v for v in schema["enum"]
+                              if v not in ("POWER", "RESONANCE", "TRANSFORMER")]
         return schema
 
 

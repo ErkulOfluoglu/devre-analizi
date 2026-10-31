@@ -23,6 +23,7 @@ namespace CircuitAnalyzer.WPF
         private int _capacitorCounter = 0;
         private int _inductorCounter = 0;
         private int _impedanceCounter = 0;
+        private int _transformerCounter = 0;
         private int _groundCounter = 0;
         private int _probeCounter = 0;
         private int _junctionCounter = 0;
@@ -100,6 +101,16 @@ namespace CircuitAnalyzer.WPF
             };
 
             BeginPlacement(z, $"{z.Id} ({z.Impedance.ToRectangularString()}Ω) eklendi — Sürükle/Sağ-tık/Çift-tık");
+        }
+
+        private void BtnAddTransformer_Click(object sender, RoutedEventArgs e)
+        {
+            var t = new TransformerElement
+            {
+                Id = $"T{_transformerCounter + 1}"
+            };
+
+            BeginPlacement(t, $"{t.Id} (Transformatör) eklendi — Sürükle/Sağ-tık/Çift-tık");
         }
 
         /// <summary>
@@ -836,6 +847,7 @@ namespace CircuitAnalyzer.WPF
             _capacitorCounter = 0;
             _inductorCounter = 0;
             _impedanceCounter = 0;
+            _transformerCounter = 0;
             _groundCounter = 0;
             _probeCounter = 0;
             _junctionCounter = 0;

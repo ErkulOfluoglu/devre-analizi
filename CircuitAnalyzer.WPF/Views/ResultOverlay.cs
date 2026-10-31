@@ -115,6 +115,26 @@ namespace CircuitAnalyzer.WPF.Views
                     continue;
                 }
 
+                if (element is TransformerElement tfEl)
+                {
+                    var tf = response.Transformer ?? results.Transformer;
+                    if (tf != null && (string.IsNullOrEmpty(tf.Id) || string.Equals(tf.Id, tfEl.Id, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        var (pPos, sPos) = TransformerCurrentAnchors(tfEl);
+                        if (tf.I1 != null)
+                        {
+                            var i1Val = ResultValue.FromComplex(tf.I1);
+                            AddLabel(pPos, $"I₁: {EngFormat.Format(i1Val, "A")}", "Brush.Overlay.Current", bold: false);
+                        }
+                        if (tf.I2 != null)
+                        {
+                            var i2Val = ResultValue.FromComplex(tf.I2);
+                            AddLabel(sPos, $"I₂: {EngFormat.Format(i2Val, "A")}", "Brush.Overlay.Current", bold: false);
+                        }
+                    }
+                    continue;
+                }
+
                 if (results.ElementCurrents.TryGetValue(element.Id, out var current))
                 {
                     var (value, direction) = CurrentDisplay.Format(element.Id, current);
@@ -178,6 +198,25 @@ namespace CircuitAnalyzer.WPF.Views
             return vertical
                 ? new Point(cx + element.VisualHeight / 2 + 14, cy - 8)
                 : new Point(cx - element.VisualWidth / 2, cy + element.VisualHeight / 2 + 2);
+        }
+
+        private static (Point Primary, Point Secondary) TransformerCurrentAnchors(TransformerElement element)
+        {
+            var p1 = element.Pins[0].AbsolutePosition;
+            var p2 = element.Pins[1].AbsolutePosition;
+            var s1 = element.Pins[2].AbsolutePosition;
+            var s2 = element.Pins[3].AbsolutePosition;
+            var pMid = new Point((p1.X + p2.X) / 2, (p1.Y + p2.Y) / 2);
+            var sMid = new Point((s1.X + s2.X) / 2, (s1.Y + s2.Y) / 2);
+
+            bool vertical = Math.Abs(element.Rotation % 180 - 90) < 1;
+            if (vertical)
+            {
+                return (new Point(pMid.X + 16, pMid.Y - 10),
+                        new Point(sMid.X + 16, sMid.Y - 10));
+            }
+            return (new Point(pMid.X - 10, pMid.Y + 24),
+                    new Point(sMid.X - 10, sMid.Y + 24));
         }
 
         // ═══════════════════════════════════════════════════════

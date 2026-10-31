@@ -41,12 +41,13 @@ public class AnalysisMethodListTests
     [InlineData(7, "Geçici Durum (Anahtar)", AnalysisTypes.Transient, false)]
     [InlineData(8, "Güç ve Güç Katsayısı", AnalysisTypes.Power, false)]
     [InlineData(9, "Rezonans", AnalysisTypes.Resonance, false)]
+    [InlineData(10, "Transformatör", AnalysisTypes.Transformer, false)]
     public void ComboItem_MapsToApiTypeAndTerminalsRow(int index, string label, string apiType, bool showsTerminals)
     {
         RunOnSta(() =>
         {
             var panel = new AnalysisPanel();
-            Assert.Equal(10, panel.CmbAnalysisType.Items.Count);
+            Assert.Equal(11, panel.CmbAnalysisType.Items.Count);
             Assert.Equal(label, (panel.CmbAnalysisType.Items[index] as ComboBoxItem)?.Content as string);
 
             panel.CmbAnalysisType.SelectedIndex = index;
@@ -65,6 +66,7 @@ public class AnalysisMethodListTests
         Assert.Equal("TRANSIENT", AnalysisTypes.Transient);
         Assert.Equal("POWER", AnalysisTypes.Power);
         Assert.Equal("RESONANCE", AnalysisTypes.Resonance);
+        Assert.Equal("TRANSFORMER", AnalysisTypes.Transformer);
     }
 
     [Fact]
@@ -125,7 +127,7 @@ public class AnalysisMethodListTests
         RunOnSta(() =>
         {
             var panel = new AnalysisPanel();
-            foreach (var type in new[] { AnalysisTypes.Millman, AnalysisTypes.SourceTransform, AnalysisTypes.Resonance })
+            foreach (var type in new[] { AnalysisTypes.Millman, AnalysisTypes.SourceTransform, AnalysisTypes.Resonance, AnalysisTypes.Transformer })
             {
                 panel.RestoreAnalysisSettings(new CircuitDocument.AnalysisData { Type = type });
                 Assert.Equal(type, panel.GetAnalysisSettings().Type);

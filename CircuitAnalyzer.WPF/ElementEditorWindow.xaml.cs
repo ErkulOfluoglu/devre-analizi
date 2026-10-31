@@ -41,6 +41,8 @@ namespace CircuitAnalyzer.WPF
 
         // ── Dinamik alan paneli (mod değiştiğinde yeniden oluşturulur) ──
         private StackPanel? _dynamicPanel = null;
+        private bool _transformerIdealUseRatio = true;
+        private bool _transformerCoupledUseK = true;
 
         // ── Bağımlı kaynak formu: kontrol listesi, işaret kutusu ve onaylanınca uygulanacak işlemler ──
         private readonly IReadOnlyList<CircuitElement> _circuitElements;
@@ -132,6 +134,10 @@ namespace CircuitAnalyzer.WPF
 
                 case SpdtSwitch spdt:
                     BuildSpdtSwitchForm(spdt);
+                    break;
+
+                case TransformerElement tf:
+                    BuildTransformerForm(tf);
                     break;
             }
 
@@ -616,6 +622,115 @@ namespace CircuitAnalyzer.WPF
                         "İsim dışında düzenlenecek parametresi yoktur.");
         }
 
+        private void BuildTransformerForm(TransformerElement tf)
+        {
+            Title = $"{tf.Id} — Transformatör";
+            AddNameField(tf.Id, id => tf.Id = id);
+
+            _transformerIdealUseRatio = !tf.N1.HasValue || !tf.N2.HasValue;
+            _transformerCoupledUseK = tf.CouplingInput == CouplingInput.K;
+
+            AddModeSelector("Mod:", "İdeal", "Kuplajlı", tf.Mode == TransformerMode.Ideal, isIdeal =>
+            {
+                tf.Mode = isIdeal ? TransformerMode.Ideal : TransformerMode.Coupled;
+                RebuildTransformerFields(tf);
+            }, "TfModeGroup");
+
+            _dynamicPanel = new StackPanel();
+            PropertiesPanel.Children.Add(_dynamicPanel);
+
+            RebuildTransformerFields(tf);
+
+            AddHintText("Nokta işaretli uçlar aynı anda pozitiftir.");
+        }
+
+        private void RebuildTransformerFields(TransformerElement tf)
+        {
+            if (_dynamicPanel == null) return;
+
+            _dynamicPanel.Children.Clear();
+            _valueBoxes.Clear();
+            _setters.Clear();
+            _unitScales.Clear();
+            _complexInputBox = null;
+            _complexSetter = null;
+
+            if (tf.Mode == TransformerMode.Ideal)
+            {
+                AddModeSelectorTo(_dynamicPanel, "Giriş türü:", "Oran", "Sarım sayısı", _transformerIdealUseRatio, isRatio =>
+                {
+                    _transformerIdealUseRatio = isRatio;
+                    RebuildTransformerFields(tf);
+                }, "TfIdealTypeGroup");
+
+                if (_transformerIdealUseRatio)
+                {
+                    AddFieldTo(_dynamicPanel, "Oran a = N₂/N₁", tf.Ratio, v =>
+                    {
+                        tf.Ratio = v;
+                        tf.N1 = null;
+                        tf.N2 = null;
+                    });
+                }
+                else
+                {
+                    double n1 = tf.N1 ?? 100;
+                    double n2 = tf.N2 ?? (n1 * tf.Ratio);
+                    double tempN1 = n1;
+                    double tempN2 = n2;
+
+                    AddFieldTo(_dynamicPanel, "Primer sarım sayısı (N₁)", n1, v =>
+                    {
+                        tempN1 = v;
+                        tf.N1 = v;
+                        if (tempN1 > 0 && tempN2 > 0) tf.Ratio = tempN2 / tempN1;
+                    });
+                    AddFieldTo(_dynamicPanel, "Sekonder sarım sayısı (N₂)", n2, v =>
+                    {
+                        tempN2 = v;
+                        tf.N2 = v;
+                        if (tempN1 > 0 && tempN2 > 0) tf.Ratio = tempN2 / tempN1;
+                    });
+                }
+            }
+            else
+            {
+                AddFieldTo(_dynamicPanel, "L₁ (mH)", tf.L1 * 1e3, v => tf.L1 = v * 1e-3, unitScale: 1e3);
+                AddFieldTo(_dynamicPanel, "L₂ (mH)", tf.L2 * 1e3, v => tf.L2 = v * 1e-3, unitScale: 1e3);
+
+                AddModeSelectorTo(_dynamicPanel, "Kuplaj parametresi:", "k", "M (mH)", _transformerCoupledUseK, isK =>
+                {
+                    _transformerCoupledUseK = isK;
+                    RebuildTransformerFields(tf);
+                }, "TfCouplingParamGroup");
+
+                if (_transformerCoupledUseK)
+                {
+                    AddFieldTo(_dynamicPanel, "Kuplaj katsayısı k (0 < k ≤ 1)", tf.K, v =>
+                    {
+                        tf.K = v;
+                        tf.CouplingInput = CouplingInput.K;
+                    });
+                }
+                else
+                {
+                    double currentM = (tf.K * Math.Sqrt(tf.L1 * tf.L2)) * 1e3;
+                    AddFieldTo(_dynamicPanel, "Ortak endüktans M (mH)", currentM, v =>
+                    {
+                        double mInH = v * 1e-3;
+                        tf.K = TransformerElement.CalculateKFromM(mInH, tf.L1, tf.L2);
+                        tf.CouplingInput = CouplingInput.M;
+                    }, unitScale: 1e3);
+                }
+            }
+
+            if (_valueBoxes.Count > 0)
+            {
+                _valueBoxes[0].Focus();
+                _valueBoxes[0].SelectAll();
+            }
+        }
+
         // ═══════════════════════════════════════════════════════
         //  FORM BİLEŞENLERİ
         // ═══════════════════════════════════════════════════════
@@ -738,8 +853,15 @@ namespace CircuitAnalyzer.WPF
             // Bu metot ek bir statik önizleme eklemek için kullanılabilir
         }
 
-        /// <summary>Mod seçici RadioButton çifti ekler.</summary>
+        /// <summary>Mod seçici RadioButton çifti ekler (ana panele).</summary>
         private void AddModeSelector(string label, string option1, string option2,
+            bool isFirstSelected, Action<bool> onChanged, string groupName = "InputMode")
+        {
+            AddModeSelectorTo(PropertiesPanel, label, option1, option2, isFirstSelected, onChanged, groupName);
+        }
+
+        /// <summary>Mod seçici RadioButton çifti ekler (belirtilen panele).</summary>
+        private void AddModeSelectorTo(Panel panel, string label, string option1, string option2,
             bool isFirstSelected, Action<bool> onChanged, string groupName = "InputMode")
         {
             var lbl = new TextBlock
@@ -778,8 +900,8 @@ namespace CircuitAnalyzer.WPF
             radioPanel.Children.Add(radio1);
             radioPanel.Children.Add(radio2);
 
-            PropertiesPanel.Children.Add(lbl);
-            PropertiesPanel.Children.Add(radioPanel);
+            panel.Children.Add(lbl);
+            panel.Children.Add(radioPanel);
         }
 
         /// <summary>İpucu metni ekler (ana panele).</summary>
@@ -891,7 +1013,35 @@ namespace CircuitAnalyzer.WPF
                     return;
                 }
 
-                _setters[i](val);
+                try
+                {
+                    _setters[i](val);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    MessageBox.Show(
+                        ex.Message,
+                        "Giriş Hatası",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+
+                    _valueBoxes[i].Focus();
+                    _valueBoxes[i].SelectAll();
+                    return;
+                }
+            }
+
+            if (_element is TransformerElement tfCheck && tfCheck.Mode == TransformerMode.Coupled && _transformerCoupledUseK)
+            {
+                if (tfCheck.K <= 0 || tfCheck.K > 1.0)
+                {
+                    MessageBox.Show(
+                        "Kuplaj katsayısı k, 0 ile 1 arasında olmalıdır (0 < k ≤ 1).",
+                        "Giriş Hatası",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
             }
 
             // ── 2. Karmaşık sayı alanını doğrula ──

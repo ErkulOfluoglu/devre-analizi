@@ -28,6 +28,7 @@ namespace CircuitAnalyzer.WPF.Services
         public const string Transient = "TRANSIENT";
         public const string Power = "POWER";
         public const string Resonance = "RESONANCE";
+        public const string Transformer = "TRANSFORMER";
     }
 
     public sealed class TerminalsDto
@@ -243,6 +244,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("transient")] public TransientAnalysisDto? Transient { get; set; }
         [JsonPropertyName("power_summary")] public PowerSummaryDto? PowerSummary { get; set; }
         [JsonPropertyName("resonance")] public ResonanceDto? Resonance { get; set; }
+        [JsonPropertyName("transformer")] public TransformerResultDto? Transformer { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -530,6 +532,20 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("curve")] public ResonanceCurveDto? Curve { get; set; }
     }
 
+    public sealed class TransformerResultDto
+    {
+        [JsonPropertyName("kind")] public string Kind { get; set; } = "ideal";
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("a")] public double? A { get; set; }
+        [JsonPropertyName("k")] public double? K { get; set; }
+        [JsonPropertyName("m")] public double? M { get; set; }
+        [JsonPropertyName("v1")] public ComplexNumberDto? V1 { get; set; }
+        [JsonPropertyName("v2")] public ComplexNumberDto? V2 { get; set; }
+        [JsonPropertyName("i1")] public ComplexNumberDto? I1 { get; set; }
+        [JsonPropertyName("i2")] public ComplexNumberDto? I2 { get; set; }
+        [JsonPropertyName("floating_secondary")] public bool FloatingSecondary { get; set; }
+    }
+
     public sealed class AnalysisResponseDto
     {
         /// <summary>"success" veya "warning".</summary>
@@ -544,6 +560,9 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("transient")] public TransientAnalysisDto? Transient { get; set; }
         [JsonPropertyName("power_summary")] public PowerSummaryDto? PowerSummary { get; set; }
         [JsonPropertyName("resonance")] public ResonanceDto? Resonance { get; set; }
+        [JsonPropertyName("transformer")] public TransformerResultDto? Transformer { get; set; }
+
+        [JsonIgnore] public TransformerResultDto? TransformerResult => Transformer ?? Results?.Transformer;
     }
 
     public sealed class HealthDto
