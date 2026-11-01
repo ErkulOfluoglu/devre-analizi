@@ -138,7 +138,7 @@ namespace CircuitAnalyzer.WPF.Services
 
         /// <summary>
         /// Uygulama klasöründen yukarı doğru CircuitAnalyzer.API\main.py arar.
-        /// (bin\Debug\net8.0-windows → ... → proje kökü)
+        /// (bin\Debug\net10.0-windows → ... → proje kökü)
         /// </summary>
         internal static string? FindApiSourceDir(string startDir)
         {

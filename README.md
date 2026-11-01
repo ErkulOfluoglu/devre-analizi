@@ -129,14 +129,14 @@ Program iki parçadan oluşur:
 
 | Klasör | Ne yapar? | Teknoloji |
 |---|---|---|
-| `CircuitAnalyzer.WPF` | Çizim arayüzü, paneller, alıştırma modu, zaman grafiği | C# · .NET 8 · WPF · ScottPlot |
+| `CircuitAnalyzer.WPF` | Çizim arayüzü, paneller, alıştırma modu, zaman grafiği | C# · .NET 10 · WPF · ScottPlot |
 | `CircuitAnalyzer.API` | Çözücü, Türkçe anlatım, cevap denetimi, yapay zekâ bağlantısı | Python · FastAPI · lcapy |
 | `CircuitAnalyzer.Tests` | Arayüz ve uçtan uca testler | xUnit |
 | `installer` | Kurulum paketi (PyInstaller + Inno Setup) | PowerShell |
 
 Arayüz, çözücüyü arka planda kendisi başlatır (geliştirme sırasında `python -m uvicorn main:app`, kurulu sürümde `backend\CircuitAnalyzerAPI.exe`).
 
-**Kaynaktan çalıştırma:** .NET 8 SDK ve Python 3.10+ gerekir.
+**Kaynaktan çalıştırma:** .NET 10 SDK ve Python 3.10+ gerekir.
 
 ```bash
 pip install -r CircuitAnalyzer.API/requirements-dev.txt

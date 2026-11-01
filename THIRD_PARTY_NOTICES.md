@@ -10,7 +10,7 @@ derleme sırasında otomatik toplar).
 
 | Bileşen | Lisans | Kaynak |
 |---|---|---|
-| .NET 8 çalışma zamanı ve WPF | MIT | https://github.com/dotnet/runtime · https://github.com/dotnet/wpf |
+| .NET 10 çalışma zamanı ve WPF | MIT | https://github.com/dotnet/runtime · https://github.com/dotnet/wpf |
 | Python 3.10 (OpenSSL, libffi vb. dahil) | PSF-2.0 (+ dosyada listelenen lisanslar) | https://www.python.org |
 
 ## .NET / WPF paketleri

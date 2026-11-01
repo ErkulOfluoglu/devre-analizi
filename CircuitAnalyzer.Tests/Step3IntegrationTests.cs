@@ -69,8 +69,8 @@ public class Step3IntegrationTests : IClassFixture<BackendFixture>
                 {
                     var candidates = new[]
                     {
-                        Path.Combine(binDir, "Debug", "net8.0-windows", "CircuitAnalyzer.exe"),
-                        Path.Combine(binDir, "Release", "net8.0-windows", "CircuitAnalyzer.exe")
+                        Path.Combine(binDir, "Debug", "net10.0-windows", "CircuitAnalyzer.exe"),
+                        Path.Combine(binDir, "Release", "net10.0-windows", "CircuitAnalyzer.exe")
                     };
 
                     foreach (var candidate in candidates)
@@ -81,7 +81,7 @@ public class Step3IntegrationTests : IClassFixture<BackendFixture>
 
                     foreach (var configDir in Directory.GetDirectories(binDir))
                     {
-                        var candidate = Path.Combine(configDir, "net8.0-windows", "CircuitAnalyzer.exe");
+                        var candidate = Path.Combine(configDir, "net10.0-windows", "CircuitAnalyzer.exe");
                         if (File.Exists(candidate))
                             return candidate;
                     }

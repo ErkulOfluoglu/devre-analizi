@@ -12,7 +12,7 @@ set "PATH=%LOCALAPPDATA%\Microsoft\dotnet;%PATH%"
 
 where dotnet >nul 2>nul
 if errorlevel 1 (
-    echo [HATA] .NET SDK bulunamadi. https://dotnet.microsoft.com/download adresinden .NET 8 SDK kurun.
+    echo [HATA] .NET SDK bulunamadi. https://dotnet.microsoft.com/download adresinden .NET 10 SDK kurun.
     pause
     exit /b 1
 )
@@ -33,5 +33,5 @@ if errorlevel 1 (
     exit /b 1
 )
 
-start "" "CircuitAnalyzer.WPF\bin\Debug\net8.0-windows\CircuitAnalyzer.exe"
+start "" "CircuitAnalyzer.WPF\bin\Debug\net10.0-windows\CircuitAnalyzer.exe"
 endlocal

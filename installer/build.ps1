@@ -5,7 +5,7 @@
 #  -Version verilmezse sürüm CircuitAnalyzer.WPF.csproj içindeki <Version> değerinden okunur.
 #
 #  Gerekenler (yalnızca paketi HAZIRLAYAN bilgisayarda; kullanıcıda değil):
-#    .NET 8 SDK, Python 3.10 + requirements.txt + pyinstaller, Inno Setup 6
+#    .NET 10 SDK, Python 3.10 + requirements.txt + pyinstaller, Inno Setup 6
 #
 #  Çıktı: build\installer\DevreAnalizi-Kurulum-<sürüm>.exe
 # ════════════════════════════════════════════════════════════════
