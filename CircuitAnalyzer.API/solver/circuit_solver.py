@@ -23,10 +23,10 @@ import copy
 import math
 import cmath
 import traceback
-from typing import Tuple, List, Optional, Union
+from typing import Dict, Tuple, List, Optional, Union
 
 import sympy
-from explainer.formatting import MINUS, num
+from explainer.formatting import MINUS, eng, num
 
 from models.response import (
     AnalysisResults, SolutionStep, ComplexNumber,
@@ -1172,12 +1172,93 @@ def _solve_core(
 UNSOLVABLE_PREFIX = "⛔ "
 
 
+def _dc_no_steady_state_reason(parsed: ParsedCircuit) -> Optional[str]:
+    """
+    DC'de kararlı hâli olmayan iki durum: akım kaynağının akımı yalnızca kondansatörden dönebiliyor
+    (gerilim sınırsız büyür) ya da gerilim kaynağı direnç görmeden yalnızca bobine bağlı (akım
+    sınırsız büyür). Yalnızca R, L, C ve DC kaynaklı devrelere bakılır; yoksa None.
+    """
+    allowed = (ElementType.RESISTOR, ElementType.CAPACITOR, ElementType.INDUCTOR,
+               ElementType.DC_SOURCE, ElementType.CURRENT_DC)
+    if not parsed.elements or any(e.element_type not in allowed for e in parsed.elements):
+        return None
+
+    def components(links):
+        parent: Dict[str, str] = {}
+
+        def find(n):
+            parent.setdefault(n, n)
+            while parent[n] != n:
+                parent[n] = parent[parent[n]]
+                n = parent[n]
+            return n
+
+        for a, b in links:
+            parent[find(a)] = find(b)
+        return find
+
+    def ends(*kinds):
+        return [e for e in parsed.elements if e.element_type in kinds]
+
+    # Kondansatör açık, bobin kısa devre: akım kaynağının net akımı dönemeyen parça var mı?
+    find = components((e.node_positive, e.node_negative) for e in ends(
+        ElementType.RESISTOR, ElementType.INDUCTOR, ElementType.DC_SOURCE))
+    net: Dict[str, float] = {}
+    for src in ends(ElementType.CURRENT_DC):
+        net[find(src.node_negative)] = net.get(find(src.node_negative), 0.0) + src.value
+        net[find(src.node_positive)] = net.get(find(src.node_positive), 0.0) - src.value
+    for part, current in net.items():
+        caps = [c for c in ends(ElementType.CAPACITOR)
+                if (find(c.node_positive) == part) != (find(c.node_negative) == part)]
+        if abs(current) <= 1e-15 or not caps:
+            continue
+        sources = ", ".join(s.id for s in ends(ElementType.CURRENT_DC))
+        rate = ""
+        if len(caps) == 1:
+            rate = (f" Hızı: dV/dt = I / C = {eng(abs(current), 'A')} / {eng(caps[0].value, 'F')} = "
+                    f"{eng(abs(current) / caps[0].value, 'V')}/s.")
+        return ("Bu devrenin DC kararlı hâli yok. DC'de kondansatör açık devre sayılır; "
+                f"{sources} akım kaynağının akımı ise dönecek başka yol bulamıyor. Bu yüzden "
+                f"{', '.join(c.id for c in caps)} sürekli dolar ve gerilimi sınırsız büyür.{rate}\n\n"
+                "Ne yapabilirsiniz:\n"
+                "• Kondansatöre paralel bir direnç ekleyin; akım o yoldan döner ve devre çözülür.\n"
+                "• Akım kaynağı yerine gerilim kaynağı kullanın.\n"
+                "• Kaynağı AC yapın; AC'de kondansatörden akım geçer.")
+
+    # Gerilim kaynağının iki ucu yalnızca bobinlerle bağlı mı?
+    for v in ends(ElementType.DC_SOURCE):
+        others = [e for e in ends(ElementType.DC_SOURCE) if e is not v]
+        coils = ends(ElementType.INDUCTOR)
+        with_coils = components([(v.node_positive, v.node_positive)]
+                                + [(e.node_positive, e.node_negative) for e in others + coils])
+        direct = components([(v.node_positive, v.node_positive)]
+                            + [(e.node_positive, e.node_negative) for e in others])
+        if (abs(v.value) <= 1e-15 or with_coils(v.node_positive) != with_coils(v.node_negative)
+                or direct(v.node_positive) == direct(v.node_negative)):
+            continue
+        rate = ""
+        if len(coils) == 1:
+            rate = (f" Hızı: dI/dt = V / L = {eng(abs(v.value), 'V')} / {eng(coils[0].value, 'H')} = "
+                    f"{eng(abs(v.value) / coils[0].value, 'A')}/s.")
+        return ("Bu devrenin DC kararlı hâli yok. DC'de bobin kısa devre sayılır; "
+                f"{v.id} gerilim kaynağı arada direnç olmadan yalnızca bobine bağlı. Bu yüzden "
+                f"akım sürekli artar ve sınırsız büyür.{rate}\n\n"
+                "Ne yapabilirsiniz:\n"
+                "• Bobine seri bir direnç ekleyin; gerçek bobinlerin de iç direnci vardır.\n"
+                "• Kaynağı AC yapın; AC'de bobinin reaktansı akımı sınırlar.")
+    return None
+
+
 def _unsolvable_reason(cct, parsed: ParsedCircuit, is_dc: bool,
                        frequency: Optional[float]) -> Optional[str]:
     """
     Devre denklemleri tekilse (tek bir çözüm yoksa) öğrenciye Türkçe açıklama döndürür,
     çözülebiliyorsa None. lcapy tekil sistemde "MNA A matrix is not invertible" verir.
     """
+    if is_dc:
+        reason = _dc_no_steady_state_reason(parsed)
+        if reason:
+            return reason
     nodes = sorted({n for e in parsed.elements
                     for n in element_nodes(e)} - {"0"})
     if not nodes:
