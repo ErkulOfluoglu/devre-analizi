@@ -46,8 +46,10 @@ namespace CircuitAnalyzer.WPF
             LblCardVoltage.Visibility = TxtCardVoltage.Visibility = readout.Voltage != null ? Visibility.Visible : Visibility.Collapsed;
             TxtCardPower.Text = readout.Power ?? "";
             LblCardPower.Visibility = TxtCardPower.Visibility = readout.Power != null ? Visibility.Visible : Visibility.Collapsed;
-            TxtCardBalance.Text = readout.NodeBalance ?? "";
-            CardBalanceRow.Visibility = readout.NodeBalance != null ? Visibility.Visible : Visibility.Collapsed;
+            // Alt satır: DC'de düğümdeki akım dengesi, AC'de salınımın ne anlattığı
+            string? footer = readout.NodeBalance ?? readout.Note;
+            TxtCardBalance.Text = footer ?? "";
+            CardBalanceRow.Visibility = footer != null ? Visibility.Visible : Visibility.Collapsed;
             SubscriptText.Apply(TxtCardBalance);
 
             ElementCardTarget = selected;

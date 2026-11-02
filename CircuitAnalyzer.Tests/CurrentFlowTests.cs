@@ -150,5 +150,44 @@ namespace CircuitAnalyzer.Tests
             Assert.Contains(w3, ofR3);       // R3'e giden 1 A
             Assert.DoesNotContain(w2, ofR3);
         }
+
+        private static ElementCurrentDto Ac(double re, double im, string direction) =>
+            new() { Value = new ResultValue { Real = re, Imaginary = im, IsComplex = true }, Unit = "A", Direction = direction };
+
+        [Fact]
+        public void Ac_JunctionAddsPhasors_NotMagnitudes()
+        {
+            // AC kaynaktan paralel R (1∠0° A) ve C (1∠90° A): ortak telde √2 A geçer, 2 A değil
+            var v = new AcVoltageSource { Id = "VAC1", Position = new Point(0, 0) };
+            var r1 = new Resistor { Id = "R1", Position = new Point(100, 0) };
+            var c1 = new Capacitor { Id = "C1", Position = new Point(100, 100) };
+            var trunk = new Wire(v.Pins[0], r1.Pins[0]);
+            var toC = new Wire(r1.Pins[0], c1.Pins[0]);
+            var back1 = new Wire(r1.Pins[1], c1.Pins[1]);
+            var back2 = new Wire(c1.Pins[1], v.Pins[1]);
+            var map = new Dictionary<Pin, int>
+            {
+                [v.Pins[0]] = 1, [r1.Pins[0]] = 1, [c1.Pins[0]] = 1,
+                [r1.Pins[1]] = 0, [c1.Pins[1]] = 0, [v.Pins[1]] = 0,
+            };
+            var currents = new Dictionary<string, ElementCurrentDto>
+            {
+                // Gerilim kaynağının fazörü pasif yönde (+ uca giren) gelir; gösterimde ters çevrilir
+                ["VAC1"] = Ac(-1, -1, "1→0"),
+                ["R1"] = Ac(1, 0, "1→0"),
+                ["C1"] = Ac(0, 1, "1→0"),
+            };
+
+            var flows = CurrentFlow.Compute(new CircuitElement[] { v, r1, c1 },
+                new[] { trunk, toC, back1, back2 }, map, currents);
+
+            Assert.Equal(Math.Sqrt(2), flows.Single(f => f.Wire == trunk).Amps, 6);
+            var c = flows.Single(f => f.Wire == toC);
+            Assert.Equal(1.0, c.Amps, 6);
+            // R1'in ucundan C1'e giden akım C1'in fazörüdür: 0 + 1j
+            Assert.Equal(0.0, c.Phasor.Real, 6);
+            Assert.Equal(1.0, c.Phasor.Imaginary, 6);
+            Assert.Equal(Math.Sqrt(2), flows.Single(f => f.Wire == back2).Amps, 6);
+        }
     }
 }

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -17,6 +19,10 @@ namespace CircuitAnalyzer.WPF.Views
     /// Darbeler kol boyunca kesintisizdir: her telin deseni kolun başından ölçülen uzaklıkla başlar.
     /// Hız akımla artar (karekökle), elektronun gerçek hızı değildir. Windows'ta animasyonlar
     /// kapalıysa ışık akmaz, sabit çizgi olur.
+    ///
+    /// AC'de akım sürekli yön değiştirir: ışık kol boyunca ileri geri salınır (yavaşlatılmış,
+    /// bir salınım 2 sn). Salınım genişliği akımın büyüklüğünü, zamanlaması fazını gösterir;
+    /// bütün AC kolları aynı saate bağlıdır, iki elemanı sırayla seçen faz farkını görür.
     /// </summary>
     public sealed class CurrentFlowLayer
     {
@@ -29,6 +35,13 @@ namespace CircuitAnalyzer.WPF.Views
         private const double MinSpeed = 10;
         private const double MaxSpeed = 28;
         private const double DimmedWireOpacity = 0.55;
+        // AC: yavaşlatılmış salınım (Hz) ve tuval biriminde salınım genliği
+        private const double AcSlowFrequency = 0.5;
+        private const double AcMinAmplitude = 12;
+        private const double AcMaxAmplitude = 34;
+
+        // Bütün AC kollarının ortak saati: faz farkları seçimler arasında korunur
+        private static readonly Stopwatch AcClock = Stopwatch.StartNew();
 
         private readonly Canvas _canvas;
         private readonly List<Polyline> _lines = new();
@@ -40,6 +53,11 @@ namespace CircuitAnalyzer.WPF.Views
         private IReadOnlyDictionary<Pin, int> _nodeMap = new Dictionary<Pin, int>();
         private IReadOnlyDictionary<string, ElementCurrentDto> _currents = new Dictionary<string, ElementCurrentDto>();
         private double _maxAmps;
+        private bool _isAc;
+        private readonly List<(Polyline Line, double ArcStart, double Thickness)> _acLines = new();
+        private double _acAmplitude;
+        private double _acPhase;
+        private bool _acTicking;
 
         public CurrentFlowLayer(Canvas canvas)
         {
@@ -57,9 +75,11 @@ namespace CircuitAnalyzer.WPF.Views
             IEnumerable<CircuitElement> elements,
             IEnumerable<Wire> wires,
             NetlistResult netlist,
-            IReadOnlyDictionary<string, ElementCurrentDto> currents)
+            IReadOnlyDictionary<string, ElementCurrentDto> currents,
+            bool isAc = false)
         {
             Clear();
+            _isAc = isAc;
             _elements = elements.ToList();
             _wires = wires.ToList();
             _nodeMap = netlist.NodeMap;
@@ -81,19 +101,30 @@ namespace CircuitAnalyzer.WPF.Views
         {
             ClearLines();
             if (selected == null || _flows.Count == 0
-                || !CurrentFlow.TryBranch(selected, _nodeMap, _currents, out var from, out var to, out double amps) || amps <= 0)
+                || !CurrentFlow.TryPhasor(selected, _nodeMap, _currents, out var from, out var to, out Complex reference)
+                || reference.Magnitude <= 0)
                 return;
+            double amps = reference.Magnitude;
 
             var branch = CurrentFlow.BranchWires(selected, _elements, _flows, _nodeMap, _currents);
             if (branch.Count == 0)
                 return;
 
             var flowOf = _flows.Where(f => branch.Contains(f.Wire)).ToDictionary(f => f.Wire);
+            if (_isAc)
+            {
+                // AC'de "ileri", seçili elemanın fazörüyle aynı yön: kolun bütün telleri aynı fazda salınır
+                flowOf = flowOf.ToDictionary(
+                    kv => kv.Key,
+                    kv => kv.Value with { Forward = (kv.Value.Phasor * Complex.Conjugate(reference)).Real >= 0 });
+            }
             var start = ArcStarts(selected, from, to, flowOf);
 
             double ratio = Math.Sqrt(amps / _maxAmps);
             var duration = TimeSpan.FromSeconds(Period / (MinSpeed + (MaxSpeed - MinSpeed) * ratio));
             bool animate = SystemParameters.ClientAreaAnimation;
+            _acAmplitude = AcMinAmplitude + (AcMaxAmplitude - AcMinAmplitude) * ratio;
+            _acPhase = reference.Phase;
 
             foreach (var (wire, flow) in flowOf)
             {
@@ -105,6 +136,12 @@ namespace CircuitAnalyzer.WPF.Views
                 _canvas.Children.Add(Pulse(points, CoreThickness, 0.6 + 0.4 * ratio, s0, duration, animate));
             }
             LitWires = flowOf.Keys.ToList();
+            if (_acLines.Count > 0 && !_acTicking)
+            {
+                CompositionTarget.Rendering += OnAcFrame;
+                _acTicking = true;
+                OnAcFrame(this, EventArgs.Empty);
+            }
 
             foreach (var wire in _wires)
             {
@@ -117,6 +154,12 @@ namespace CircuitAnalyzer.WPF.Views
 
         private void ClearLines()
         {
+            if (_acTicking)
+            {
+                CompositionTarget.Rendering -= OnAcFrame;
+                _acTicking = false;
+            }
+            _acLines.Clear();
             foreach (var line in _lines)
                 _canvas.Children.Remove(line);
             _lines.Clear();
@@ -214,10 +257,29 @@ namespace CircuitAnalyzer.WPF.Views
             line.StrokeDashCap = PenLineCap.Round;
             line.StrokeDashArray = new DoubleCollection { DashLength / thickness, (Period - DashLength) / thickness };
             double offset = arcStart / thickness;
+            if (_isAc)
+            {
+                // AC: her karede salınımın yerine göre kaydırılır (OnAcFrame)
+                line.StrokeDashOffset = offset;
+                _acLines.Add((line, arcStart, thickness));
+                return line;
+            }
             var animation = new DoubleAnimation(offset, offset - Period / thickness, duration) { RepeatBehavior = RepeatBehavior.Forever };
             animation.Freeze();
             line.BeginAnimation(Shape.StrokeDashOffsetProperty, animation);
             return line;
+        }
+
+        /// <summary>
+        /// AC salınımı: i = |I|·cos(ωt + φ) ise yük yer değiştirmesi sin(ωt + φ) ile orantılıdır;
+        /// desen bu kadar ileri geri kaydırılır.
+        /// </summary>
+        private void OnAcFrame(object? sender, EventArgs e)
+        {
+            double t = AcClock.Elapsed.TotalSeconds;
+            double shift = _acAmplitude * Math.Sin(2 * Math.PI * AcSlowFrequency * t + _acPhase);
+            foreach (var (line, arcStart, thickness) in _acLines)
+                line.StrokeDashOffset = (arcStart - shift) / thickness;
         }
     }
 }

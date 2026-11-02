@@ -162,7 +162,7 @@ Akım ışığı teldeki gerçek akımı gösterir; süs değildir.
 - **Süreklilik:** darbeler kol boyunca kopmadan akar; her telin deseni, seçili elemanın giriş ucundan kol boyunca ölçülen uzaklıkla başlar. Aynı akımı taşıyan seri elemanların içinden geçilir, akımın bölündüğü düğümde kol biter.
 - **Eleman kartı:** ışıkla birlikte, elemanın sağında (sığmazsa solunda) cam bir kart açılır: ad ve değer, akım, yön ("Düğüm 2 → 3"), uçlardaki gerilim, güç (kaynakta "verir") ve DC'de akımın girdiği düğümdeki denge ("Düğüm 2: giren … = çıkan …"). Kart fareyi engellemez, kaydırma ve yakınlaştırmada elemanı izler. AC çözümde kart açılır ama denge satırı yoktur (fazörlerin genlikleri toplanmaz).
 - **Alıştırma modu:** sonuçlar gizli olduğundan ışık da kart da görünmez.
-- **AC devreler:** sonraki adım. Işık yavaşlatılmış gösterilir ve faz farkı görünür.
+- **AC devreler:** akım sürekli yön değiştirdiği için ışık akmaz, kol boyunca ileri geri salınır. Salınım yavaşlatılmıştır (bir salınım 2 sn; 50 Hz'lik akım 100 kat yavaş). Genişliği akımın büyüklüğüyle artar, zamanlaması akımın fazıdır: yer değiştirme sin(ωt + φ) ile gider, yani akım cos(ωt + φ). Bütün AC kolları aynı saati kullanır; iki elemanı sırayla seçen, örneğin kondansatör akımının önde gittiğini görür. Teldeki akımlar fazör olarak toplanır (90° farklı iki 1 A'lik akım ortak telde √2 A eder). Kartta akım ve gerilim açısıyla yazar, alt satırda salınımın ne anlattığı açıklanır.
 - **Hareket azaltma:** Windows'ta animasyonlar kapalıysa ışık akmaz, sabit parlak çizgi olarak görünür.
 
 ## Bileşenler

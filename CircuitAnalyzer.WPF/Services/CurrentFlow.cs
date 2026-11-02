@@ -2,16 +2,21 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Numerics;
 using CircuitAnalyzer.WPF.Models;
 
 namespace CircuitAnalyzer.WPF.Services
 {
-    /// <summary>Bir teldeki akım: Forward ise StartPin → EndPin yönünde.</summary>
-    public sealed record WireFlow(Wire Wire, bool Forward, double Amps);
+    /// <summary>
+    /// Bir teldeki akım: Forward ise StartPin → EndPin yönünde, Amps büyüklüğü.
+    /// Phasor, StartPin → EndPin yönündeki akımdır (DC'de sanal kısmı sıfır, AC'de fazör).
+    /// </summary>
+    public sealed record WireFlow(Wire Wire, bool Forward, double Amps, Complex Phasor = default);
 
     /// <summary>
     /// Elemanların akımlarından her telin akımını KCL ile bulur. Bir düğümün telleri ağaç
-    /// oluşturur: yapraktan köke doğru toplanan akım teli geçen akımdır. Tek çözümü olmayan
+    /// oluşturur: yapraktan köke doğru toplanan akım teli geçen akımdır. AC'de akımlar fazör
+    /// olarak (karmaşık sayı) toplanır; genlikleri düz toplamak yanlış olurdu. Tek çözümü olmayan
     /// (halka oluşturan) ya da akımı bilinmeyen elemana bağlı düğümdeki tellere akım atanmaz.
     /// </summary>
     public static class CurrentFlow
@@ -22,7 +27,7 @@ namespace CircuitAnalyzer.WPF.Services
             IReadOnlyDictionary<Pin, int> nodeMap,
             IReadOnlyDictionary<string, ElementCurrentDto> currents)
         {
-            var injected = new Dictionary<Pin, double>();
+            var injected = new Dictionary<Pin, Complex>();
             var blockedNodes = new HashSet<int>();
             var ground = new HashSet<Pin>();
 
@@ -36,7 +41,7 @@ namespace CircuitAnalyzer.WPF.Services
                 if (element is TestProbe or JunctionElement)
                     continue;
 
-                if (!TryBranch(element, nodeMap, currents, out var from, out var to, out double amps))
+                if (!TryPhasor(element, nodeMap, currents, out var from, out var to, out Complex amps))
                 {
                     foreach (var pin in element.Pins)
                         if (nodeMap.TryGetValue(pin, out int node)) blockedNodes.Add(node);
@@ -76,10 +81,14 @@ namespace CircuitAnalyzer.WPF.Services
                     var pin = order[i];
                     var wire = parentWire[pin];
                     var parent = wire.StartPin == pin ? wire.EndPin : wire.StartPin;
-                    double current = sum[pin];
+                    Complex current = sum[pin]; // pin'den ebeveyne doğru
                     sum[parent] += current;
-                    if (Math.Abs(current) > 1e-12)
-                        flows.Add(new WireFlow(wire, (wire.StartPin == pin) == (current > 0), Math.Abs(current)));
+                    if (current.Magnitude > 1e-12)
+                    {
+                        Complex alongWire = wire.StartPin == pin ? current : -current;
+                        bool forward = alongWire.Real > 0 || (alongWire.Real == 0 && alongWire.Imaginary > 0);
+                        flows.Add(new WireFlow(wire, forward, current.Magnitude, alongWire));
+                    }
                 }
             }
 
@@ -94,8 +103,20 @@ namespace CircuitAnalyzer.WPF.Services
             IReadOnlyDictionary<string, ElementCurrentDto> currents,
             out Pin from, out Pin to, out double amps)
         {
+            bool ok = TryPhasor(element, nodeMap, currents, out from, out to, out Complex phasor);
+            amps = ok ? phasor.Magnitude : 0;
+            return ok;
+        }
+
+        /// <summary>İki uçlu elemanın akımı fazör olarak (fromPin → toPin yönünde); DC'de pozitif gerçel.</summary>
+        public static bool TryPhasor(
+            CircuitElement element,
+            IReadOnlyDictionary<Pin, int> nodeMap,
+            IReadOnlyDictionary<string, ElementCurrentDto> currents,
+            out Pin from, out Pin to, out Complex phasor)
+        {
             from = to = null!;
-            amps = 0;
+            phasor = Complex.Zero;
             if (element.Pins.Count != 2 || !currents.TryGetValue(element.Id, out var dto))
                 return false;
 
@@ -114,7 +135,7 @@ namespace CircuitAnalyzer.WPF.Services
 
             from = fromPin;
             to = toPin;
-            amps = value.IsComplex ? Math.Sqrt(value.Real * value.Real + value.Imaginary * value.Imaginary) : Math.Abs(value.Real);
+            phasor = value.IsComplex ? new Complex(value.Real, value.Imaginary) : new Complex(Math.Abs(value.Real), 0);
             return true;
         }
 

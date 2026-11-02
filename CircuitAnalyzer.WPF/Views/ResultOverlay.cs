@@ -45,7 +45,7 @@ namespace CircuitAnalyzer.WPF.Views
         public AnalysisResponseDto? Response => _lastResponse;
         public NetlistResult? Netlist => _lastNetlist;
 
-        /// <summary>Akım ışığı: seçili elemanın kolu yanar (null: söner). Yalnız DC çözümde.</summary>
+        /// <summary>Akım ışığı: seçili elemanın kolu yanar (null: söner). DC ve AC (fazör) çözümde.</summary>
         public void HighlightBranch(CircuitElement? selected)
         {
             _selected = selected;
@@ -115,10 +115,12 @@ namespace CircuitAnalyzer.WPF.Views
 
             var results = response.Results;
 
-            // Akım ışığı yalnız DC'de (AC'de akım yönü sürekli döner; ayrı adım). Etiketlerin altında kalsın diye önce
-            if (string.Equals(response.Mode, AnalysisModes.Dc, StringComparison.OrdinalIgnoreCase))
+            // Akım ışığı: DC'de akar, AC'de yavaşlatılmış salınır. Etiketlerin altında kalsın diye önce
+            bool isDc = string.Equals(response.Mode, AnalysisModes.Dc, StringComparison.OrdinalIgnoreCase);
+            bool isAc = string.Equals(response.Mode, AnalysisModes.AcPhasor, StringComparison.OrdinalIgnoreCase);
+            if (isDc || isAc)
             {
-                _flow.Prepare(elements, wires, netlist, results.ElementCurrents);
+                _flow.Prepare(elements, wires, netlist, results.ElementCurrents, isAc);
                 _flow.Show(_selected != null && elements.Contains(_selected) ? _selected : null);
             }
             else

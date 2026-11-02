@@ -278,6 +278,8 @@ namespace CircuitAnalyzer.WPF
                     SelectElement(selectedEl, selectedVisual);
                 }
                 summary.AppendLine($"Işık çizgisi: {_overlay?.Flow.LineCount} · kart: {ElementCardTarget?.Id ?? "yok"}");
+                foreach (var litWire in _overlay?.Flow.LitWires ?? Array.Empty<Wire>())
+                    summary.AppendLine($"  yanan tel: {litWire.StartPin.Owner?.Id}.{litWire.StartPin.Owner?.Pins.IndexOf(litWire.StartPin)} → {litWire.EndPin.Owner?.Id}.{litWire.EndPin.Owner?.Pins.IndexOf(litWire.EndPin)}");
                 if (cmd.Contains("--fps", StringComparer.OrdinalIgnoreCase))
                 {
                     int frames = 0;

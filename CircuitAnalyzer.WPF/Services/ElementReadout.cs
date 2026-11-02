@@ -16,7 +16,8 @@ namespace CircuitAnalyzer.WPF.Services
         string Direction,
         string? Voltage,
         string? Power,
-        string? NodeBalance);
+        string? NodeBalance,
+        string? Note = null);
 
     public static class ElementReadoutBuilder
     {
@@ -60,7 +61,8 @@ namespace CircuitAnalyzer.WPF.Services
                 $"Düğüm {a} → {b}",
                 voltage,
                 power,
-                balance);
+                balance,
+                isDc ? null : "AC: akım yön değiştirir; ışık bu salınımı yavaşlatarak gösterir. Faz, akımın ∠ açısıdır.");
         }
 
         /// <summary>"Düğüm 2: giren 33,15 mA (R1) = çıkan 26,32 mA (R3) + 6,832 mA (R5)"; eksik akım varsa null.</summary>
