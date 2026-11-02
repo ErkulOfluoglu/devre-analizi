@@ -45,6 +45,9 @@ namespace CircuitAnalyzer.WPF
             _overlay.Changed += (_, _) => UpdateCurrentFlowAndCard();
             CanvasScrollViewer.ScrollChanged += (_, _) => PositionElementCard();
             CanvasLayer.SizeChanged += (_, _) => PositionElementCard();
+            // Pencere içi diyalog, Hakkında, Tanıtım ya da büyük grafik açıkken akım ışığı duraklar
+            foreach (var layer in new FrameworkElement[] { DialogOverlay, AboutOverlay, OnboardingOverlay, PlotOverlay })
+                layer.IsVisibleChanged += (_, _) => { if (_overlay != null) _overlay.Flow.Paused = IsModalOverlayOpen; };
             AnalysisPanel.SolveRequested += async (_, _) => await SolveAsync();
             AnalysisPanel.ValueDisplayChanged += async (_, _) =>
             {

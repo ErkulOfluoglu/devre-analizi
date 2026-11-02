@@ -80,6 +80,8 @@ namespace CircuitAnalyzer.WPF.Views
         private IReadOnlyDictionary<string, ElementCurrentDto> _currents = new Dictionary<string, ElementCurrentDto>();
         private bool _isAc;
         private bool _ticking;
+        private bool _acAnimate;
+        private bool _paused;
 
         public CurrentFlowLayer(Canvas canvas)
         {
@@ -140,7 +142,39 @@ namespace CircuitAnalyzer.WPF.Views
             }
 
             ApplyFactors(null);
-            if (_isAc && animate && _lights.Count > 0)
+            _acAnimate = _isAc && animate;
+            ApplyPause();
+        }
+
+        /// <summary>
+        /// Duraklatılmış: ışık gizlenir ve AC kare döngüsü durur. Pencere içi bir diyalog açıkken
+        /// kullanılır; ışık karartmanın arkasında kalır, her karede yeniden çizilen ışık ve onu
+        /// kopyalayan cam diyaloğun açılışını takıltıyordu.
+        /// </summary>
+        public bool Paused
+        {
+            get => _paused;
+            set
+            {
+                if (_paused == value)
+                    return;
+                _paused = value;
+                ApplyPause();
+            }
+        }
+
+        private void ApplyPause()
+        {
+            foreach (var light in _lights)
+                foreach (var layer in light.Layers)
+                    layer.Line.Visibility = _paused || (layer.IsGlow && !light.Glow) ? Visibility.Collapsed : Visibility.Visible;
+
+            if (_paused && _ticking)
+            {
+                CompositionTarget.Rendering -= OnAcFrame;
+                _ticking = false;
+            }
+            else if (!_paused && !_ticking && _acAnimate && _lights.Count > 0)
             {
                 CompositionTarget.Rendering += OnAcFrame;
                 _ticking = true;
@@ -160,6 +194,7 @@ namespace CircuitAnalyzer.WPF.Views
                 foreach (var layer in light.Layers)
                     _canvas.Children.Remove(layer.Line);
             _lights.Clear();
+            _acAnimate = false;
             RestoreWires();
             _flows = new List<WireFlow>();
             LitWires = Array.Empty<Wire>();
@@ -195,7 +230,7 @@ namespace CircuitAnalyzer.WPF.Views
                 light.Glow = branch != null && branch.Contains(light.Wire);
                 foreach (var layer in light.Layers)
                 {
-                    if (layer.IsGlow)
+                    if (layer.IsGlow && !_paused)
                         layer.Line.Visibility = light.Glow ? Visibility.Visible : Visibility.Collapsed;
                     if (!_ticking)
                         layer.Line.Opacity = layer.BaseOpacity * light.Factor;

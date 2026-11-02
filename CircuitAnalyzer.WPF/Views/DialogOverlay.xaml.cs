@@ -69,8 +69,13 @@ namespace CircuitAnalyzer.WPF.Views
 
             var duration = TimeSpan.FromMilliseconds(180);
             var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+            // Açılış süresince kart gölgesiyle birlikte tek bir görüntü olarak önbelleklenir:
+            // gölge ve yazı her karede yeniden çizilmez; animasyon bitince keskin çizime döner
+            CardBorder.CacheMode = new BitmapCache { RenderAtScale = 1 };
+            var grow = new DoubleAnimation(0.97, 1.0, duration) { EasingFunction = ease };
+            grow.Completed += (_, _) => CardBorder.CacheMode = null;
             BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
-            CardScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.97, 1.0, duration) { EasingFunction = ease });
+            CardScale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
             CardScale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.97, 1.0, duration) { EasingFunction = ease });
         }
 
