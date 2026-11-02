@@ -41,6 +41,10 @@ namespace CircuitAnalyzer.WPF
         private void InitializeAnalysis()
         {
             _overlay = new ResultOverlay(CircuitCanvas);
+            // Çözüm gösterilince, silinince ya da devre değişince ışık ve cam kart güncellenir
+            _overlay.Changed += (_, _) => UpdateCurrentFlowAndCard();
+            CanvasScrollViewer.ScrollChanged += (_, _) => PositionElementCard();
+            CanvasLayer.SizeChanged += (_, _) => PositionElementCard();
             AnalysisPanel.SolveRequested += async (_, _) => await SolveAsync();
             AnalysisPanel.ValueDisplayChanged += async (_, _) =>
             {

@@ -23,6 +23,8 @@ namespace CircuitAnalyzer.WPF.Views
     {
         private readonly Canvas _canvas;
         private readonly List<UIElement> _items = new();
+        private readonly CurrentFlowLayer _flow;
+        private CircuitElement? _selected;
 
         private NetlistResult? _lastNetlist;
         private IEnumerable<CircuitElement>? _lastElements;
@@ -32,11 +34,29 @@ namespace CircuitAnalyzer.WPF.Views
         public ResultOverlay(Canvas canvas)
         {
             _canvas = canvas;
+            _flow = new CurrentFlowLayer(canvas);
             ThemeManager.ThemeChanged += (_, _) => Refresh();
         }
 
+        /// <summary>Sonuçlar gösterildi, silindi ya da yenilendi (cam kart buna göre güncellenir).</summary>
+        public event EventHandler? Changed;
+
+        /// <summary>Gösterilen çözüm (yoksa null) ve ona ait düğüm haritası.</summary>
+        public AnalysisResponseDto? Response => _lastResponse;
+        public NetlistResult? Netlist => _lastNetlist;
+
+        /// <summary>Akım ışığı: seçili elemanın kolu yanar (null: söner). Yalnız DC çözümde.</summary>
+        public void HighlightBranch(CircuitElement? selected)
+        {
+            _selected = selected;
+            _flow.Show(selected);
+        }
+
+        public CurrentFlowLayer Flow => _flow;
+
         public void Clear()
         {
+            _flow.Clear();
             foreach (var item in _items)
                 _canvas.Children.Remove(item);
             _items.Clear();
@@ -44,6 +64,7 @@ namespace CircuitAnalyzer.WPF.Views
             _lastElements = null;
             _lastWires = null;
             _lastResponse = null;
+            Changed?.Invoke(this, EventArgs.Empty);
         }
 
         private void Refresh()
@@ -61,6 +82,7 @@ namespace CircuitAnalyzer.WPF.Views
         /// <summary>Sadece düğüm numaralarını gösterir (çözüm öncesi).</summary>
         public void ShowNodeNumbers(NetlistResult netlist, IEnumerable<Wire> wires)
         {
+            _flow.Clear();
             foreach (var item in _items)
                 _canvas.Children.Remove(item);
             _items.Clear();
@@ -72,6 +94,7 @@ namespace CircuitAnalyzer.WPF.Views
 
             foreach (var (node, anchor) in NodeAnchors(netlist, wires))
                 AddNodeBadge(anchor, node, null);
+            Changed?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Düğüm gerilimleri, eleman akımları ve prob değerlerini gösterir.</summary>
@@ -91,6 +114,17 @@ namespace CircuitAnalyzer.WPF.Views
             _lastResponse = response;
 
             var results = response.Results;
+
+            // Akım ışığı yalnız DC'de (AC'de akım yönü sürekli döner; ayrı adım). Etiketlerin altında kalsın diye önce
+            if (string.Equals(response.Mode, AnalysisModes.Dc, StringComparison.OrdinalIgnoreCase))
+            {
+                _flow.Prepare(elements, wires, netlist, results.ElementCurrents);
+                _flow.Show(_selected != null && elements.Contains(_selected) ? _selected : null);
+            }
+            else
+            {
+                _flow.Clear();
+            }
 
             foreach (var (node, anchor) in NodeAnchors(netlist, wires))
             {
@@ -183,6 +217,7 @@ namespace CircuitAnalyzer.WPF.Views
                     AddLabel(BelowOrRight(element), $"{value} ({direction})", "Brush.Overlay.Current", bold: false);
                 }
             }
+            Changed?.Invoke(this, EventArgs.Empty);
         }
 
         // ═══════════════════════════════════════════════════════

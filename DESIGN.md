@@ -159,7 +159,9 @@ Akım ışığı teldeki gerçek akımı gösterir; süs değildir.
 - **Yön:** akımın gerçek yönünde. Birden çok kaynak varsa uydurma tek bir yol çizilmez; her telin akımı çözümden gelir.
 - **Hız:** akımın büyüklüğüyle artar ama sakindir. Bir çizgi parçasının 48 px yol alması, en büyük akımda yaklaşık 1,7 sn, küçük akımlarda 3 sn sürer (hız oranı akım oranının karekökü). Bütün teller aynı düzende akar; her tel kendi rastgele desenini çizmez.
 - **Görünüş:** 3 px'lik parlak çizgi ve altında 10 px'lik soluk hale; 14 px çizgi, 34 px boşluk.
-- **Eleman kartı:** ışıkla birlikte açılır. İçinde ad, değer, akım, gerilim, güç ve o düğümdeki akım dengesi (KCL) yazar.
+- **Süreklilik:** darbeler kol boyunca kopmadan akar; her telin deseni, seçili elemanın giriş ucundan kol boyunca ölçülen uzaklıkla başlar. Aynı akımı taşıyan seri elemanların içinden geçilir, akımın bölündüğü düğümde kol biter.
+- **Eleman kartı:** ışıkla birlikte, elemanın sağında (sığmazsa solunda) cam bir kart açılır: ad ve değer, akım, yön ("Düğüm 2 → 3"), uçlardaki gerilim, güç (kaynakta "verir") ve DC'de akımın girdiği düğümdeki denge ("Düğüm 2: giren … = çıkan …"). Kart fareyi engellemez, kaydırma ve yakınlaştırmada elemanı izler. AC çözümde kart açılır ama denge satırı yoktur (fazörlerin genlikleri toplanmaz).
+- **Alıştırma modu:** sonuçlar gizli olduğundan ışık da kart da görünmez.
 - **AC devreler:** sonraki adım. Işık yavaşlatılmış gösterilir ve faz farkı görünür.
 - **Hareket azaltma:** Windows'ta animasyonlar kapalıysa ışık akmaz, sabit parlak çizgi olarak görünür.
 

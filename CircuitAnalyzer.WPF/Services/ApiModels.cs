@@ -639,6 +639,13 @@ namespace CircuitAnalyzer.WPF.Services
     {
         public static (string Value, string Direction) Format(string elementId, ElementCurrentDto current)
         {
+            var (value, direction) = Normalize(elementId, current);
+            return (EngFormat.Format(value, current.Unit), direction);
+        }
+
+        /// <summary>Akımı, yönü gerçekte aktığı tarafa çevrilmiş olarak verir.</summary>
+        public static (ResultValue Value, string Direction) Normalize(string elementId, ElementCurrentDto current)
+        {
             var value = current.Value;
             string direction = current.Direction;
             string[] ends = direction.Split('→');
@@ -656,7 +663,7 @@ namespace CircuitAnalyzer.WPF.Services
                     ? new ResultValue { Real = -value.Real, Imaginary = -value.Imaginary, IsComplex = true }
                     : ResultValue.FromReal(-value.Real);
             }
-            return (EngFormat.Format(value, current.Unit), direction);
+            return (value, direction);
         }
     }
 

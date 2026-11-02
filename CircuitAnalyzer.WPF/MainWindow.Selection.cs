@@ -268,6 +268,8 @@ namespace CircuitAnalyzer.WPF
                 ? vis
                 : null;
 
+            UpdateCurrentFlowAndCard();
+
             double pad = 4;
             foreach (var element in _selection.Elements)
             {

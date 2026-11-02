@@ -269,6 +269,25 @@ namespace CircuitAnalyzer.WPF
                     SetZoom(zoomVal / 100.0);
                 }
 
+                // Akım ışığı: --select R5 elemanı seçer (kolu yanar, cam kart açılır), --fps kare hızını yazar
+                int sel = Array.FindIndex(cmd, a => string.Equals(a, "--select", StringComparison.OrdinalIgnoreCase));
+                if (sel >= 0 && sel + 1 < cmd.Length
+                    && _elements.FirstOrDefault(el => el.Id == cmd[sel + 1]) is { } selectedEl
+                    && _elementToVisual.TryGetValue(selectedEl, out var selectedVisual))
+                {
+                    SelectElement(selectedEl, selectedVisual);
+                }
+                summary.AppendLine($"Işık çizgisi: {_overlay?.Flow.LineCount} · kart: {ElementCardTarget?.Id ?? "yok"}");
+                if (cmd.Contains("--fps", StringComparer.OrdinalIgnoreCase))
+                {
+                    int frames = 0;
+                    EventHandler onFrame = (_, _) => frames++;
+                    System.Windows.Media.CompositionTarget.Rendering += onFrame;
+                    await Task.Delay(3000);
+                    System.Windows.Media.CompositionTarget.Rendering -= onFrame;
+                    summary.AppendLine($"Kare/sn: {frames / 3.0:0.0}");
+                }
+
                 // Düzenin ve etiketlerin çizilmesini bekle
                 await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
                 UpdateLayout();

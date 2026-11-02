@@ -202,7 +202,7 @@
                     CornerRadius="8"
                     Padding="0"
                     ClipToBounds="True">
-                <Grid>
+                <Grid x:Name="CanvasLayer">
                     <ScrollViewer x:Name="CanvasScrollViewer"
                                   HorizontalScrollBarVisibility="Auto"
                                   VerticalScrollBarVisibility="Auto"
@@ -471,6 +471,59 @@
                                 </StackPanel>
                             </Button>
                         </StackPanel>
+                        </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Seçili elemanın cam kartı: akım, gerilim, güç, düğümdeki akım dengesi (DESIGN.md, "Akım ışığı") -->
+                    <Border x:Name="ElementCard"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Width="248"
+                            CornerRadius="14"
+                            Effect="{DynamicResource Effect.Glass}"
+                            IsHitTestVisible="False"
+                            Panel.ZIndex="15"
+                            Visibility="Collapsed">
+                        <Grid>
+                        <controls:GlassBackdrop Source="{Binding ElementName=CanvasScrollViewer}"
+                                                Radius="14"/>
+                        <StackPanel Margin="14,12">
+                            <Grid Margin="0,0,0,6">
+                                <TextBlock x:Name="TxtCardName" FontSize="14" FontWeight="Bold"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"/>
+                                <TextBlock x:Name="TxtCardValue" FontSize="13" HorizontalAlignment="Right"
+                                           Foreground="{DynamicResource Brush.Text.Secondary}"/>
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Akım" FontSize="13" Margin="0,1,14,1" Foreground="{DynamicResource Brush.Text.Secondary}"/>
+                                <TextBlock x:Name="TxtCardCurrent" Grid.Column="1" FontSize="13" FontWeight="SemiBold" Margin="0,1"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"/>
+                                <TextBlock Grid.Row="1" Text="Yön" FontSize="13" Margin="0,1,14,1" Foreground="{DynamicResource Brush.Text.Secondary}"/>
+                                <TextBlock x:Name="TxtCardDirection" Grid.Row="1" Grid.Column="1" FontSize="13" Margin="0,1"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"/>
+                                <TextBlock x:Name="LblCardVoltage" Grid.Row="2" Text="Gerilim" FontSize="13" Margin="0,1,14,1" Foreground="{DynamicResource Brush.Text.Secondary}"/>
+                                <TextBlock x:Name="TxtCardVoltage" Grid.Row="2" Grid.Column="1" FontSize="13" Margin="0,1"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"/>
+                                <TextBlock x:Name="LblCardPower" Grid.Row="3" Text="Güç" FontSize="13" Margin="0,1,14,1" Foreground="{DynamicResource Brush.Text.Secondary}"/>
+                                <TextBlock x:Name="TxtCardPower" Grid.Row="3" Grid.Column="1" FontSize="13" Margin="0,1"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"/>
+                            </Grid>
+                            <Border x:Name="CardBalanceRow" BorderThickness="0,1,0,0" Margin="0,8,0,0" Padding="0,8,0,0"
+                                    BorderBrush="{DynamicResource Brush.Glass.Divider}">
+                                <TextBlock x:Name="TxtCardBalance" FontSize="12" TextWrapping="Wrap" LineHeight="17"
+                                           Foreground="{DynamicResource Brush.Text.Secondary}"/>
+                            </Border>
                         </StackPanel>
                         </Grid>
                     </Border>
