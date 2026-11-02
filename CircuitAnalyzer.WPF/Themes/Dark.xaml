@@ -11,8 +11,8 @@
     <SolidColorBrush x:Key="Brush.Bg.Surface" Color="#272727"/>
     <SolidColorBrush x:Key="Brush.Bg.SurfaceAlt" Color="#202020"/>
     <SolidColorBrush x:Key="Brush.Bg.Subtle" Color="#202020"/>
-    <SolidColorBrush x:Key="Brush.Bg.Hover" Color="#313131"/>
-    <SolidColorBrush x:Key="Brush.Bg.Pressed" Color="#383838"/>
+    <SolidColorBrush x:Key="Brush.Bg.Hover" Color="#0FFFFFFF"/>
+    <SolidColorBrush x:Key="Brush.Bg.Pressed" Color="#17FFFFFF"/>
     <SolidColorBrush x:Key="Brush.Bg.Selected" Color="#23324A"/>
     <SolidColorBrush x:Key="Brush.Bg.Input" Color="#2E2E2E"/>
     <SolidColorBrush x:Key="Brush.Bg.Popup" Color="#2C2C2C"/>
@@ -96,5 +96,17 @@
     <DropShadowEffect x:Key="Effect.Card" BlurRadius="0" ShadowDepth="0" Color="#000000" Opacity="0"/>
     <DropShadowEffect x:Key="Effect.Popup" BlurRadius="28" ShadowDepth="6" Direction="270"
                       Color="#000000" Opacity="0.45"/>
+
+    <!-- Cam (DESIGN.md "Cam kuralları"): yalnız tuvalin üstünde yüzen parçalar -->
+    <SolidColorBrush x:Key="Brush.Glass.Base" Color="#262626"/>
+    <SolidColorBrush x:Key="Brush.Glass.Tint" Color="#66343438"/>
+    <SolidColorBrush x:Key="Brush.Glass.Acrylic" Color="#8C2C2C2C"/>
+    <SolidColorBrush x:Key="Brush.Glass.Divider" Color="#1AFFFFFF"/>
+    <LinearGradientBrush x:Key="Brush.Glass.Edge" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#3DFFFFFF" Offset="0"/>
+        <GradientStop Color="#14FFFFFF" Offset="1"/>
+    </LinearGradientBrush>
+    <DropShadowEffect x:Key="Effect.Glass" BlurRadius="28" ShadowDepth="8" Direction="270"
+                      Color="#000000" Opacity="0.42"/>
 
 </ResourceDictionary>

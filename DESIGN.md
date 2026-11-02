@@ -9,8 +9,9 @@ colors:
     layer: "#FFFFFF8C"         # tuval katmanı, %55 beyaz
     layer-edge: "#0000000F"
     canvas-dot: "#37352F29"
-    acrylic: "#FCFCFCB3"       # açılan eleman listesi
-    glass: "#FFFFFF85"         # yüzen araç çubuğu, eleman kartı
+    glass-base: "#FAFAFA"      # camın opak tabanı (altındaki devre net görünmesin)
+    acrylic: "#FCFCFC8C"       # açılan eleman listesi
+    glass: "#FFFFFF66"         # yüzen araç çubuğu, eleman kartı
     glass-edge: "#FFFFFFE6"
     glass-divider: "#00000014"
     paper: "#FFFFFF"           # okuma paneli
@@ -30,8 +31,9 @@ colors:
     layer: "#3A3A3A4D"
     layer-edge: "#FFFFFF12"
     canvas-dot: "#FFFFFF1A"
-    acrylic: "#2C2C2CB3"
-    glass: "#34343880"
+    glass-base: "#262626"
+    acrylic: "#2C2C2C8C"
+    glass: "#34343866"
     glass-edge: "#FFFFFF29"
     glass-divider: "#FFFFFF1A"
     paper: "#272727"
@@ -144,7 +146,7 @@ Camın olmadığı yerler:
 - Sol şerit ve başlık çubuğu: zeminin üstünde dururlar. İki cam yan yana gelirse arada çirkin bir ek yeri oluşur.
 - Cam camın üstüne binmez.
 
-Camın tarifi: arkasındaki tuvalin bulanık kopyası, üstünde yarı saydam renk, 1 px açık kenar, üst kenarda ince bir parlak çizgi ve yumuşak gölge. Gölge tek katmanlı ve hafiftir (açıkta %16, koyuda %42); sert gölge kullanılmaz.
+Camın tarifi: opak bir taban, onun üstünde arkasındaki tuvalin bulanık kopyası, üstünde yarı saydam renk, 1 px açık kenar, üst kenarda ince bir parlak çizgi ve yumuşak gölge. Gölge tek katmanlı ve hafiftir (açıkta %16, koyuda %42); sert gölge kullanılmaz.
 
 Saydamlık kapalıysa (Windows ayarı, pil tasarrufu ya da yüksek karşıtlık modu) cam yerine aynı tonda düz renk gösterilir. Program bu durumda da düzgün görünmelidir.
 

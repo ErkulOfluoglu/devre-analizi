@@ -259,16 +259,16 @@
                             VerticalAlignment="Top"
                             Margin="10"
                             Width="220"
-                            Padding="8,10"
-                            Background="{DynamicResource Brush.Bg.Popup}"
-                            BorderBrush="{DynamicResource Brush.Border.Default}"
-                            BorderThickness="1"
                             CornerRadius="12"
-                            Effect="{DynamicResource Effect.Popup}"
+                            Effect="{DynamicResource Effect.Glass}"
                             Panel.ZIndex="20"
                             Visibility="Collapsed"
                             ButtonBase.Click="ElementDrawer_Click">
-                        <StackPanel>
+                        <Grid>
+                        <controls:GlassBackdrop Source="{Binding ElementName=CanvasScrollViewer}"
+                                                TintKey="Brush.Glass.Acrylic"
+                                                Radius="12"/>
+                        <StackPanel Margin="8,10">
                             <TextBlock x:Name="TxtDrawerTitle"
                                        Style="{DynamicResource Text.Overline}"
                                        Margin="10,0,10,6"/>
@@ -449,6 +449,7 @@
                             </Button>
                         </StackPanel>
                         </StackPanel>
+                        </Grid>
                     </Border>
 
                     <!-- Yüzen araç çubuğu (Floating Toolbar) -->
@@ -456,14 +457,13 @@
                             HorizontalAlignment="Center"
                             VerticalAlignment="Bottom"
                             Margin="0,0,0,14"
-                            Background="{DynamicResource Brush.Bg.Surface}"
-                            BorderBrush="{DynamicResource Brush.Border.Default}"
-                            BorderThickness="1"
-                            CornerRadius="12"
-                            Effect="{DynamicResource Effect.Popup}"
-                            Padding="4"
+                            CornerRadius="16"
+                            Effect="{DynamicResource Effect.Glass}"
                             Panel.ZIndex="10">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Grid>
+                        <controls:GlassBackdrop Source="{Binding ElementName=CanvasScrollViewer}"
+                                                Radius="16"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="5">
                             <Button x:Name="BtnDrawWire"
                                     Style="{DynamicResource Button.Ghost}"
                                     Height="32"
@@ -476,7 +476,7 @@
                             </Button>
 
                             <Border Width="1" Height="18"
-                                    Background="{DynamicResource Brush.Border.Default}"
+                                    Background="{DynamicResource Brush.Glass.Divider}"
                                     Margin="4,0"/>
 
                             <Button x:Name="BtnUndo"
@@ -498,7 +498,7 @@
                             </Button>
 
                             <Border Width="1" Height="18"
-                                    Background="{DynamicResource Brush.Border.Default}"
+                                    Background="{DynamicResource Brush.Glass.Divider}"
                                     Margin="4,0"/>
 
                             <Button x:Name="BtnZoomOut"
@@ -539,6 +539,7 @@
                                 <controls:Icon Data="{DynamicResource Icon.Fit}" Width="16" Height="16"/>
                             </Button>
                         </StackPanel>
+                        </Grid>
                     </Border>
                 </Grid>
             </Border>

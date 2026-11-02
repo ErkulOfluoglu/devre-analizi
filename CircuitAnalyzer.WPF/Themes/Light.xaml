@@ -13,8 +13,9 @@
     <SolidColorBrush x:Key="Brush.Bg.Surface" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="Brush.Bg.SurfaceAlt" Color="#F6F5F4"/>
     <SolidColorBrush x:Key="Brush.Bg.Subtle" Color="#F1F0EE"/>
-    <SolidColorBrush x:Key="Brush.Bg.Hover" Color="#F1F0EE"/>
-    <SolidColorBrush x:Key="Brush.Bg.Pressed" Color="#E8E6E3"/>
+    <!-- Üzerine gelme ve basılma yarı saydam: cam ve kartların üstünde aynı görünür (Fluent) -->
+    <SolidColorBrush x:Key="Brush.Bg.Hover" Color="#0F1F1E1C"/>
+    <SolidColorBrush x:Key="Brush.Bg.Pressed" Color="#1A1F1E1C"/>
     <SolidColorBrush x:Key="Brush.Bg.Selected" Color="#EAF2FF"/>
     <SolidColorBrush x:Key="Brush.Bg.Input" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="Brush.Bg.Popup" Color="#FFFFFF"/>
@@ -102,5 +103,19 @@
                       Color="#000000" Opacity="0.06"/>
     <DropShadowEffect x:Key="Effect.Popup" BlurRadius="28" ShadowDepth="6" Direction="270"
                       Color="#000000" Opacity="0.14"/>
+
+    <!-- Cam (DESIGN.md "Cam kuralları"): yalnız tuvalin üstünde yüzen parçalar -->
+    <SolidColorBrush x:Key="Brush.Glass.Base" Color="#FAFAFA"/>
+    <SolidColorBrush x:Key="Brush.Glass.Tint" Color="#66FFFFFF"/>
+    <SolidColorBrush x:Key="Brush.Glass.Acrylic" Color="#8CFCFCFC"/>
+    <SolidColorBrush x:Key="Brush.Glass.Divider" Color="#14000000"/>
+    <!-- Kenar: üstte parlak, altta soluk ince çizgi -->
+    <LinearGradientBrush x:Key="Brush.Glass.Edge" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#F2FFFFFF" Offset="0"/>
+        <GradientStop Color="#80FFFFFF" Offset="0.5"/>
+        <GradientStop Color="#1A000000" Offset="1"/>
+    </LinearGradientBrush>
+    <DropShadowEffect x:Key="Effect.Glass" BlurRadius="28" ShadowDepth="8" Direction="270"
+                      Color="#283246" Opacity="0.16"/>
 
 </ResourceDictionary>
