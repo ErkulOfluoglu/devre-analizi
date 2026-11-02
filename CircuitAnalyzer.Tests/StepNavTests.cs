@@ -4,7 +4,6 @@ using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Windows;
-using System.Windows.Controls;
 using CircuitAnalyzer.WPF.Services;
 using CircuitAnalyzer.WPF.Views;
 using Xunit;
@@ -12,9 +11,9 @@ using Xunit;
 namespace CircuitAnalyzer.Tests;
 
 /// <summary>
-/// Okuma panelinin adım geçişi: anlatımın her bölümü bir adımdır; Önceki / Sonraki
-/// bölüm başına kaydırır, etiket okunan bölümü gösterir. Çözüm sayfalara bölünmez.
-/// Python arka ucu gerekmez (cevap elle kurulur).
+/// Okuma panelinin adım zinciri: anlatımın her bölümü numaralı bir adımdır, aynı anda bir adım
+/// açıktır, Önceki / Sonraki zinciri ilerletir, "Tümünü aç" hepsini açar. Kapalı adımda tek
+/// satırlık özet görünür. Python arka ucu gerekmez (cevap elle kurulur).
 /// </summary>
 [Collection(WpfUiCollection.Name)]
 public class StepNavTests
@@ -45,7 +44,7 @@ public class StepNavTests
             ExceptionDispatchInfo.Capture(ex).Throw();
     }
 
-    // Gerçek anlatımlar gibi: ilk bölümler uzun, son bölümler kısa (en altta birkaçı birlikte görünür)
+    // Gerçek anlatımlar gibi: ilk bölümler uzun, son bölümler kısa
     private static AnalysisResponseDto Response(int sections) => new()
     {
         Status = "success",
@@ -70,8 +69,11 @@ public class StepNavTests
         panel.UpdateLayout();
     }
 
+    private static int[] OpenSteps(AnalysisPanel panel) =>
+        Enumerable.Range(0, panel.StepSections.Count).Where(panel.IsStepOpen).ToArray();
+
     [Fact]
-    public void NextAndPrevious_MoveBetweenSections_AndLabelFollows()
+    public void FirstStepOpens_AndNextPreviousWalkTheWholeChain()
     {
         RunOnSta(() =>
         {
@@ -82,77 +84,77 @@ public class StepNavTests
             Assert.Equal(5, panel.StepSections.Count);
             Assert.Equal(Visibility.Visible, panel.StepNavBar.Visibility);
             Assert.Equal(0, panel.CurrentStepIndex);
+            Assert.Equal(new[] { 0 }, OpenSteps(panel));
             Assert.StartsWith("Adım 1 / 5 · Bölüm 1", panel.TxtStepLabel.Text);
-            Assert.True(panel.BtnNextStep.IsEnabled);
+            Assert.False(panel.BtnPrevStep.IsEnabled);
 
-            panel.GoToStep(+1);
-            Assert.Equal(1, panel.CurrentStepIndex);
-            Assert.StartsWith("Adım 2 / 5 · Bölüm 2", panel.TxtStepLabel.Text);
-
-            panel.GoToStep(+1);
-            Assert.Equal(2, panel.CurrentStepIndex);
-
-            panel.GoToStep(-1);
-            Assert.Equal(1, panel.CurrentStepIndex);
-
-            // Bütün bölümler görünür kalır (sayfalara bölünmez)
-            Assert.All(panel.StepSections, s => Assert.Equal(Visibility.Visible, s.Visibility));
-        });
-    }
-
-    [Fact]
-    public void Previous_WorksFromTheEnd_WhereLastSectionsShareTheScreen()
-    {
-        RunOnSta(() =>
-        {
-            var panel = new AnalysisPanel();
-            panel.ShowResults(Response(5));
-            Layout(panel);
-
-            // Sonraki ile sona kadar git: en alttayken son bölümler birlikte görünür
-            for (int i = 0; i < 6; i++)
+            for (int expected = 1; expected <= 4; expected++)
+            {
                 panel.GoToStep(+1);
-            Assert.Equal(4, panel.CurrentStepIndex);
+                Assert.Equal(expected, panel.CurrentStepIndex);
+                Assert.Equal(new[] { expected }, OpenSteps(panel));
+            }
             Assert.False(panel.BtnNextStep.IsEnabled);
 
-            // Önceki her basışta bir adım geri gider, sayfa kıpırdamasa bile
+            // Sondan başa: en altta kısa adımlar birlikte görünse de her basış bir adım geri gider
             for (int expected = 3; expected >= 0; expected--)
             {
                 Assert.True(panel.BtnPrevStep.IsEnabled);
                 panel.GoToStep(-1);
                 Assert.Equal(expected, panel.CurrentStepIndex);
+                Assert.Equal(new[] { expected }, OpenSteps(panel));
                 Assert.StartsWith($"Adım {expected + 1} / 5", panel.TxtStepLabel.Text);
-                // Seçilen adımın başlığı vurgulanır, diğerleri değil
-                var headings = panel.StepSections.Select(sec => (TextBlock)((StackPanel)sec).Children[0]).ToList();
-                for (int i = 0; i < headings.Count; i++)
-                    Assert.Equal(i == expected, headings[i].ReadLocalValue(TextBlock.ForegroundProperty) != DependencyProperty.UnsetValue);
             }
         });
     }
 
     [Fact]
-    public void Previous_WorksAfterScrollingToTheEndByHand()
+    public void ClickingOpenStep_ClosesIt_AndNextStartsFromTheTop()
     {
         RunOnSta(() =>
         {
             var panel = new AnalysisPanel();
-            panel.ShowResults(Response(5));
+            panel.ShowResults(Response(4));
             Layout(panel);
 
-            panel.ResultsScrollViewer.ScrollToEnd();
-            panel.UpdateLayout();
-            int atEnd = panel.CurrentStepIndex;
-            Assert.Equal(4, atEnd);
-
-            panel.GoToStep(-1);
-            Assert.Equal(3, panel.CurrentStepIndex);
-            panel.GoToStep(-1);
+            panel.OnStepHeaderClicked(2);
             Assert.Equal(2, panel.CurrentStepIndex);
+            Assert.Equal(new[] { 2 }, OpenSteps(panel));
+
+            panel.OnStepHeaderClicked(2);
+            Assert.Equal(-1, panel.CurrentStepIndex);
+            Assert.Empty(OpenSteps(panel));
+            Assert.Equal("4 adım", panel.TxtStepLabel.Text);
+
+            panel.GoToStep(+1);
+            Assert.Equal(0, panel.CurrentStepIndex);
         });
     }
 
     [Fact]
-    public void ResultsView_AndSingleSection_HideStepNav()
+    public void OpenAll_ShowsEveryStep_AndNavigationStillMovesTheMarker()
+    {
+        RunOnSta(() =>
+        {
+            var panel = new AnalysisPanel();
+            panel.ShowResults(Response(4));
+            Layout(panel);
+
+            panel.SetAllStepsOpen(true);
+            Assert.True(panel.AllStepsOpen);
+            Assert.Equal(new[] { 0, 1, 2, 3 }, OpenSteps(panel));
+
+            panel.GoToStep(+1);
+            Assert.Equal(1, panel.CurrentStepIndex);
+            Assert.Equal(new[] { 0, 1, 2, 3 }, OpenSteps(panel));
+
+            panel.SetAllStepsOpen(false);
+            Assert.Equal(new[] { 1 }, OpenSteps(panel));
+        });
+    }
+
+    [Fact]
+    public void ResultsView_SingleSection_AndClear_HideStepNav()
     {
         RunOnSta(() =>
         {
@@ -173,5 +175,42 @@ public class StepNavTests
             panel.ClearResults();
             Assert.Equal(Visibility.Collapsed, panel.StepNavBar.Visibility);
         });
+    }
+
+    private static ExplanationSectionDto Section(params (string Kind, string Text)[] blocks) => new()
+    {
+        Title = "Adım",
+        Blocks = blocks.Select(b => new ExplanationBlockDto { Kind = b.Kind, Text = b.Text }).ToList()
+    };
+
+    [Fact]
+    public void Summary_PrefersResults_ThenChecks_ThenEquations_ThenFirstSentence()
+    {
+        Assert.Equal("V₂ = 8,685 V · V₃ = 5,474 V", AnalysisPanel.SummarizeStep(Section(
+            ("text", "Cramer kuralıyla çözelim:"),
+            ("math", "Δ = 197,7"),
+            ("result", "V₂ = Δ₁/Δ = 1717 / 197,7 = 8,685 V"),
+            ("result", "V₃ = Δ₂/Δ = 1082 / 197,7 = 5,474 V"))));
+
+        Assert.Equal("Güç dengesi ✓", AnalysisPanel.SummarizeStep(Section(
+            ("math", "P_R1 = I²·R = 109,9 mW"),
+            ("check", "Güç dengesi: verilen 753,8 mW = harcanan 753,8 mW ✓"))));
+
+        Assert.Equal("3 kontrol tuttu ✓", AnalysisPanel.SummarizeStep(Section(
+            ("check", "Düğüm 1: ... ✓"), ("check", "Düğüm 2: ... ✓"), ("check", "Düğüm 3: ... ✓"))));
+
+        Assert.Equal("2 bilinmeyen için 2 denklem", AnalysisPanel.SummarizeStep(Section(
+            ("text", "Kirchhoff Akım Yasası."),
+            ("math", "Düğüm 2: (V₂ − V₁)/R1 + V₂/R3 = 0"),
+            ("math", "⇒ (V₂ − 12)/100 + V₂/330 = 0"),
+            ("math", "Düğüm 3: (V₃ − V₁)/R2 + V₃/R4 = 0"))));
+
+        Assert.Equal("I_R1 = 33,15 mA · I_R2 = 29,66 mA · …", AnalysisPanel.SummarizeStep(Section(
+            ("math", "I_R1 = (V₁ − V₂)/R1 = 33,15 mA  (Düğüm 1 → Düğüm 2)"),
+            ("math", "I_R2 = (V₁ − V₃)/R2 = 29,66 mA  (Düğüm 1 → Düğüm 3)"),
+            ("math", "I_R3 = V₂/R3 = 26,32 mA"))));
+
+        Assert.Equal("Kaynaklar: V1 = 12 V (DC).", AnalysisPanel.SummarizeStep(Section(
+            ("text", "Kaynaklar: V1 = 12 V (DC)."), ("text", "İkinci cümle."))));
     }
 }

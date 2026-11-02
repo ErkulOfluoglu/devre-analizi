@@ -259,12 +259,11 @@
             <ScrollViewer x:Name="ResultsScrollViewer"
                           Grid.Row="2"
                           VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled"
-                          ScrollChanged="ResultsScrollViewer_ScrollChanged">
+                          HorizontalScrollBarVisibility="Disabled">
                 <StackPanel x:Name="ResultsContainer" Margin="28,22,24,24"/>
             </ScrollViewer>
 
-            <!-- Adımlar arası geçiş: bölüme kaydırır, çözümü sayfalara bölmez -->
+            <!-- Adım zinciri geçişi: önceki / sonraki adımı açar -->
             <Border x:Name="StepNavBar"
                     Grid.Row="3"
                     BorderBrush="{DynamicResource Brush.Border.Default}"

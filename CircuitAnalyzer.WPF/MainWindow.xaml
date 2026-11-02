@@ -87,16 +87,39 @@
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
                     </Button>
-                    <Button x:Name="BtnTheme"
-                            Style="{DynamicResource Button.Icon}"
-                            Width="32" Height="32"
-                            AutomationProperties.Name="Tema"
+<!-- Tema: yazısız, üç simge (DESIGN.md, "Başlık çubuğu") -->
+                    <Border x:Name="ThemeSwitch"
+                            Style="{DynamicResource Segment.Track}"
+                            Padding="2"
                             Margin="4,0,0,0"
-                            Click="BtnTheme_Click">
-                        <controls:Icon x:Name="ThemeIcon"
-                                       Data="{DynamicResource Icon.Sun}"
-                                       Width="18" Height="18"/>
-                    </Button>
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleButton x:Name="BtnThemeLight"
+                                          Style="{DynamicResource Toggle.ThemeIcon}"
+                                          Tag="Light"
+                                          ToolTip="Açık tema"
+                                          AutomationProperties.Name="Açık tema"
+                                          Click="ThemeSwitch_Click">
+                                <controls:Icon Data="{DynamicResource Icon.Sun}" Width="16" Height="16"/>
+                            </ToggleButton>
+                            <ToggleButton x:Name="BtnThemeDark"
+                                          Style="{DynamicResource Toggle.ThemeIcon}"
+                                          Tag="Dark"
+                                          ToolTip="Koyu tema"
+                                          AutomationProperties.Name="Koyu tema"
+                                          Click="ThemeSwitch_Click">
+                                <controls:Icon Data="{DynamicResource Icon.Moon}" Width="16" Height="16"/>
+                            </ToggleButton>
+                            <ToggleButton x:Name="BtnThemeSystem"
+                                          Style="{DynamicResource Toggle.ThemeIcon}"
+                                          Tag="System"
+                                          ToolTip="Windows'un ayarına uy"
+                                          AutomationProperties.Name="Windows'un tema ayarına uy"
+                                          Click="ThemeSwitch_Click">
+                                <controls:Icon Data="{DynamicResource Icon.Monitor}" Width="16" Height="16"/>
+                            </ToggleButton>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Grid>
 

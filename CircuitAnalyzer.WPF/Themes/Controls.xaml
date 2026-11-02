@@ -368,6 +368,13 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Tema seçicinin simge düğmesi (☀ ☾ 🖥): yazı yok, ipucu ve erişilebilir ad var -->
+    <Style x:Key="Toggle.ThemeIcon" TargetType="ToggleButton" BasedOn="{StaticResource Segment.Item}">
+        <Setter Property="Width" Value="30"/>
+        <Setter Property="Height" Value="26"/>
+        <Setter Property="Padding" Value="0"/>
+    </Style>
+
     <!-- ═══════════ Anahtar (Alıştırma modu) ═══════════ -->
     <Style x:Key="CheckBox.Switch" TargetType="CheckBox">
         <Setter Property="Cursor" Value="Hand"/>

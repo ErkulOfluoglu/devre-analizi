@@ -126,47 +126,16 @@ namespace CircuitAnalyzer.WPF
 
         private void UpdateThemeButton()
         {
-            ThemeIcon.SetResourceReference(Controls.Icon.DataProperty, ThemeManager.IsDark ? "Icon.Moon" : "Icon.Sun");
+            BtnThemeLight.IsChecked = ThemeManager.Choice == ThemeChoice.Light;
+            BtnThemeDark.IsChecked = ThemeManager.Choice == ThemeChoice.Dark;
+            BtnThemeSystem.IsChecked = ThemeManager.Choice == ThemeChoice.System;
         }
 
-        private void BtnTheme_Click(object sender, RoutedEventArgs e)
+        private void ThemeSwitch_Click(object sender, RoutedEventArgs e)
         {
-            var menu = new ContextMenu();
-
-            void AddItem(string title, ThemeChoice choice)
-            {
-                var item = new MenuItem();
-                var dock = new DockPanel { LastChildFill = true };
-                if (ThemeManager.Choice == choice)
-                {
-                    var checkIcon = new Controls.Icon
-                    {
-                        Width = 16,
-                        Height = 16,
-                        Margin = new Thickness(12, 0, 0, 0)
-                    };
-                    checkIcon.SetResourceReference(Controls.Icon.DataProperty, "Icon.Check");
-                    DockPanel.SetDock(checkIcon, Dock.Right);
-                    dock.Children.Add(checkIcon);
-                }
-                var text = new TextBlock
-                {
-                    Text = title,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                dock.Children.Add(text);
-                item.Header = dock;
-                item.Click += (_, _) => ThemeManager.SetChoice(choice);
-                menu.Items.Add(item);
-            }
-
-            AddItem("Açık", ThemeChoice.Light);
-            AddItem("Koyu", ThemeChoice.Dark);
-            AddItem("Sistem (Windows'a uy)", ThemeChoice.System);
-
-            menu.PlacementTarget = BtnTheme;
-            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-            menu.IsOpen = true;
+            if (sender is FrameworkElement { Tag: string tag } && Enum.TryParse(tag, out ThemeChoice choice))
+                ThemeManager.SetChoice(choice);
+            UpdateThemeButton(); // aynı simgeye yeniden basılsa da seçili kalsın
         }
 
         public void ShowOnboarding(int page = 0)

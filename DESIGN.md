@@ -165,7 +165,7 @@ Akım ışığı teldeki gerçek akımı gösterir; süs değildir.
 
 ## Bileşenler
 
-**Başlık çubuğu.** 48 px yüksek, zeminin üstünde. Solda program adı ve dosya adı (soluk), sağda Dosya, Örnekler, Yeni soru, ince bir ayraç, Yardım ve tema düğmesi. Düğmeler kenarsızdır. Dosya menüsünde: Aç, Son açılanlar, Kaydet, Yazdır / PDF, Netlist oluştur, Temizle.
+**Başlık çubuğu.** 48 px yüksek, zeminin üstünde. Solda program adı ve dosya adı (soluk), sağda Dosya, Örnekler, Yeni soru, ince bir ayraç, Yardım ve tema seçici. Tema seçici yazısızdır: üç simge yan yana (güneş: açık, ay: koyu, ekran: Windows'a uy); seçili olan dolgulu, her birinin ipucu ve erişilebilir adı vardır. Düğmeler kenarsızdır. Dosya menüsünde: Aç, Son açılanlar, Kaydet, Yazdır / PDF, Netlist oluştur, Temizle.
 
 **Sol şerit.** 5 kategori: Pasif, Kaynak, Bağımlı, Anahtar, Ölçüm. Her öğede 22 px simge ve altında 12 px ad. Seçili öğenin hafif bir dolgusu ve solunda 3×16 px mavi çizgisi vardır. Seçili kategoriye yeniden tıklamak listeyi kapatır.
 
@@ -177,7 +177,7 @@ Akım ışığı teldeki gerçek akımı gösterir; süs değildir.
 
 **Okuma paneli.** Tek bir kâğıt kart. Üstte yöntem kutusu ile Çöz düğmesi yan yana; altında analiz türü ("DC analiz") ve çözücü durumu, gerekiyorsa terminal, frekans ve Etkin/Tepe seçimleri, en altta Alıştırma modu. İnce bir çizginin altında çözüm başlar: başarıda yalnız küçük yeşil bir "Çözüm başarılı" satırı (uyarı varsa sarı şerit), Anlatım / Sonuçlar seçimi, adım adım anlatım ve en sonda "Yapay zekâya sor". Denklemler kod bloğu içinde (paper-soft zemin, 8 px köşe, mono yazı). Grafikler kart içinde kart olmasın diye yalnız ince kenarlı kutularda durur.
 
-**Adım geçişi.** Kâğıdın altında "‹ Önceki · Adım 2 / 8 · Düğüm Denklemleri · Sonraki ›". Anlatımın her bölümü bir adımdır. Önceki / Sonraki çözümü sayfalara bölmez, ilgili bölümün başına kaydırır; etiket kaydırdıkça o an okunan bölümü gösterir. Düğmeyle seçilen adımın başlığı mavi olur; en altta son kısa bölümler ekrana birlikte sığdığında sayfa kıpırdamasa da seçim böyle görünür. Sonuçlar görünümünde ve tek bölümlük anlatımda gizlenir. Alttaki durum satırındaki adım sayısı aynı bölüm sayısıdır.
+**Adım zinciri.** Anlatım, yukarıdan aşağı akan bir zincirdir; her bölüm bir adımdır. Solda 26 px'lik numaralı yuvarlaklar ince dikey bir çizgiyle birbirine bağlanır: geçilen adımlarda ✓ ve soluk mavi, okunan adımda dolu mavi, gelecek adımlarda boş halka. Kapalı adımda başlık ve tek satırlık özet görünür; özet adımın içeriğinden çıkar (önce sonuçlar, sonra kontroller, sonra "N bilinmeyen için N denklem", sonra kısaltılmış denklemler, yoksa ilk cümle). Aynı anda bir adım açıktır; başlığa tıklamak açar, açık adımın başlığı kapatır. Zincirin üstünde "N adımda çözüm" ve "Tümünü aç". Kâğıdın altında "‹ Önceki · Adım 3 / 8 · Düğüm Denklemleri · Sonraki ›": bir adım ilerletip onu açar ve başına kaydırır. Sonuçlar görünümünde ve tek adımlık anlatımda gizlenir. Yazdırma ve PDF zinciri kullanmaz, bütün adımları açık basar.
 
 **Düğmeler.** Asıl düğme (Çöz) mavi dolgulu, beyaz yazılı, yarı kalın. İkincil düğmeler ince kenarlı, yarı saydam beyaz. Hepsi 6 px köşeli; Notion'un hap biçimli düğmeleri kullanılmaz.
 
