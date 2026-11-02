@@ -151,6 +151,26 @@ namespace CircuitAnalyzer.Tests
             Assert.DoesNotContain(w2, ofR3);
         }
 
+        [Fact]
+        public void WaveStarts_FollowThePathFromTheSource_SoPulsesDoNotBreak()
+        {
+            // Dalga kaynağın giriş ucundan (−) başlar, kaynağın içinden, üst telden, R1'den, alt telden geçer
+            var (els, wires, map, top, bottom, r) = SeriesLoop();
+            var currents = new Dictionary<string, ElementCurrentDto>
+            {
+                ["V1"] = Dc(1, "0→1"), ["R1"] = Dc(1, "1→0"),
+            };
+            var flows = CurrentFlow.Compute(els, wires, map, currents);
+
+            var starts = CircuitAnalyzer.WPF.Views.CurrentFlowLayer.WaveStarts(els, flows, map, currents);
+
+            double Dist(Pin a, Pin b) => (a.AbsolutePosition - b.AbsolutePosition).Length;
+            var v = els[0];
+            double throughSource = Dist(v.Pins[1], v.Pins[0]);
+            Assert.Equal(throughSource, starts[top], 6);
+            Assert.Equal(throughSource + Dist(top.StartPin, top.EndPin) + Dist(r.Pins[0], r.Pins[1]), starts[bottom], 6);
+        }
+
         private static ElementCurrentDto Ac(double re, double im, string direction) =>
             new() { Value = new ResultValue { Real = re, Imaginary = im, IsComplex = true }, Unit = "A", Direction = direction };
 
