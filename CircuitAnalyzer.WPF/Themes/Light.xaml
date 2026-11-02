@@ -9,33 +9,33 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- ── Zeminler ── -->
-    <SolidColorBrush x:Key="Brush.Bg.Window" Color="#F5F5F7"/>
+    <SolidColorBrush x:Key="Brush.Bg.Window" Color="#F3F3F3"/>
     <SolidColorBrush x:Key="Brush.Bg.Surface" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="Brush.Bg.SurfaceAlt" Color="#F5F5F7"/>
-    <SolidColorBrush x:Key="Brush.Bg.Subtle" Color="#F0F0F3"/>
-    <SolidColorBrush x:Key="Brush.Bg.Hover" Color="#F0F0F3"/>
-    <SolidColorBrush x:Key="Brush.Bg.Pressed" Color="#E6E6EB"/>
+    <SolidColorBrush x:Key="Brush.Bg.SurfaceAlt" Color="#F6F5F4"/>
+    <SolidColorBrush x:Key="Brush.Bg.Subtle" Color="#F1F0EE"/>
+    <SolidColorBrush x:Key="Brush.Bg.Hover" Color="#F1F0EE"/>
+    <SolidColorBrush x:Key="Brush.Bg.Pressed" Color="#E8E6E3"/>
     <SolidColorBrush x:Key="Brush.Bg.Selected" Color="#EAF2FF"/>
     <SolidColorBrush x:Key="Brush.Bg.Input" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="Brush.Bg.Popup" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="Brush.Bg.Strong" Color="#1D1D1F"/>
-    <SolidColorBrush x:Key="Brush.Bg.StrongHover" Color="#3A3A3C"/>
+    <SolidColorBrush x:Key="Brush.Bg.Strong" Color="#1F1E1C"/>
+    <SolidColorBrush x:Key="Brush.Bg.StrongHover" Color="#3A3835"/>
 
     <!-- ── Kenarlar ── -->
-    <SolidColorBrush x:Key="Brush.Border.Card" Color="Transparent"/>
-    <SolidColorBrush x:Key="Brush.Border.Default" Color="#E5E5EA"/>
-    <SolidColorBrush x:Key="Brush.Border.Strong" Color="#D2D2D7"/>
+    <SolidColorBrush x:Key="Brush.Border.Card" Color="#0F000000"/>
+    <SolidColorBrush x:Key="Brush.Border.Default" Color="#EBEAE8"/>
+    <SolidColorBrush x:Key="Brush.Border.Strong" Color="#DAD8D4"/>
     <SolidColorBrush x:Key="Brush.Border.Focus" Color="#0071E3"/>
 
     <!-- ── Yazı ── -->
-    <SolidColorBrush x:Key="Brush.Text.Primary" Color="#1D1D1F"/>
-    <SolidColorBrush x:Key="Brush.Text.Body" Color="#3A3A3C"/>
-    <SolidColorBrush x:Key="Brush.Text.Secondary" Color="#6E6E73"/>
+    <SolidColorBrush x:Key="Brush.Text.Primary" Color="#1F1E1C"/>
+    <SolidColorBrush x:Key="Brush.Text.Body" Color="#31302E"/>
+    <SolidColorBrush x:Key="Brush.Text.Secondary" Color="#615D59"/>
     <!-- Yalnızca ipucu (placeholder) ve devre dışı metin: düşük karşıtlık bilerek -->
-    <SolidColorBrush x:Key="Brush.Text.Tertiary" Color="#8E8E93"/>
+    <SolidColorBrush x:Key="Brush.Text.Tertiary" Color="#716C66"/>
     <SolidColorBrush x:Key="Brush.Text.OnStrong" Color="#FFFFFF"/>
 
-    <!-- ── Vurgu (Apple mavisi) ── -->
+    <!-- ── Vurgu: tek mavi (Çöz, seçim, akım ışığı) ── -->
     <SolidColorBrush x:Key="Brush.Accent" Color="#0071E3"/>
     <SolidColorBrush x:Key="Brush.Accent.Hover" Color="#0077ED"/>
     <SolidColorBrush x:Key="Brush.Accent.Pressed" Color="#0062C4"/>
@@ -54,17 +54,17 @@
     <SolidColorBrush x:Key="Brush.Info.Soft" Color="#EAF2FF"/>
 
     <!-- ── Çizim alanı ve devre sembolleri ── -->
-    <SolidColorBrush x:Key="Brush.Canvas.Bg" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="Brush.Circuit.Stroke" Color="#1D1D1F"/>
+    <SolidColorBrush x:Key="Brush.Canvas.Bg" Color="#8CFFFFFF"/>
+    <SolidColorBrush x:Key="Brush.Circuit.Stroke" Color="#1F1E1C"/>
     <SolidColorBrush x:Key="Brush.Circuit.Fill" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="Brush.Circuit.Label" Color="#1D1D1F"/>
-    <SolidColorBrush x:Key="Brush.Circuit.LabelSecondary" Color="#6E6E73"/>
-    <SolidColorBrush x:Key="Brush.Circuit.Wire" Color="#3A3A3C"/>
+    <SolidColorBrush x:Key="Brush.Circuit.Label" Color="#1F1E1C"/>
+    <SolidColorBrush x:Key="Brush.Circuit.LabelSecondary" Color="#615D59"/>
+    <SolidColorBrush x:Key="Brush.Circuit.Wire" Color="#37352F"/>
     <SolidColorBrush x:Key="Brush.Circuit.WirePreview" Color="#990071E3"/>
     <SolidColorBrush x:Key="Brush.Circuit.Selection" Color="#0071E3"/>
     <SolidColorBrush x:Key="Brush.Circuit.SelectionFill" Color="#1A0071E3"/>
     <SolidColorBrush x:Key="Brush.Circuit.Pin" Color="#0071E3"/>
-    <SolidColorBrush x:Key="Brush.Circuit.Source" Color="#1D1D1F"/>
+    <SolidColorBrush x:Key="Brush.Circuit.Source" Color="#1F1E1C"/>
     <SolidColorBrush x:Key="Brush.Circuit.Probe" Color="#C2410C"/>
 
     <!-- ── Devre üzerindeki sonuç etiketleri ── -->
@@ -76,24 +76,21 @@
     <SolidColorBrush x:Key="Brush.Overlay.Probe" Color="#9A3412"/>
 
     <!-- Tanıtım turu / pencere arkası karartma perdesi -->
-    <SolidColorBrush x:Key="Brush.Overlay.Scrim" Color="#731D1D1F"/>
+    <SolidColorBrush x:Key="Brush.Overlay.Scrim" Color="#731F1E1C"/>
 
-    <!-- Kareli defter kâğıdı: 20 px ızgara (GridHelper.GridSize ile aynı) -->
+    <!-- Nokta ızgara: 20 px (GridHelper.GridSize ile aynı); zemin saydam, tuval katmanı alttan görünür -->
     <DrawingBrush x:Key="Brush.Canvas.Grid" TileMode="Tile" Viewport="0,0,20,20" ViewportUnits="Absolute"
                   Viewbox="0,0,20,20" ViewboxUnits="Absolute">
         <DrawingBrush.Drawing>
             <DrawingGroup>
-                <GeometryDrawing Brush="#FFFFFF">
+                <GeometryDrawing Brush="#00FFFFFF">
                     <GeometryDrawing.Geometry>
                         <RectangleGeometry Rect="0,0,20,20"/>
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
-                <GeometryDrawing Brush="#EEF0F4">
+                <GeometryDrawing Brush="#3337352F">
                     <GeometryDrawing.Geometry>
-                        <GeometryGroup>
-                            <RectangleGeometry Rect="0,0,20,1"/>
-                            <RectangleGeometry Rect="0,0,1,20"/>
-                        </GeometryGroup>
+                        <EllipseGeometry Center="1,1" RadiusX="1" RadiusY="1"/>
                     </GeometryDrawing.Geometry>
                 </GeometryDrawing>
             </DrawingGroup>

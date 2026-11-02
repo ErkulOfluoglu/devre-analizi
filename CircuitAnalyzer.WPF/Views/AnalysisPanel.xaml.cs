@@ -948,24 +948,17 @@ public partial class AnalysisPanel : UserControl
 
     internal static StackPanel BuildExplanationSectionPanel(ExplanationSectionDto section)
     {
-        var sectionPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 18) };
+        // Bölümleri çizgi değil boşluk ayırır (DESIGN.md, "Şekil ve boşluk")
+        var sectionPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 26) };
 
         var titleText = new TextBlock
         {
             Text = section.Title,
-            Margin = new Thickness(0, 0, 0, 8)
-        };
-        titleText.SetResourceReference(StyleProperty, "Text.Section");
-        SubscriptText.Apply(titleText);
-        sectionPanel.Children.Add(titleText);
-
-        var divider = new Border
-        {
-            Height = 1,
             Margin = new Thickness(0, 0, 0, 10)
         };
-        divider.SetResourceReference(Border.BackgroundProperty, "Brush.Border.Default");
-        sectionPanel.Children.Add(divider);
+        titleText.SetResourceReference(StyleProperty, "Text.ReadingHeading");
+        SubscriptText.Apply(titleText);
+        sectionPanel.Children.Add(titleText);
 
         if (section.Blocks != null)
         {
@@ -1095,7 +1088,7 @@ public partial class AnalysisPanel : UserControl
                     Text = block.Text,
                     Margin = new Thickness(0, 0, 0, 10)
                 };
-                tb.SetResourceReference(StyleProperty, "Text.Body");
+                tb.SetResourceReference(StyleProperty, "Text.Reading");
                 SubscriptText.Apply(tb);
                 return tb;
             }

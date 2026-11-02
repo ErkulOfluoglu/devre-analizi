@@ -808,6 +808,8 @@ namespace CircuitAnalyzer.WPF
             var visual = new DrawingVisual();
             using (var dc = visual.RenderOpen())
             {
+                // Tuval katmanı yarı saydam: altına pencere zeminini koy
+                dc.DrawRectangle((Brush)FindResource("Brush.Bg.Window"), null, new Rect(0, 0, width, height));
                 dc.DrawRectangle((Brush)FindResource("Brush.Canvas.Bg"), null, new Rect(0, 0, width, height));
                 dc.PushTransform(new ScaleTransform(scale, scale));
                 dc.DrawRectangle(new VisualBrush(CircuitCanvas)

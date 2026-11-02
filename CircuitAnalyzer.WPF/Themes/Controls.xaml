@@ -17,8 +17,8 @@
     <FontFamily x:Key="Font.Display">Segoe UI Variable Display, Segoe UI</FontFamily>
     <FontFamily x:Key="Font.Mono">Cascadia Mono, Consolas</FontFamily>
 
-    <CornerRadius x:Key="Radius.Card">16</CornerRadius>
-    <CornerRadius x:Key="Radius.Control">10</CornerRadius>
+    <CornerRadius x:Key="Radius.Card">8</CornerRadius>
+    <CornerRadius x:Key="Radius.Control">6</CornerRadius>
     <CornerRadius x:Key="Radius.Small">8</CornerRadius>
     <CornerRadius x:Key="Radius.Pill">999</CornerRadius>
 
@@ -38,7 +38,7 @@
         <Setter Property="Background" Value="{DynamicResource Brush.Bg.Surface}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Card}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="16"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="Padding" Value="20"/>
         <Setter Property="Effect" Value="{DynamicResource Effect.Card}"/>
     </Style>
@@ -46,7 +46,7 @@
     <!-- İç blok: formül kutusu, küçük değer kutuları -->
     <Style x:Key="Card.Inset" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.Bg.SurfaceAlt}"/>
-        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="Padding" Value="12,10"/>
     </Style>
 
@@ -83,8 +83,26 @@
     </Style>
     <Style x:Key="Text.Mono" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}"/>
-        <Setter Property="FontSize" Value="13.5"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="LineHeight" Value="21"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+    <!-- Okuma paneli (adım adım anlatım): Notion sakinliği, DESIGN.md "Yazı" -->
+    <Style x:Key="Text.Reading" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="15"/>
         <Setter Property="LineHeight" Value="24"/>
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Body}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style x:Key="Text.ReadingHeading" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Display}"/>
+        <Setter Property="FontSize" Value="17"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="LineHeight" Value="24"/>
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
@@ -92,7 +110,7 @@
     <!-- ═══════════ Rozetler ve bildirim şeritleri ═══════════ -->
     <Style x:Key="Chip.Accent" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.Accent.Soft}"/>
-        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="Padding" Value="12,6"/>
         <Setter Property="HorizontalAlignment" Value="Left"/>
         <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Accent.SoftText}"/>
@@ -121,7 +139,7 @@
 
     <Style x:Key="InfoBar.Success" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.Success.Soft}"/>
-        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="Padding" Value="14,10"/>
         <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Success}"/>
         <Setter Property="TextElement.FontSize" Value="13"/>
@@ -157,7 +175,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="10"
+                            CornerRadius="6"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="True">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
@@ -316,7 +334,7 @@
     <!-- Seçenek göstergesi: [Anlatım | Sonuçlar] -->
     <Style x:Key="Segment.Track" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.Bg.Subtle}"/>
-        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="Padding" Value="4"/>
     </Style>
     <Style x:Key="Segment.Item" TargetType="ToggleButton" BasedOn="{StaticResource Button.Base}">
@@ -403,7 +421,7 @@
                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="10" SnapsToDevicePixels="True">
+                            CornerRadius="6" SnapsToDevicePixels="True">
                         <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                       Focusable="False" HorizontalScrollBarVisibility="Hidden"
@@ -472,7 +490,7 @@
                                     <Border x:Name="Bd"
                                             Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                                             BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
-                                            BorderThickness="1" CornerRadius="10">
+                                            BorderThickness="1" CornerRadius="6">
                                         <controls:Icon Data="{DynamicResource Icon.ChevronDown}" Width="16" Height="16"
                                                        HorizontalAlignment="Right" Margin="0,0,12,0"
                                                        Foreground="{DynamicResource Brush.Text.Secondary}"/>
@@ -493,7 +511,7 @@
                             <Border Margin="0,6,12,16" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
                                     Background="{DynamicResource Brush.Bg.Popup}"
                                     BorderBrush="{DynamicResource Brush.Border.Default}" BorderThickness="1"
-                                    CornerRadius="12" Padding="0,4" Effect="{DynamicResource Effect.Popup}">
+                                    CornerRadius="8" Padding="0,4" Effect="{DynamicResource Effect.Popup}">
                                 <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto">
                                     <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                 </ScrollViewer>
@@ -524,7 +542,7 @@
                 <ControlTemplate TargetType="ContextMenu">
                     <Border Margin="0,0,12,16" Background="{DynamicResource Brush.Bg.Popup}"
                             BorderBrush="{DynamicResource Brush.Border.Default}" BorderThickness="1"
-                            CornerRadius="12" Padding="4" Effect="{DynamicResource Effect.Popup}">
+                            CornerRadius="8" Padding="4" Effect="{DynamicResource Effect.Popup}">
                         <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
                     </Border>
                 </ControlTemplate>
@@ -643,13 +661,13 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Expander">
                     <Border Background="{DynamicResource Brush.Bg.Surface}" BorderBrush="{DynamicResource Brush.Border.Default}"
-                            BorderThickness="1" CornerRadius="12">
+                            BorderThickness="1" CornerRadius="8">
                         <DockPanel>
                             <ToggleButton DockPanel.Dock="Top" Cursor="Hand" FocusVisualStyle="{x:Null}"
                                           IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
-                                        <Border x:Name="Hd" Background="Transparent" Padding="14,12" CornerRadius="12">
+                                        <Border x:Name="Hd" Background="Transparent" Padding="14,12" CornerRadius="8">
                                             <DockPanel>
                                                 <controls:Icon x:Name="Chev" DockPanel.Dock="Right" Width="16" Height="16"
                                                                Data="{DynamicResource Icon.ChevronDown}"
