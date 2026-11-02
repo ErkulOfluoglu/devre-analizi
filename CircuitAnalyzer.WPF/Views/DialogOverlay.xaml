@@ -49,13 +49,19 @@
                     <ContentPresenter x:Name="BodyHost"/>
                 </ScrollViewer>
 
-                <Button x:Name="BtnOk"
-                        Grid.Row="2"
-                        Content="Tamam"
-                        Style="{DynamicResource Button.Primary}"
-                        HorizontalAlignment="Right"
-                        Margin="0,16,0,0"
-                        Click="BtnOk_Click"/>
+                <StackPanel Grid.Row="2"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,16,0,0">
+                    <!-- Soru kipinde düğmeler (Kaydet / Kaydetme / Vazgeç gibi) buraya eklenir -->
+                    <StackPanel x:Name="ChoiceButtons"
+                                Orientation="Horizontal"
+                                Visibility="Collapsed"/>
+                    <Button x:Name="BtnOk"
+                            Content="Tamam"
+                            Style="{DynamicResource Button.Primary}"
+                            Click="BtnOk_Click"/>
+                </StackPanel>
             </Grid>
         </Border>
     </Grid>

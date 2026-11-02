@@ -1093,8 +1093,16 @@ namespace CircuitAnalyzer.WPF
             return true;
         }
 
+        /// <summary>Giriş hatasını pencerenin içinde, Uygula düğmesinin üstünde gösterir.</summary>
+        private void ShowInputError(string message)
+        {
+            TxtError.Text = message;
+            ErrorBar.Visibility = Visibility.Visible;
+        }
+
         private void BtnApply_Click(object sender, RoutedEventArgs e)
         {
+            ErrorBar.Visibility = Visibility.Collapsed;
             // ── 1. Standart sayısal alanları doğrula ──
             for (int i = 0; i < _valueBoxes.Count; i++)
             {
@@ -1102,13 +1110,9 @@ namespace CircuitAnalyzer.WPF
 
                 if (!TryParseFieldValue(text, _unitScales[i], out double val))
                 {
-                    MessageBox.Show(
-                        $"Geçersiz sayı: \"{text}\"\n\n" +
+                    ShowInputError($"Geçersiz sayı: \"{text}\"\n\n" +
                         "Lütfen geçerli bir ondalıklı sayı girin.\n" +
-                        "Örnek: 1000, 4,7, 0,01",
-                        "Giriş Hatası",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
+                        "Örnek: 1000, 4,7, 0,01");
 
                     _valueBoxes[i].Focus();
                     _valueBoxes[i].SelectAll();
@@ -1124,11 +1128,7 @@ namespace CircuitAnalyzer.WPF
                 {
                     if (Math.Abs(val) < 1e-15)
                     {
-                        MessageBox.Show(
-                            "Akım değeri sıfır olamaz.",
-                            "Giriş Hatası",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
+                        ShowInputError("Akım değeri sıfır olamaz.");
 
                         _valueBoxes[i].Focus();
                         _valueBoxes[i].SelectAll();
@@ -1140,11 +1140,7 @@ namespace CircuitAnalyzer.WPF
                     // Kazanç: negatif serbest, yalnızca sıfır yasak
                     if (Math.Abs(val) < 1e-15)
                     {
-                        MessageBox.Show(
-                            "Kazanç sıfır olamaz.",
-                            "Giriş Hatası",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
+                        ShowInputError("Kazanç sıfır olamaz.");
 
                         _valueBoxes[i].Focus();
                         _valueBoxes[i].SelectAll();
@@ -1153,11 +1149,7 @@ namespace CircuitAnalyzer.WPF
                 }
                 else if (val <= 0 && !isPhaseField)
                 {
-                    MessageBox.Show(
-                        "Değer sıfırdan büyük olmalıdır.",
-                        "Giriş Hatası",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
+                    ShowInputError("Değer sıfırdan büyük olmalıdır.");
 
                     _valueBoxes[i].Focus();
                     _valueBoxes[i].SelectAll();
@@ -1170,11 +1162,7 @@ namespace CircuitAnalyzer.WPF
                 }
                 catch (InvalidOperationException ex)
                 {
-                    MessageBox.Show(
-                        ex.Message,
-                        "Giriş Hatası",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
+                    ShowInputError(ex.Message);
 
                     _valueBoxes[i].Focus();
                     _valueBoxes[i].SelectAll();
@@ -1186,11 +1174,7 @@ namespace CircuitAnalyzer.WPF
             {
                 if (tfCheck.K <= 0 || tfCheck.K > 1.0)
                 {
-                    MessageBox.Show(
-                        "Kuplaj katsayısı k, 0 ile 1 arasında olmalıdır (0 < k ≤ 1).",
-                        "Giriş Hatası",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
+                    ShowInputError("Kuplaj katsayısı k, 0 ile 1 arasında olmalıdır (0 < k ≤ 1).");
                     return;
                 }
             }
@@ -1204,16 +1188,12 @@ namespace CircuitAnalyzer.WPF
                     string complexText = box.Text.Trim();
                     if (!ComplexValue.TryParse(complexText, out var cv))
                     {
-                        MessageBox.Show(
-                            $"Geçersiz karmaşık sayı: \"{complexText}\"\n\n" +
+                        ShowInputError($"Geçersiz karmaşık sayı: \"{complexText}\"\n\n" +
                             "Kabul edilen formatlar:\n" +
                             "  Dikdörtgensel: 50+j30, 50+30j, 4+3i, 4+i3\n" +
                             "  Kutupsal: 10∠30, 10<30°\n" +
                             "  Saf reel: 100\n" +
-                            "  Saf sanal: j50, -j30",
-                            "Giriş Hatası",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
+                            "  Saf sanal: j50, -j30");
 
                         box.Focus();
                         box.SelectAll();
@@ -1233,16 +1213,12 @@ namespace CircuitAnalyzer.WPF
 
                 if (!ComplexValue.TryParse(complexText, out var cv))
                 {
-                    MessageBox.Show(
-                        $"Geçersiz karmaşık sayı: \"{complexText}\"\n\n" +
+                    ShowInputError($"Geçersiz karmaşık sayı: \"{complexText}\"\n\n" +
                         "Kabul edilen formatlar:\n" +
                         "  Dikdörtgensel: 50+j30, 50+30j, 4+3i, 4+i3\n" +
                         "  Kutupsal: 10∠30, 10<30°\n" +
                         "  Saf reel: 100\n" +
-                        "  Saf sanal: j50, -j30",
-                        "Giriş Hatası",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
+                        "  Saf sanal: j50, -j30");
 
                     _complexInputBox.Focus();
                     _complexInputBox.SelectAll();
@@ -1257,14 +1233,12 @@ namespace CircuitAnalyzer.WPF
             {
                 if (tpsCheck.Value <= 0)
                 {
-                    MessageBox.Show("Gerilim sıfırdan büyük olmalıdır.",
-                        "Giriş Hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ShowInputError("Gerilim sıfırdan büyük olmalıdır.");
                     return;
                 }
                 if (tpsCheck.Frequency <= 0)
                 {
-                    MessageBox.Show("Frekans sıfırdan büyük olmalıdır.",
-                        "Giriş Hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ShowInputError("Frekans sıfırdan büyük olmalıdır.");
                     return;
                 }
             }
@@ -1274,14 +1248,12 @@ namespace CircuitAnalyzer.WPF
             {
                 if (acSrc.Amplitude <= 0)
                 {
-                    MessageBox.Show("Genlik sıfırdan büyük olmalıdır.",
-                        "Giriş Hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ShowInputError("Genlik sıfırdan büyük olmalıdır.");
                     return;
                 }
                 if (acSrc.InputMode == AcInputMode.Physical && acSrc.Frequency <= 0)
                 {
-                    MessageBox.Show("Frekans sıfırdan büyük olmalıdır.",
-                        "Giriş Hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ShowInputError("Frekans sıfırdan büyük olmalıdır.");
                     return;
                 }
             }
@@ -1289,14 +1261,12 @@ namespace CircuitAnalyzer.WPF
             {
                 if (acCurrentSrc.Amplitude <= 0)
                 {
-                    MessageBox.Show("Genlik sıfırdan büyük olmalıdır.",
-                        "Giriş Hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ShowInputError("Genlik sıfırdan büyük olmalıdır.");
                     return;
                 }
                 if (acCurrentSrc.InputMode == AcInputMode.Physical && acCurrentSrc.Frequency <= 0)
                 {
-                    MessageBox.Show("Frekans sıfırdan büyük olmalıdır.",
-                        "Giriş Hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ShowInputError("Frekans sıfırdan büyük olmalıdır.");
                     return;
                 }
             }

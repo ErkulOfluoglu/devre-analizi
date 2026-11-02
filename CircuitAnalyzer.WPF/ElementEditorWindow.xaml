@@ -17,6 +17,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Başlık -->
@@ -30,8 +31,17 @@
                         Grid.Row="1"
                         Margin="0,0,0,16"/>
 
+            <!-- Giriş hatası: ayrı mesaj kutusu yerine pencerenin içinde, Uygula'nın üstünde -->
+            <Border x:Name="ErrorBar"
+                    Grid.Row="2"
+                    Style="{DynamicResource InfoBar.Warning}"
+                    Margin="0,0,0,12"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="TxtError" TextWrapping="Wrap" LineHeight="19"/>
+            </Border>
+
             <!-- Butonlar -->
-            <StackPanel Grid.Row="2"
+            <StackPanel Grid.Row="3"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right">
                 <Button Content="İptal"

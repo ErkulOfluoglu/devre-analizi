@@ -386,4 +386,80 @@ public class DialogOverlayTests
             Assert.True(rightClickCard.Handled);
         });
     }
+
+    private static Window HiddenWindow(DialogOverlay overlay)
+    {
+        var window = new Window
+        {
+            Width = 800,
+            Height = 600,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -20000,
+            Top = -20000,
+            ShowActivated = false,
+            Content = overlay
+        };
+        window.Show();
+        return window;
+    }
+
+    private static readonly DialogButton[] SaveChoices =
+    {
+        new("cancel", "Vazgeç"),
+        new("discard", "Kaydetme"),
+        new("save", "Kaydet", IsPrimary: true),
+    };
+
+    [Fact]
+    public void ShowModal_WaitsForTheChosenButton_AndRestoresOkButton()
+    {
+        RunOnSta(() =>
+        {
+            var overlay = new DialogOverlay();
+            var window = HiddenWindow(overlay);
+
+            // Soru açılınca "Kaydetme" düğmesine basılır; ShowModal o zamana kadar bekler
+            overlay.Dispatcher.BeginInvoke(() =>
+            {
+                Assert.True(overlay.IsModal);
+                Assert.Equal(Visibility.Collapsed, overlay.BtnOk.Visibility);
+                var discard = overlay.ChoiceButtons.Children.OfType<Button>().Single(b => (string)b.Tag == "discard");
+                discard.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            }, DispatcherPriority.Background);
+
+            string? choice = overlay.ShowModal("Değişiklikler kaydedilsin mi?", "Kaydedilmemiş değişiklikler var.",
+                DialogKind.Question, SaveChoices, cancelId: "cancel");
+
+            Assert.Equal("discard", choice);
+            Assert.False(overlay.IsOpen);
+            Assert.False(overlay.IsModal);
+            Assert.Equal(Visibility.Visible, overlay.BtnOk.Visibility);
+            Assert.Empty(overlay.ChoiceButtons.Children);
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public void ShowModal_EscapeCancels_EnterPicksThePrimaryButton()
+    {
+        RunOnSta(() =>
+        {
+            var overlay = new DialogOverlay();
+            var window = HiddenWindow(overlay);
+
+            void PressLater(Key key) => overlay.Dispatcher.BeginInvoke(() =>
+            {
+                var source = PresentationSource.FromVisual(overlay)!;
+                overlay.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+            }, DispatcherPriority.Background);
+
+            PressLater(Key.Escape);
+            Assert.Equal("cancel", overlay.ShowModal("Soru", "Metin", DialogKind.Question, SaveChoices, cancelId: "cancel"));
+
+            Keyboard.ClearFocus();
+            PressLater(Key.Enter);
+            Assert.Equal("save", overlay.ShowModal("Soru", "Metin", DialogKind.Question, SaveChoices, cancelId: "cancel"));
+            window.Close();
+        });
+    }
 }

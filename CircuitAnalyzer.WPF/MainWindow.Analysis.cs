@@ -479,8 +479,7 @@ namespace CircuitAnalyzer.WPF
         {
             if (_elements.Count == 0)
             {
-                MessageBox.Show("Canvas'ta hiç eleman yok!\nÖnce soldaki şeritten eleman ekleyin.",
-                    "Netlist Hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
+                Inform("Netlist oluşturulamadı", "Çizim alanında hiç eleman yok. Önce soldaki şeritten eleman ekleyin.", DialogKind.Warning);
                 return;
             }
 
@@ -488,20 +487,31 @@ namespace CircuitAnalyzer.WPF
             bool hasGround = _elements.Any(el => el is GroundElement);
             if (!hasGround)
             {
-                var result = MessageBox.Show(
-                    "Devrede Toprak (GND) referans noktası yok!\n\n" +
-                    "SPICE analizi için Node 0 (referans) gereklidir.\n" +
-                    "GND olmadan devam etmek istiyor musunuz?\n\n" +
-                    "(Düğüm numaraları 1'den başlayacak, Node 0 olmayacak)",
-                    "GND Eksik", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if (result == MessageBoxResult.No)
+                string? choice = DialogOverlay.ShowModal(
+                    "Toprak (GND) yok",
+                    "SPICE analizi için 0 numaralı referans düğümü gerekir. GND olmadan devam ederseniz " +
+                    "düğüm numaraları 1'den başlar ve 0 numaralı düğüm olmaz.",
+                    DialogKind.Warning,
+                    new[] { new DialogButton("cancel", "Vazgeç", IsPrimary: true), new DialogButton("continue", "Yine de devam et") },
+                    cancelId: "cancel");
+                if (choice != "continue")
                     return;
             }
 
             var netlist = NetlistBuilder.Build(_elements, _wires);
             int totalNodes = netlist.NodeCount;
 
-            MessageBox.Show(netlist.Text, "SPICE Netlist", MessageBoxButton.OK, MessageBoxImage.Information);
+            // Netlist seçilip kopyalanabilsin diye salt okunur, eş aralıklı bir metin kutusunda
+            var netlistBox = new TextBox
+            {
+                Text = netlist.Text,
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.NoWrap,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                MaxHeight = 360,
+            };
+            netlistBox.SetResourceReference(FontFamilyProperty, "Font.Mono");
+            DialogOverlay.Show("SPICE netlist", netlistBox, width: 560);
 
             TxtStatus.Text = $"Netlist oluşturuldu — {_elements.Count} eleman, {_wires.Count} tel, " +
                 $"{totalNodes} düğüm" + (hasGround ? " (GND=0)" : " (GND yok!)");

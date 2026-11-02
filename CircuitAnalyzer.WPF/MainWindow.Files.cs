@@ -134,12 +134,12 @@ namespace CircuitAnalyzer.WPF
             }
             catch (CircuitFileException ex)
             {
-                MessageBox.Show(this, ex.Message, "Kaydetme Hatası", MessageBoxButton.OK, MessageBoxImage.Error);
+                Inform("Kaydedilemedi", ex.Message, DialogKind.Error);
                 return false;
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, $"Dosya kaydedilemedi: {ex.Message}", "Kaydetme Hatası", MessageBoxButton.OK, MessageBoxImage.Error);
+                Inform("Kaydedilemedi", $"Dosya kaydedilemedi: {ex.Message}", DialogKind.Error);
                 return false;
             }
         }
@@ -149,7 +149,7 @@ namespace CircuitAnalyzer.WPF
             if (!System.IO.File.Exists(path))
             {
                 if (!isSelfTest && !HasAnySelfTest(Environment.GetCommandLineArgs()))
-                    MessageBox.Show(this, $"Dosya bulunamadı:\n{path}", "Dosya Açılamadı", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Inform("Dosya açılamadı", $"Dosya bulunamadı:\n{path}", DialogKind.Warning);
                 AppSettings.RemoveRecentFile(path);
                 return false;
             }
@@ -186,13 +186,13 @@ namespace CircuitAnalyzer.WPF
             catch (CircuitFileException ex)
             {
                 if (!isSelfTest && !HasAnySelfTest(Environment.GetCommandLineArgs()))
-                    MessageBox.Show(this, ex.Message, "Dosya Açılamadı", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Inform("Dosya açılamadı", ex.Message, DialogKind.Error);
                 return false;
             }
             catch (Exception ex)
             {
                 if (!isSelfTest && !HasAnySelfTest(Environment.GetCommandLineArgs()))
-                    MessageBox.Show(this, $"Dosya okunamadı: {ex.Message}", "Dosya Açılamadı", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Inform("Dosya açılamadı", $"Dosya okunamadı: {ex.Message}", DialogKind.Error);
                 return false;
             }
         }
@@ -235,25 +235,24 @@ namespace CircuitAnalyzer.WPF
             if (!_isDirty || HasAnySelfTest(Environment.GetCommandLineArgs()))
                 return true;
 
-            var result = MessageBox.Show(
-                this,
-                "Değişiklikleri kaydetmek istiyor musunuz?",
-                "Devre Analizi",
-                MessageBoxButton.YesNoCancel,
-                MessageBoxImage.Question);
+            string? choice = DialogOverlay.ShowModal(
+                "Değişiklikler kaydedilsin mi?",
+                "Devrede kaydedilmemiş değişiklikler var. Kaydetmezseniz bu değişiklikler kaybolur.",
+                DialogKind.Question,
+                new[]
+                {
+                    new DialogButton("cancel", "Vazgeç"),
+                    new DialogButton("discard", "Kaydetme"),
+                    new DialogButton("save", "Kaydet", IsPrimary: true),
+                },
+                cancelId: "cancel");
 
-            if (result == MessageBoxResult.Yes)
+            return choice switch
             {
-                return SaveCircuit();
-            }
-            else if (result == MessageBoxResult.No)
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
+                "save" => SaveCircuit(),
+                "discard" => true,
+                _ => false,
+            };
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
@@ -313,7 +312,7 @@ namespace CircuitAnalyzer.WPF
                     {
                         if (!System.IO.File.Exists(filePath))
                         {
-                            MessageBox.Show(this, $"Dosya bulunamadı:\n{filePath}", "Dosya Yok", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            Inform("Dosya bulunamadı", $"Dosya bulunamadı, son açılanlar listesinden çıkarıldı:\n{filePath}", DialogKind.Warning);
                             AppSettings.RemoveRecentFile(filePath);
                             return;
                         }
@@ -330,7 +329,7 @@ namespace CircuitAnalyzer.WPF
             CancelPlacement(); // önizleme baskıya girmesin
             if (_lastResponse == null || _lastSolveVersion != _circuitVersion)
             {
-                MessageBox.Show(this, "Önce devreyi çözün.", "Yazdır / PDF", MessageBoxButton.OK, MessageBoxImage.Information);
+                Inform("Yazdır / PDF", "Önce devreyi çözün. Yazdırılacak güncel bir çözüm yok.");
                 return;
             }
 
