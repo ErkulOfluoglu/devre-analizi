@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
 using CircuitAnalyzer.WPF.Services;
 using CircuitAnalyzer.WPF.Views;
 using Xunit;
@@ -44,6 +45,7 @@ public class StepNavTests
             ExceptionDispatchInfo.Capture(ex).Throw();
     }
 
+    // Gerçek anlatımlar gibi: ilk bölümler uzun, son bölümler kısa (en altta birkaçı birlikte görünür)
     private static AnalysisResponseDto Response(int sections) => new()
     {
         Status = "success",
@@ -52,7 +54,7 @@ public class StepNavTests
             Explanation = Enumerable.Range(1, sections).Select(i => new ExplanationSectionDto
             {
                 Title = $"Bölüm {i}",
-                Blocks = Enumerable.Range(1, 6).Select(j => new ExplanationBlockDto
+                Blocks = Enumerable.Range(1, i <= sections - 3 ? 6 : 1).Select(j => new ExplanationBlockDto
                 {
                     Kind = "text",
                     Text = $"Bölüm {i}, paragraf {j}: düğüm gerilimleri ve akımlar üzerine uzunca bir açıklama metni."
@@ -95,6 +97,57 @@ public class StepNavTests
 
             // Bütün bölümler görünür kalır (sayfalara bölünmez)
             Assert.All(panel.StepSections, s => Assert.Equal(Visibility.Visible, s.Visibility));
+        });
+    }
+
+    [Fact]
+    public void Previous_WorksFromTheEnd_WhereLastSectionsShareTheScreen()
+    {
+        RunOnSta(() =>
+        {
+            var panel = new AnalysisPanel();
+            panel.ShowResults(Response(5));
+            Layout(panel);
+
+            // Sonraki ile sona kadar git: en alttayken son bölümler birlikte görünür
+            for (int i = 0; i < 6; i++)
+                panel.GoToStep(+1);
+            Assert.Equal(4, panel.CurrentStepIndex);
+            Assert.False(panel.BtnNextStep.IsEnabled);
+
+            // Önceki her basışta bir adım geri gider, sayfa kıpırdamasa bile
+            for (int expected = 3; expected >= 0; expected--)
+            {
+                Assert.True(panel.BtnPrevStep.IsEnabled);
+                panel.GoToStep(-1);
+                Assert.Equal(expected, panel.CurrentStepIndex);
+                Assert.StartsWith($"Adım {expected + 1} / 5", panel.TxtStepLabel.Text);
+                // Seçilen adımın başlığı vurgulanır, diğerleri değil
+                var headings = panel.StepSections.Select(sec => (TextBlock)((StackPanel)sec).Children[0]).ToList();
+                for (int i = 0; i < headings.Count; i++)
+                    Assert.Equal(i == expected, headings[i].ReadLocalValue(TextBlock.ForegroundProperty) != DependencyProperty.UnsetValue);
+            }
+        });
+    }
+
+    [Fact]
+    public void Previous_WorksAfterScrollingToTheEndByHand()
+    {
+        RunOnSta(() =>
+        {
+            var panel = new AnalysisPanel();
+            panel.ShowResults(Response(5));
+            Layout(panel);
+
+            panel.ResultsScrollViewer.ScrollToEnd();
+            panel.UpdateLayout();
+            int atEnd = panel.CurrentStepIndex;
+            Assert.Equal(4, atEnd);
+
+            panel.GoToStep(-1);
+            Assert.Equal(3, panel.CurrentStepIndex);
+            panel.GoToStep(-1);
+            Assert.Equal(2, panel.CurrentStepIndex);
         });
     }
 

@@ -876,6 +876,7 @@ public partial class AnalysisPanel : UserControl
 
     private void UpdateViewVisibility()
     {
+        _stepIndex = -1;
         if (_resultsPanel == null) return;
 
         if (IsExplanationViewSelected)
@@ -919,34 +920,48 @@ public partial class AnalysisPanel : UserControl
             ? _explanationPanel.Children.OfType<FrameworkElement>().ToList()
             : Array.Empty<FrameworkElement>();
 
-    /// <summary>Okunan adımın sırası (0'dan): üst kenarı görünümün üstünü geçmiş son bölüm.</summary>
+    // Önceki / Sonraki ile seçilen adım. En altta son bölümler ekrana birlikte sığar ve
+    // sayfa kaydırılamaz; adım o zaman konumdan değil bu alandan okunur. Elle kaydırınca -1 olur.
+    private int _stepIndex = -1;
+    private bool _scrollFromStepNav;
+
+    /// <summary>Okunan adımın sırası (0'dan).</summary>
     internal int CurrentStepIndex
     {
         get
         {
-            var sections = StepSections;
-            if (sections.Count == 0)
+            int n = StepSections.Count;
+            if (n == 0)
                 return -1;
-            int current = 0;
-            for (int i = 0; i < sections.Count; i++)
+            return _stepIndex >= 0 && _stepIndex < n ? _stepIndex : StepIndexFromScroll();
+        }
+    }
+
+    /// <summary>Kaydırma konumundan adım: üst kenarı görünümün üstünü geçmiş son bölüm.</summary>
+    private int StepIndexFromScroll()
+    {
+        var sections = StepSections;
+        if (sections.Count == 0)
+            return -1;
+        int current = 0;
+        for (int i = 0; i < sections.Count; i++)
+        {
+            if (SectionTop(sections[i]) <= ResultsScrollViewer.VerticalOffset + 24)
+                current = i;
+        }
+        // En alta inildiyse son bölümler hiç tepeye çıkamaz: görünen son başlığı say
+        if (ResultsScrollViewer.ScrollableHeight > 0 && ResultsScrollViewer.VerticalOffset >= ResultsScrollViewer.ScrollableHeight - 1)
+        {
+            for (int i = sections.Count - 1; i > current; i--)
             {
-                if (SectionTop(sections[i]) <= ResultsScrollViewer.VerticalOffset + 24)
-                    current = i;
-            }
-            // En alta inildiyse son bölümler hiç tepeye çıkamaz: görünen son başlığı say
-            if (ResultsScrollViewer.ScrollableHeight > 0 && ResultsScrollViewer.VerticalOffset >= ResultsScrollViewer.ScrollableHeight - 1)
-            {
-                for (int i = sections.Count - 1; i > current; i--)
+                if (SectionTop(sections[i]) <= ResultsScrollViewer.VerticalOffset + ResultsScrollViewer.ViewportHeight - 40)
                 {
-                    if (SectionTop(sections[i]) <= ResultsScrollViewer.VerticalOffset + ResultsScrollViewer.ViewportHeight - 40)
-                    {
-                        current = i;
-                        break;
-                    }
+                    current = i;
+                    break;
                 }
             }
-            return current;
         }
+        return current;
     }
 
     private double SectionTop(FrameworkElement section)
@@ -971,13 +986,27 @@ public partial class AnalysisPanel : UserControl
         }
         StepNavBar.Visibility = Visibility.Visible;
         int k = Math.Max(0, CurrentStepIndex);
-        string title = sections[k] is StackPanel sp && sp.Children.Count > 0 && sp.Children[0] is TextBlock t ? t.Text : "";
+        string title = SectionTitle(sections[k])?.Text ?? "";
         TxtStepLabel.Text = string.IsNullOrEmpty(title)
             ? $"Adım {k + 1} / {sections.Count}"
             : $"Adım {k + 1} / {sections.Count} · {title}";
         BtnPrevStep.IsEnabled = k > 0 || ResultsScrollViewer.VerticalOffset > SectionTop(sections[0]) + 1;
         BtnNextStep.IsEnabled = k < sections.Count - 1;
+
+        // Düğmeyle seçilen adımın başlığı mavi olur: sayfa kaydırılamasa da hangi adımda olunduğu görünür
+        for (int i = 0; i < sections.Count; i++)
+        {
+            if (SectionTitle(sections[i]) is not { } heading)
+                continue;
+            if (i == k && _stepIndex >= 0)
+                heading.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Accent.SoftText");
+            else
+                heading.ClearValue(TextBlock.ForegroundProperty);
+        }
     }
+
+    private static TextBlock? SectionTitle(FrameworkElement section) =>
+        section is StackPanel sp && sp.Children.Count > 0 ? sp.Children[0] as TextBlock : null;
 
     /// <summary>Bir sonraki (+1) ya da önceki (−1) adımın başına kaydırır.</summary>
     internal void GoToStep(int delta)
@@ -991,8 +1020,15 @@ public partial class AnalysisPanel : UserControl
         if (delta < 0 && ResultsScrollViewer.VerticalOffset > SectionTop(sections[k]) + 1)
             target = k;
         target = Math.Clamp(target, 0, sections.Count - 1);
-        ResultsScrollViewer.ScrollToVerticalOffset(Math.Max(0, SectionTop(sections[target]) - 8));
-        ResultsScrollViewer.UpdateLayout();
+
+        _stepIndex = target;
+        double offset = Math.Clamp(SectionTop(sections[target]) - 8, 0, ResultsScrollViewer.ScrollableHeight);
+        if (Math.Abs(offset - ResultsScrollViewer.VerticalOffset) > 0.5)
+        {
+            _scrollFromStepNav = true;
+            ResultsScrollViewer.ScrollToVerticalOffset(offset);
+            ResultsScrollViewer.UpdateLayout();
+        }
         UpdateStepNav();
     }
 
@@ -1000,7 +1036,14 @@ public partial class AnalysisPanel : UserControl
 
     private void BtnNextStep_Click(object sender, RoutedEventArgs e) => GoToStep(+1);
 
-    private void ResultsScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e) => UpdateStepNav();
+    private void ResultsScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (_scrollFromStepNav)
+            _scrollFromStepNav = false;
+        else if (e.VerticalChange != 0)
+            _stepIndex = -1; // elle kaydırıldı: adım yeniden konumdan okunur
+        UpdateStepNav();
+    }
 
     private Border CreateSegmentedToggle()
     {
@@ -1655,6 +1698,7 @@ public partial class AnalysisPanel : UserControl
         ResultsScrollViewer.Opacity = 1.0;
         ResultsContainer.Children.Clear();
         StepNavBar.Visibility = Visibility.Collapsed;
+        _stepIndex = -1;
         ResultsScrollViewer.ScrollToVerticalOffset(0);
         _explanationPanel = null;
         _resultsPanel = null;
