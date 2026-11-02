@@ -231,6 +231,13 @@ namespace CircuitAnalyzer.WPF.Views
             if (h <= 0) h = 800;
 
             var target = currentStep.TargetAccessor?.Invoke();
+            // Hedef kaydırılabilir bir alanın içinde ve ekran dışındaysa önce görünür yap
+            // (ör. sağ paneldeki "Yapay zekâya sor" çözümün en altında)
+            if (target != null && target.IsVisible)
+            {
+                target.BringIntoView();
+                target.UpdateLayout();
+            }
             Rect holeRect;
 
             if (target != null && target.IsVisible && target.ActualWidth > 0 && target.ActualHeight > 0)

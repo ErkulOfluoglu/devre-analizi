@@ -205,15 +205,24 @@ namespace CircuitAnalyzer.WPF
             }
         }
 
+        // Tekerlek farenin olduğu yere doğru yakınlaştırır; Shift ile yatay, Ctrl ile dikey kaydırır
         private void CanvasScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            e.Handled = true;
+            var mods = Keyboard.Modifiers;
+            if (mods.HasFlag(ModifierKeys.Shift))
             {
-                e.Handled = true;
-                double factor = e.Delta > 0 ? 1.2 : (1.0 / 1.2);
-                Point mousePos = e.GetPosition(CanvasScrollViewer);
-                SetZoom(_currentZoom * factor, mousePos);
+                CanvasScrollViewer.ScrollToHorizontalOffset(CanvasScrollViewer.HorizontalOffset - e.Delta);
+                return;
             }
+            if (mods.HasFlag(ModifierKeys.Control))
+            {
+                CanvasScrollViewer.ScrollToVerticalOffset(CanvasScrollViewer.VerticalOffset - e.Delta);
+                return;
+            }
+            double factor = e.Delta > 0 ? 1.2 : (1.0 / 1.2);
+            Point mousePos = e.GetPosition(CanvasScrollViewer);
+            SetZoom(_currentZoom * factor, mousePos);
         }
 
         private void CanvasScrollViewer_PreviewMouseDown(object sender, MouseButtonEventArgs e)

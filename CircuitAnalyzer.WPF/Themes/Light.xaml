@@ -57,7 +57,8 @@
     <!-- ── Çizim alanı ve devre sembolleri ── -->
     <SolidColorBrush x:Key="Brush.Canvas.Bg" Color="#8CFFFFFF"/>
     <SolidColorBrush x:Key="Brush.Circuit.Stroke" Color="#1F1E1C"/>
-    <SolidColorBrush x:Key="Brush.Circuit.Fill" Color="#FFFFFF"/>
+    <!-- Eleman gövdeleri saydam: tuvalin ve Mica'nın tonunu alır, açık zeminde beyaz kutu gibi durmaz -->
+    <SolidColorBrush x:Key="Brush.Circuit.Fill" Color="#00FFFFFF"/>
     <SolidColorBrush x:Key="Brush.Circuit.Label" Color="#1F1E1C"/>
     <SolidColorBrush x:Key="Brush.Circuit.LabelSecondary" Color="#615D59"/>
     <SolidColorBrush x:Key="Brush.Circuit.Wire" Color="#37352F"/>
