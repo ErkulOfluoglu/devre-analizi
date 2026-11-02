@@ -200,7 +200,7 @@ namespace CircuitAnalyzer.WPF
             }
             if (!_elements.Any(e => e is not GroundElement and not TestProbe and not JunctionElement))
             {
-                AnalysisPanel.ShowError("Devre boş", "Önce araç kutusundan eleman ekleyip tellerle bağlayın.");
+                AnalysisPanel.ShowError("Devre boş", "Önce soldaki şeritten eleman ekleyip tellerle bağlayın.");
                 return;
             }
             if (!AnalysisPanel.TryGetOptions(out var options, out string? optionError))
@@ -473,7 +473,7 @@ namespace CircuitAnalyzer.WPF
         {
             if (_elements.Count == 0)
             {
-                MessageBox.Show("Canvas'ta hiç eleman yok!\nÖnce araç kutusundan eleman ekleyin.",
+                MessageBox.Show("Canvas'ta hiç eleman yok!\nÖnce soldaki şeritten eleman ekleyin.",
                     "Netlist Hatası", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }

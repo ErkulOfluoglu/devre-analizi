@@ -30,9 +30,9 @@ namespace CircuitAnalyzer.WPF.Services
             {
                 new()
                 {
-                    TargetAccessor = () => window?.SidebarCard,
+                    TargetAccessor = () => window?.ElementRail,
                     Title = "Elemanlar",
-                    Body = "Devre elemanlarını buradan ekleyin. Eklenen eleman çizim alanının ortasına gelir; sürükleyip yerleştirin."
+                    Body = "Bir kategoriye tıklayın, açılan listeden elemanı seçin. Eklenen eleman çizim alanının ortasına gelir; sürükleyip yerleştirin."
                 },
                 new()
                 {
@@ -56,7 +56,7 @@ namespace CircuitAnalyzer.WPF.Services
                 {
                     TargetAccessor = () => window?.AnalysisPanel.ChkPracticeMode,
                     Title = "Alıştırma modu",
-                    Body = "Açınca sonuçlar gizlenir, soruları kendiniz çözersiniz. Sol alttaki “Yeni soru” ile rastgele devre üretebilirsiniz."
+                    Body = "Açınca sonuçlar gizlenir, soruları kendiniz çözersiniz. Üstteki “Yeni soru” ile rastgele devre üretebilirsiniz."
                 },
                 new()
                 {

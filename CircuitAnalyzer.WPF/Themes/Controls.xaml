@@ -272,6 +272,47 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Sol şerit kategorisi: üstte ikon, altta ad; seçilince solda mavi çizgi (DESIGN.md, "Sol şerit") -->
+    <Style x:Key="Toggle.Rail" TargetType="ToggleButton">
+        <Setter Property="FontFamily" Value="{DynamicResource Font.UI}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Height" Value="58"/>
+        <Setter Property="Margin" Value="0,0,0,4"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid>
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                BorderThickness="0" BorderBrush="{DynamicResource Brush.Border.Focus}"/>
+                        <Border x:Name="Pill" Width="3" Height="16" CornerRadius="1.5"
+                                HorizontalAlignment="Left" VerticalAlignment="Center"
+                                Background="{DynamicResource Brush.Accent}" Visibility="Collapsed"/>
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Bg.Hover}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Bg.Hover}"/>
+                            <Setter TargetName="Pill" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Bg.Pressed}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderThickness" Value="2"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Seçenek göstergesi: [Anlatım | Sonuçlar] -->
     <Style x:Key="Segment.Track" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.Bg.Subtle}"/>

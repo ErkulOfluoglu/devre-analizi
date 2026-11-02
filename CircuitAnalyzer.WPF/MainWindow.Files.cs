@@ -31,6 +31,7 @@ namespace CircuitAnalyzer.WPF
                 ? System.IO.Path.GetFileNameWithoutExtension(_currentFilePath)
                 : "Adsız";
             Title = $"Devre Analizi — {docName}{(_isDirty ? " •" : "")}";
+            TxtDocName.Text = $"{docName}{(_isDirty ? " •" : "")}";
         }
 
         private void UpdateUndoRedoButtons()
@@ -265,26 +266,41 @@ namespace CircuitAnalyzer.WPF
             base.OnClosing(e);
         }
 
-        private void BtnOpen_Click(object sender, RoutedEventArgs e)
+        /// <summary>Başlıktaki "Dosya" menüsü: aç, son açılanlar, kaydet, yazdır, netlist, temizle.</summary>
+        private void BtnFile_Click(object sender, RoutedEventArgs e)
         {
             var menu = new ContextMenu
             {
-                PlacementTarget = BtnOpen,
+                PlacementTarget = BtnFile,
                 Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
             };
 
-            var chooseItem = new MenuItem
+            MenuItem Item(string header, string? gesture, Action onClick)
             {
-                Header = "Dosya seç…",
-                InputGestureText = "Ctrl+O",
-            };
-            chooseItem.Click += (_, _) => PromptAndOpenFileDialog();
-            menu.Items.Add(chooseItem);
+                var item = new MenuItem { Header = header, InputGestureText = gesture ?? "" };
+                item.Click += (_, _) => onClick();
+                return item;
+            }
 
+            menu.Items.Add(Item("Aç…", "Ctrl+O", PromptAndOpenFileDialog));
+            var recentMenu = new MenuItem { Header = "Son açılanlar" };
+            AddRecentFileItems(recentMenu);
+            recentMenu.IsEnabled = recentMenu.Items.Count > 0;
+            menu.Items.Add(recentMenu);
+            menu.Items.Add(Item("Kaydet", "Ctrl+S", () => SaveCircuit()));
+            menu.Items.Add(Item("Yazdır / PDF", null, () => PrintOrExportPdf()));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Item("Netlist oluştur", null, () => BtnGenerateNetlist_Click(BtnFile, new RoutedEventArgs())));
+            menu.Items.Add(Item("Temizle", null, () => BtnClearCanvas_Click(BtnFile, new RoutedEventArgs())));
+
+            menu.IsOpen = true;
+        }
+
+        private void AddRecentFileItems(MenuItem menu)
+        {
             var recent = AppSettings.RecentFiles;
             if (recent.Count > 0)
             {
-                menu.Items.Add(new Separator());
                 foreach (var file in recent)
                 {
                     string filePath = file;
@@ -307,18 +323,6 @@ namespace CircuitAnalyzer.WPF
                     menu.Items.Add(item);
                 }
             }
-
-            menu.IsOpen = true;
-        }
-
-        private void BtnSave_Click(object sender, RoutedEventArgs e)
-        {
-            SaveCircuit();
-        }
-
-        private void BtnPrint_Click(object sender, RoutedEventArgs e)
-        {
-            PrintOrExportPdf();
         }
 
         public void PrintOrExportPdf(bool isSelfTest = false)

@@ -218,6 +218,7 @@ namespace CircuitAnalyzer.WPF
 
         private void CanvasScrollViewer_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
+            CloseElementDrawer(); // tuvale tıklamak açık eleman listesini kapatır
             bool isMiddle = e.ChangedButton == MouseButton.Middle;
             bool isSpaceLeft = e.ChangedButton == MouseButton.Left && Keyboard.IsKeyDown(Key.Space);
 

@@ -132,7 +132,7 @@ namespace CircuitAnalyzer.WPF
 
             RemovePreviewVisuals();
 
-            TxtStatus.Text = "Hazır — Araç kutusundan bir eleman seçin";
+            TxtStatus.Text = "Hazır — soldaki şeritten bir eleman seçin";
         }
 
         /// <summary>Normal modda bir elemanın ucuna tıklandığında tel çizimini başlatır.</summary>

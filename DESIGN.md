@@ -128,7 +128,7 @@ Tek aile: Segoe UI Variable. Başlıklarda Display, geri kalan her yerde Text ke
 - Köşe yarıçapları: kontroller 6, kartlar 8, açılan liste 12, eleman kartı 14, araç çubuğu 16. Cam ne kadar yüzerse köşesi o kadar yuvarlaktır.
 - Boşluklar 4'ün katlarıdır: 4, 8, 12, 16, 20, 24, 28.
 - Okuma panelinin iç kenar boşluğu 28–30 px, paragraf arası 10 px, bölüm arası 26 px.
-- Sağ panel 420 px genişliğindedir; sol şerit 72 px.
+- Sağ panel varsayılan 460 px genişliğindedir (kullanıcı ayırıcıyla 360–900 px arasında ayarlar); sol şerit 72 px. Kartlar arası boşluk 8 px.
 
 ## Cam kuralları
 
@@ -163,15 +163,15 @@ Akım ışığı teldeki gerçek akımı gösterir; süs değildir.
 
 ## Bileşenler
 
-**Başlık çubuğu.** 48 px yüksek, zeminin üstünde. Solda program adı ve dosya adı (soluk), sağda Dosya, Örnekler ve tema düğmesi. Tema düğmesinin ince bir kenarı vardır, diğerleri kenarsızdır.
+**Başlık çubuğu.** 48 px yüksek, zeminin üstünde. Solda program adı ve dosya adı (soluk), sağda Dosya, Örnekler, Yeni soru, ince bir ayraç, Yardım ve tema düğmesi. Düğmeler kenarsızdır. Dosya menüsünde: Aç, Son açılanlar, Kaydet, Yazdır / PDF, Netlist oluştur, Temizle.
 
 **Sol şerit.** 5 kategori: Pasif, Kaynak, Bağımlı, Anahtar, Ölçüm. Her öğede 22 px simge ve altında 12 px ad. Seçili öğenin hafif bir dolgusu ve solunda 3×16 px mavi çizgisi vardır. Seçili kategoriye yeniden tıklamak listeyi kapatır.
 
-**Açılan eleman listesi.** 188 px genişliğinde, tuvalin sol üstünde. Başında kategori adı (12 px, soluk), altında 36 px yüksekliğinde satırlar. Elemanlar buradan tuvale sürüklenir. Liste açıkken devre sağa kayar, böylece liste devrenin üstünü kapatmaz.
+**Açılan eleman listesi.** 220 px genişliğinde, tuvalin sol üstünde yüzer. Başında kategori adı (12 px, soluk), altında 40 px yüksekliğinde satırlar. Bir eleman seçilince liste kapanır ve eleman yerleştirilmeye başlar. Tuvale tıklamak, Esc ya da aynı kategoriye yeniden basmak da listeyi kapatır. Liste devrenin bir kısmını kısa süre örter; devre kaydırılmaz.
 
-**Araç çubuğu.** Seç, Tel, Döndür, Sil, ayraç, Geri al, yakınlaştırma oranı. Seçili araç hafif dolgulu.
+**Araç çubuğu.** Tuvalin alt ortasında: Tel çiz, ayraç, Geri al, Yinele, ayraç, uzaklaştır, yakınlaştırma oranı, yakınlaştır, sığdır. Tel çizme açıkken düğme hafif dolgulu olur. (Taslaktaki Seç, Döndür, Sil düğmeleri şimdilik yok; bunlar klavye ve sağ tıkla yapılıyor.)
 
-**Durum satırı.** Tuvalin sol üstünde, soluk renkte: "Düğüm Gerilimleri · DC · Çözüldü, 4 düğüm".
+**Durum satırı.** Tuvalin altında, doğrudan zeminin üstünde, soluk renkte: "Çözüldü — 4 düğüm, 7 çözüm adımı".
 
 **Okuma paneli.** Üstte yöntem seçimi ve Çöz düğmesi, ortada adım adım çözüm, altta Önceki / Sonraki. Denklemler kod bloğu içinde (paper-soft zemin, 8 px köşe, mono yazı).
 

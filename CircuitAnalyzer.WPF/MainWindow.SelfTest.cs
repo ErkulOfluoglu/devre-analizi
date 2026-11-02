@@ -198,6 +198,11 @@ namespace CircuitAnalyzer.WPF
             int w = Array.FindIndex(cmd, a => string.Equals(a, "--width", StringComparison.OrdinalIgnoreCase));
             if (w >= 0 && w + 1 < cmd.Length && double.TryParse(cmd[w + 1], out double width))
                 Width = width;
+            // Eleman listesi açık görüntü için: --drawer Pasif (şerit düğmesinin adıyla başlar)
+            int d = Array.FindIndex(cmd, a => string.Equals(a, "--drawer", StringComparison.OrdinalIgnoreCase));
+            if (d >= 0 && d + 1 < cmd.Length
+                && RailCategories.FirstOrDefault(c => (c.Rail.Tag as string ?? "").StartsWith(cmd[d + 1], StringComparison.OrdinalIgnoreCase)).Rail is { } drawerRail)
+                OpenElementDrawer(drawerRail);
             try
             {
                 if (options.OpenFile is { } filePath)

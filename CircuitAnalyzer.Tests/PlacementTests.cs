@@ -266,11 +266,11 @@ public class PlacementTests
     [Fact]
     public void AnalysisPanelMaxWidth_KeepsCanvasAtLeast400_WhenWindowAllows()
     {
-        // 1248 px yerleşim: 1248 - 280 sabit sütun - 400 canvas = 568
-        Assert.Equal(568, MainWindow.AnalysisPanelMaxWidthFor(1248));
+        // 1248 px yerleşim: 1248 - 88 sabit sütun - 400 canvas = 760
+        Assert.Equal(760, MainWindow.AnalysisPanelMaxWidthFor(1248));
         // Çok geniş pencere: 900'de durur
         Assert.Equal(900, MainWindow.AnalysisPanelMaxWidthFor(3000));
         // Çok dar pencere: panel en küçük genişliğine iner
-        Assert.Equal(360, MainWindow.AnalysisPanelMaxWidthFor(900));
+        Assert.Equal(360, MainWindow.AnalysisPanelMaxWidthFor(800));
     }
 }

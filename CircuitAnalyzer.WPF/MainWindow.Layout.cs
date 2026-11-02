@@ -19,8 +19,8 @@ namespace CircuitAnalyzer.WPF
         /// <summary>Çizim alanının (canvas) korumaya çalışılan en küçük genişliği (piksel).</summary>
         internal const double MinCanvasAreaWidth = 400;
 
-        // Kenar çubuğu (248) + iki boşluk sütunu (16 + 16) — MainWindow.xaml sütun tanımlarıyla aynı olmalı
-        private const double FixedColumnsWidth = 248 + 16 + 16;
+        // Sol şerit (72) + ayırıcı (8) + sağ kenar boşluğu (8) — MainWindow.xaml sütun tanımlarıyla aynı olmalı
+        private const double FixedColumnsWidth = 72 + 8 + 8;
 
         /// <summary>Kaydedilmiş panel genişliğini geri yükler ve pencere boyutuna göre üst sınırı izler.</summary>
         private void InitializeAnalysisPanelLayout()

@@ -50,7 +50,7 @@ namespace CircuitAnalyzer.WPF
                 ("Boş alanda sürükle", "Toplu seçim"),
                 ("Çift tık", "Değeri düzenle"),
                 ("Sağ tık", "Döndür / düzenle / sil"),
-                ("Araç kutusu", "Eleman seç, tuvalde tıkla: bırak (sağ tık: vazgeç)"),
+                ("Sol şerit", "Kategori aç, eleman seç, tuvalde tıkla: bırak (sağ tık: vazgeç)"),
                 ("R (yerleştirirken)", "Elemanı döndür"),
                 ("Esc", "Yerleştirmeyi / tel çizmeyi bırak"),
             }),
@@ -489,6 +489,8 @@ namespace CircuitAnalyzer.WPF
 
             if (key == Key.Escape)
             {
+                if (CloseElementDrawer())
+                    return true;
                 if (CancelPlacement(announce: true))
                     return true;
                 if (_isWirePressPending)
