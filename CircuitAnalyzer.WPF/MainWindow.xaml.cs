@@ -66,6 +66,9 @@ namespace CircuitAnalyzer.WPF
             }
             InitializeComponent();
             ThemeManager.ApplyTitleBar(this);
+            // Ekran testleri pencereyi kendisi boyar; Mica yalnız gerçek açılışta
+            if (!HasAnySelfTest(Environment.GetCommandLineArgs()))
+                SourceInitialized += (_, _) => WindowBackdrop.TryApplyMica(this);
             EventHandler onThemeChanged = (_, _) =>
             {
                 if (!Dispatcher.HasShutdownStarted && !Dispatcher.HasShutdownFinished)
