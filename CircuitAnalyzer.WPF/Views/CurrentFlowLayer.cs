@@ -42,8 +42,8 @@ namespace CircuitAnalyzer.WPF.Views
 
         // Görünürlük: seçim yokken akımla orantılı soluk, seçilen kol tam, ötekiler daha soluk
         private const double IdleStrength = 0.42;
-        private const double OthersWhenSelected = 0.16;
-        private const double DimmedWireOpacity = 0.6;
+        private const double OthersWhenSelected = 0.05;
+        private const double DimmedWireOpacity = 0.45;
 
         private static readonly Stopwatch Clock = Stopwatch.StartNew();
 

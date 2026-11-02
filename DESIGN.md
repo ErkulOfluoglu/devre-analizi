@@ -152,18 +152,17 @@ Saydamlık kapalıysa (Windows ayarı, pil tasarrufu ya da yüksek karşıtlık 
 
 ## Akım ışığı
 
-Akım ışığı teldeki gerçek akımı gösterir; süs değildir.
+Akım ışığı teldeki gerçek akımı gösterir; süs değildir. İlk sürüm (yalnız seçince yanan kesik çizgi) kullanıcıya "kesik çizgi gibi, devre durgun, AC salınımı garip" geldi; aşağıdaki ikinci sürüm onun yerini aldı.
 
-- **Ne zaman:** yalnız bir eleman seçilince. Hiçbir şey seçili değilse ışık yanmaz.
-- **Nerede:** seçili elemanın kendi kolunda, düğümden düğüme. Diğer teller hafifçe soluklaşır (opaklık %55), seçili elemanın çizgisi mavi olur.
-- **Yön:** akımın gerçek yönünde. Birden çok kaynak varsa uydurma tek bir yol çizilmez; her telin akımı çözümden gelir.
-- **Hız:** akımın büyüklüğüyle artar ama sakindir. Bir çizgi parçasının 48 px yol alması, en büyük akımda yaklaşık 1,7 sn, küçük akımlarda 3 sn sürer (hız oranı akım oranının karekökü). Bütün teller aynı düzende akar; her tel kendi rastgele desenini çizmez.
-- **Görünüş:** 3 px'lik parlak çizgi ve altında 10 px'lik soluk hale; 14 px çizgi, 34 px boşluk.
-- **Süreklilik:** darbeler kol boyunca kopmadan akar; her telin deseni, seçili elemanın giriş ucundan kol boyunca ölçülen uzaklıkla başlar. Aynı akımı taşıyan seri elemanların içinden geçilir, akımın bölündüğü düğümde kol biter.
-- **Eleman kartı:** ışıkla birlikte, elemanın sağında (sığmazsa solunda) cam bir kart açılır: ad ve değer, akım, yön ("Düğüm 2 → 3"), uçlardaki gerilim, güç (kaynakta "verir") ve DC'de akımın girdiği düğümdeki denge ("Düğüm 2: giren … = çıkan …"). Kart fareyi engellemez, kaydırma ve yakınlaştırmada elemanı izler. AC çözümde kart açılır ama denge satırı yoktur (fazörlerin genlikleri toplanmaz).
+- **Ne zaman:** çözümden sonra bütün devrede soluk bir akış görünür (akımla orantılı, %15–42 görünürlük). Bir eleman seçilince onun kolu tam parlar, öteki kollar neredeyse söner (%5) ve öteki teller soluklaşır (%45).
+- **Yön:** akımın gerçek yönünde. Birden çok kaynak varsa uydurma tek bir yol çizilmez; her telin akımı çözümden gelir (düğümlerde KCL).
+- **Hız:** her telde aynı ve sakin, saniyede 30 px. Akımın büyüklüğünü hız değil ışığın kalınlığı ve parlaklığı gösterir (akım oranının karekökü). Farklı hızlar "rastgele ışıklar" gibi görünüyordu.
+- **Görünüş:** kuyruklu darbe; 48 px'lik dönemde ince, 34 px'lik kuyruk, 16 px'lik gövde, parlak yuvarlak baş. Seçili kolda başın çevresinde bulanık parıltı da vardır (parıltı filtresi pahalı olduğu için yalnız orada).
+- **Süreklilik:** her telin deseni, kaynakların giriş ucundan akım yönünde ölçülen en kısa yol uzunluğuyla başlar. Darbeler dalga gibi kaynaktan çıkar, düğümlerde kollara ayrılır, tellerde kopmaz.
+- **Eleman kartı:** seçimle birlikte, elemanın sağında (sığmazsa solunda) cam bir kart açılır: ad ve değer, akım, yön ("Düğüm 2 → 3"), uçlardaki gerilim, güç (kaynakta "verir") ve DC'de akımın girdiği düğümdeki denge ("Düğüm 2: giren … = çıkan …"). Kart fareyi engellemez, kaydırma ve yakınlaştırmada elemanı izler. AC çözümde denge satırı yerine salınımın ne anlattığı yazar (fazörlerin genlikleri toplanmaz).
 - **Alıştırma modu:** sonuçlar gizli olduğundan ışık da kart da görünmez.
-- **AC devreler:** akım sürekli yön değiştirdiği için ışık akmaz, kol boyunca ileri geri salınır. Salınım yavaşlatılmıştır (bir salınım 2 sn; 50 Hz'lik akım 100 kat yavaş). Genişliği akımın büyüklüğüyle artar, zamanlaması akımın fazıdır: yer değiştirme sin(ωt + φ) ile gider, yani akım cos(ωt + φ). Bütün AC kolları aynı saati kullanır; iki elemanı sırayla seçen, örneğin kondansatör akımının önde gittiğini görür. Teldeki akımlar fazör olarak toplanır (90° farklı iki 1 A'lik akım ortak telde √2 A eder). Kartta akım ve gerilim açısıyla yazar, alt satırda salınımın ne anlattığı açıklanır.
-- **Hareket azaltma:** Windows'ta animasyonlar kapalıysa ışık akmaz, sabit parlak çizgi olarak görünür.
+- **AC devreler:** akım sürekli yön değiştirir; ışık bir yöne gider, yavaşlar, durur ve geri döner (yavaşlatılmış, bir gidiş-geliş 3,2 sn; genlik 40–90 px). Başı her zaman gittiği yöndedir, akım sıfırdan geçerken söner. Yer değiştirme sin(ωt + φ) ile gider, yani akım cos(ωt + φ). Bütün teller aynı saati kullanır; örneğin paralel RC'de kondansatör kolunun dirençten çeyrek tur önde gittiği aynı anda görülür. Teldeki akımlar fazör olarak toplanır (90° farklı iki 1 A'lik akım ortak telde √2 A eder).
+- **Hareket azaltma:** Windows'ta animasyonlar kapalıysa ışık hareket etmez, durağan darbeler olarak görünür.
 
 ## Bileşenler
 
