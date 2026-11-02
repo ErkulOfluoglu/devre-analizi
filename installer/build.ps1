@@ -56,7 +56,7 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller başarısız" }
 
 Step "WPF uygulaması yayımlanıyor (.NET kendi içinde)"
 & $Dotnet publish (Join-Path $Root "CircuitAnalyzer.WPF\CircuitAnalyzer.WPF.csproj") `
-    -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false `
+    -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishReadyToRun=true `
     -p:Version=$Version -o $App -nologo
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish başarısız" }
 

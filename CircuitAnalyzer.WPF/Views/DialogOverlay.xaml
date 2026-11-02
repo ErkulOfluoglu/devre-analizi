@@ -10,7 +10,8 @@
     -->
     <Grid>
         <!-- Karartma perdesi: tıklamaların arkaya geçmesini engeller -->
-        <Border Background="{DynamicResource Brush.Overlay.Scrim}"
+        <Border x:Name="Scrim"
+                Background="{DynamicResource Brush.Overlay.Scrim}"
                 MouseLeftButtonDown="Absorb_MouseDown"
                 MouseRightButtonDown="Absorb_MouseDown"/>
 

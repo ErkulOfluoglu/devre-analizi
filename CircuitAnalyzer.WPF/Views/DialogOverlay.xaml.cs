@@ -67,14 +67,16 @@ namespace CircuitAnalyzer.WPF.Views
                 return;
             }
 
-            var duration = TimeSpan.FromMilliseconds(180);
+            // Pencere boyu katmanın saydamlığı canlandırılmaz (her karede pencere büyüklüğünde ek
+            // çizim demekti): yalnız düz renkli perde ve kart ayrı ayrı belirir. Kart açılış
+            // süresince gölgesiyle birlikte tek görüntü olarak önbelleklenir, bitince keskinleşir.
+            var duration = TimeSpan.FromMilliseconds(150);
             var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
-            // Açılış süresince kart gölgesiyle birlikte tek bir görüntü olarak önbelleklenir:
-            // gölge ve yazı her karede yeniden çizilmez; animasyon bitince keskin çizime döner
             CardBorder.CacheMode = new BitmapCache { RenderAtScale = 1 };
             var grow = new DoubleAnimation(0.97, 1.0, duration) { EasingFunction = ease };
             grow.Completed += (_, _) => CardBorder.CacheMode = null;
-            BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
+            Scrim.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration));
+            CardBorder.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
             CardScale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
             CardScale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.97, 1.0, duration) { EasingFunction = ease });
         }
@@ -158,6 +160,9 @@ namespace CircuitAnalyzer.WPF.Views
                 Visibility = Visibility.Collapsed;
                 BeginAnimation(OpacityProperty, null);
                 Opacity = 1;
+                Scrim.BeginAnimation(OpacityProperty, null);
+                CardBorder.BeginAnimation(OpacityProperty, null);
+                CardBorder.CacheMode = null;
                 BodyHost.Content = null;
                 Closed?.Invoke();
                 if (_modalFrame != null)
@@ -170,9 +175,12 @@ namespace CircuitAnalyzer.WPF.Views
                 return;
             }
 
-            var fade = new DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(120));
+            var fadeTime = TimeSpan.FromMilliseconds(110);
+            CardBorder.CacheMode = new BitmapCache { RenderAtScale = 1 };
+            var fade = new DoubleAnimation(0, fadeTime);
             fade.Completed += (_, _) => Finish();
-            BeginAnimation(OpacityProperty, fade);
+            Scrim.BeginAnimation(OpacityProperty, new DoubleAnimation(0, fadeTime));
+            CardBorder.BeginAnimation(OpacityProperty, fade);
         }
 
         private void BtnOk_Click(object sender, RoutedEventArgs e) => Close();
