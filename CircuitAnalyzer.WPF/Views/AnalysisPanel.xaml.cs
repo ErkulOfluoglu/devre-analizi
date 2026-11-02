@@ -89,7 +89,7 @@ public partial class AnalysisPanel : UserControl
     public Func<string?, CancellationToken, Task<LlmPullStatusDto>>? LlmStartPull { get; set; }
     public Func<CancellationToken, Task<LlmPullStatusDto?>>? LlmGetPull { get; set; }
     public Func<CancellationToken, Task<bool>>? LlmCancelPull { get; set; }
-    public FrameworkElement ResultsCard => (FrameworkElement)ResultsScrollViewer.Parent;
+    public FrameworkElement ResultsCard => ResultsScrollViewer;
     public AnalysisRequestDto? CurrentRequest { get; set; }
     public AssistantView? CurrentAssistantView { get; private set; }
 
@@ -709,13 +709,16 @@ public partial class AnalysisPanel : UserControl
         CurrentPracticeView = null;
         ClearResultsContent();
 
-        // 1. Durum Satırı
+        // 1. Durum satırı: başarıda yalnız küçük bir onay satırı, uyarıda şerit
         bool isSuccess = string.Equals(response.Status, "success", StringComparison.OrdinalIgnoreCase);
         var statusBorder = new Border
         {
-            Margin = new Thickness(0, 0, 0, 12)
+            Margin = new Thickness(0, 0, 0, isSuccess ? 14 : 12)
         };
-        statusBorder.SetResourceReference(StyleProperty, isSuccess ? "InfoBar.Success" : "InfoBar.Warning");
+        if (isSuccess)
+            statusBorder.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Brush.Success");
+        else
+            statusBorder.SetResourceReference(StyleProperty, "InfoBar.Warning");
         var sp = new StackPanel { Orientation = Orientation.Horizontal };
         var icon = new Icon
         {
@@ -729,6 +732,7 @@ public partial class AnalysisPanel : UserControl
         {
             Text = isSuccess ? "Çözüm başarılı" : "Uyarılarla çözüldü",
             FontWeight = FontWeights.SemiBold,
+            FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center
         };
         sp.Children.Add(icon);
@@ -747,12 +751,6 @@ public partial class AnalysisPanel : UserControl
             AddMessageCard(msg);
         }
 
-        // Yapay zekâ asistanı
-        if (CurrentAssistantView != null)
-        {
-            ResultsContainer.Children.Add(CurrentAssistantView);
-        }
-
         // Zaman Grafiği (Geçici durum analizi başarılıysa)
         var transientData = response.Transient ?? response.Results?.Transient;
         if (transientData != null)
@@ -762,7 +760,7 @@ public partial class AnalysisPanel : UserControl
                 Padding = new Thickness(12),
                 Margin = new Thickness(0, 0, 0, 12)
             };
-            plotCard.SetResourceReference(StyleProperty, "Card");
+            plotCard.SetResourceReference(StyleProperty, "Card.Embedded");
 
             var plotView = new TransientPlotView();
             plotView.LoadData(transientData);
@@ -785,7 +783,7 @@ public partial class AnalysisPanel : UserControl
                 Padding = new Thickness(12),
                 Margin = new Thickness(0, 0, 0, 12)
             };
-            powerCard.SetResourceReference(StyleProperty, "Card");
+            powerCard.SetResourceReference(StyleProperty, "Card.Embedded");
 
             var triangleView = new PowerTriangleView();
             triangleView.LoadData(powerSummary);
@@ -800,7 +798,7 @@ public partial class AnalysisPanel : UserControl
                 Padding = new Thickness(12),
                 Margin = new Thickness(0, 0, 0, 12)
             };
-            powerCard.SetResourceReference(StyleProperty, "Card");
+            powerCard.SetResourceReference(StyleProperty, "Card.Embedded");
 
             var triangleView = new PowerTriangleView();
             triangleView.LoadData(threePhase);
@@ -818,7 +816,7 @@ public partial class AnalysisPanel : UserControl
                 Padding = new Thickness(12),
                 Margin = new Thickness(0, 0, 0, 12)
             };
-            resCard.SetResourceReference(StyleProperty, "Card");
+            resCard.SetResourceReference(StyleProperty, "Card.Embedded");
 
             var resView = new ResonanceCurveView();
             resView.LoadData(resonanceData);
@@ -846,6 +844,7 @@ public partial class AnalysisPanel : UserControl
             _viewToggleBorder = CreateSegmentedToggle();
             ResultsContainer.Children.Add(_viewToggleBorder);
             ResultsContainer.Children.Add(_resultsPanel);
+            AddAssistantAtEnd();
 
             UpdateToggleButtonsState();
             UpdateViewVisibility();
@@ -855,7 +854,16 @@ public partial class AnalysisPanel : UserControl
             IsExplanationViewSelected = false;
             ResultsContainer.Children.Add(_resultsPanel);
             _resultsPanel.Visibility = Visibility.Visible;
+            AddAssistantAtEnd();
+            UpdateStepNav();
         }
+    }
+
+    // Yapay zekâya sor: çözüm okunduktan sonra, en altta
+    private void AddAssistantAtEnd()
+    {
+        if (CurrentAssistantView != null)
+            ResultsContainer.Children.Add(CurrentAssistantView);
     }
 
     private void UpdateToggleButtonsState()
@@ -898,7 +906,101 @@ public partial class AnalysisPanel : UserControl
             }
             _resultsPanel.Visibility = Visibility.Visible;
         }
+        UpdateStepNav();
     }
+
+    // ── Adımlar arası geçiş (DESIGN.md, "Okuma paneli") ──
+    // Çözüm sayfalara bölünmez: Önceki / Sonraki bir bölümün başına kaydırır,
+    // etiket o an okunan bölümü gösterir.
+
+    /// <summary>Anlatımdaki bölümler (her biri bir adım); anlatım görünmüyorsa boş.</summary>
+    internal IReadOnlyList<FrameworkElement> StepSections =>
+        IsExplanationViewSelected && _explanationPanel != null && ResultsContainer.Children.Contains(_explanationPanel)
+            ? _explanationPanel.Children.OfType<FrameworkElement>().ToList()
+            : Array.Empty<FrameworkElement>();
+
+    /// <summary>Okunan adımın sırası (0'dan): üst kenarı görünümün üstünü geçmiş son bölüm.</summary>
+    internal int CurrentStepIndex
+    {
+        get
+        {
+            var sections = StepSections;
+            if (sections.Count == 0)
+                return -1;
+            int current = 0;
+            for (int i = 0; i < sections.Count; i++)
+            {
+                if (SectionTop(sections[i]) <= ResultsScrollViewer.VerticalOffset + 24)
+                    current = i;
+            }
+            // En alta inildiyse son bölümler hiç tepeye çıkamaz: görünen son başlığı say
+            if (ResultsScrollViewer.ScrollableHeight > 0 && ResultsScrollViewer.VerticalOffset >= ResultsScrollViewer.ScrollableHeight - 1)
+            {
+                for (int i = sections.Count - 1; i > current; i--)
+                {
+                    if (SectionTop(sections[i]) <= ResultsScrollViewer.VerticalOffset + ResultsScrollViewer.ViewportHeight - 40)
+                    {
+                        current = i;
+                        break;
+                    }
+                }
+            }
+            return current;
+        }
+    }
+
+    private double SectionTop(FrameworkElement section)
+    {
+        try
+        {
+            return section.TranslatePoint(new Point(0, 0), ResultsContainer).Y + ResultsContainer.Margin.Top;
+        }
+        catch (InvalidOperationException)
+        {
+            return 0; // henüz yerleşmemiş
+        }
+    }
+
+    private void UpdateStepNav()
+    {
+        var sections = StepSections;
+        if (sections.Count < 2)
+        {
+            StepNavBar.Visibility = Visibility.Collapsed;
+            return;
+        }
+        StepNavBar.Visibility = Visibility.Visible;
+        int k = Math.Max(0, CurrentStepIndex);
+        string title = sections[k] is StackPanel sp && sp.Children.Count > 0 && sp.Children[0] is TextBlock t ? t.Text : "";
+        TxtStepLabel.Text = string.IsNullOrEmpty(title)
+            ? $"Adım {k + 1} / {sections.Count}"
+            : $"Adım {k + 1} / {sections.Count} · {title}";
+        BtnPrevStep.IsEnabled = k > 0 || ResultsScrollViewer.VerticalOffset > SectionTop(sections[0]) + 1;
+        BtnNextStep.IsEnabled = k < sections.Count - 1;
+    }
+
+    /// <summary>Bir sonraki (+1) ya da önceki (−1) adımın başına kaydırır.</summary>
+    internal void GoToStep(int delta)
+    {
+        var sections = StepSections;
+        if (sections.Count == 0)
+            return;
+        int k = Math.Max(0, CurrentStepIndex);
+        int target = k + delta;
+        // Bir bölümün ortasındaysak "Önceki" önce o bölümün başına döner
+        if (delta < 0 && ResultsScrollViewer.VerticalOffset > SectionTop(sections[k]) + 1)
+            target = k;
+        target = Math.Clamp(target, 0, sections.Count - 1);
+        ResultsScrollViewer.ScrollToVerticalOffset(Math.Max(0, SectionTop(sections[target]) - 8));
+        ResultsScrollViewer.UpdateLayout();
+        UpdateStepNav();
+    }
+
+    private void BtnPrevStep_Click(object sender, RoutedEventArgs e) => GoToStep(-1);
+
+    private void BtnNextStep_Click(object sender, RoutedEventArgs e) => GoToStep(+1);
+
+    private void ResultsScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e) => UpdateStepNav();
 
     private Border CreateSegmentedToggle()
     {
@@ -1552,6 +1654,8 @@ public partial class AnalysisPanel : UserControl
         BannerStale.Visibility = Visibility.Collapsed;
         ResultsScrollViewer.Opacity = 1.0;
         ResultsContainer.Children.Clear();
+        StepNavBar.Visibility = Visibility.Collapsed;
+        ResultsScrollViewer.ScrollToVerticalOffset(0);
         _explanationPanel = null;
         _resultsPanel = null;
         _viewToggleBorder = null;

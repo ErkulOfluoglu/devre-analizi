@@ -175,7 +175,9 @@ Akım ışığı teldeki gerçek akımı gösterir; süs değildir.
 
 **Durum satırı.** Tuvalin altında, doğrudan zeminin üstünde, soluk renkte: "Çözüldü — 4 düğüm, 7 çözüm adımı".
 
-**Okuma paneli.** Üstte yöntem seçimi ve Çöz düğmesi, ortada adım adım çözüm, altta Önceki / Sonraki. Denklemler kod bloğu içinde (paper-soft zemin, 8 px köşe, mono yazı).
+**Okuma paneli.** Tek bir kâğıt kart. Üstte yöntem kutusu ile Çöz düğmesi yan yana; altında analiz türü ("DC analiz") ve çözücü durumu, gerekiyorsa terminal, frekans ve Etkin/Tepe seçimleri, en altta Alıştırma modu. İnce bir çizginin altında çözüm başlar: başarıda yalnız küçük yeşil bir "Çözüm başarılı" satırı (uyarı varsa sarı şerit), Anlatım / Sonuçlar seçimi, adım adım anlatım ve en sonda "Yapay zekâya sor". Denklemler kod bloğu içinde (paper-soft zemin, 8 px köşe, mono yazı). Grafikler kart içinde kart olmasın diye yalnız ince kenarlı kutularda durur.
+
+**Adım geçişi.** Kâğıdın altında "‹ Önceki · Adım 2 / 8 · Düğüm Denklemleri · Sonraki ›". Anlatımın her bölümü bir adımdır. Önceki / Sonraki çözümü sayfalara bölmez, ilgili bölümün başına kaydırır; etiket kaydırdıkça o an okunan bölümü gösterir. Sonuçlar görünümünde ve tek bölümlük anlatımda gizlenir. Alttaki durum satırındaki adım sayısı aynı bölüm sayısıdır.
 
 **Düğmeler.** Asıl düğme (Çöz) mavi dolgulu, beyaz yazılı, yarı kalın. İkincil düğmeler ince kenarlı, yarı saydam beyaz. Hepsi 6 px köşeli; Notion'un hap biçimli düğmeleri kullanılmaz.
 

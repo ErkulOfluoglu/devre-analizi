@@ -43,6 +43,15 @@
         <Setter Property="Effect" Value="{DynamicResource Effect.Card}"/>
     </Style>
 
+    <!-- Okuma panelinin içindeki grafik kutuları: kart içinde kart olmasın, yalnız ince kenar -->
+    <Style x:Key="Card.Embedded" TargetType="Border">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="12"/>
+    </Style>
+
     <!-- İç blok: formül kutusu, küçük değer kutuları -->
     <Style x:Key="Card.Inset" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.Bg.SurfaceAlt}"/>

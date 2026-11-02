@@ -270,9 +270,11 @@ namespace CircuitAnalyzer.WPF
                 {
                     _overlay?.ShowResults(netlist, _elements, _wires, response);
                     _hasResults = true;
+                    // Adım sayısı sağ paneldeki anlatımla aynı olsun (yoksa eski çözüm adımları)
+                    int stepCount = response.Results?.Explanation?.Count is > 0 and int n ? n : response.SolutionSteps.Count;
                     TxtStatus.Text = response.Status == "success"
-                        ? response.SolutionSteps.Count > 0
-                            ? $"Çözüldü — {netlist.NodeCount} düğüm, {response.SolutionSteps.Count} çözüm adımı"
+                        ? stepCount > 0
+                            ? $"Çözüldü — {netlist.NodeCount} düğüm, {stepCount} adım"
                             : $"Çözüldü — {netlist.NodeCount} düğüm"
                         : "Uyarılarla çözüldü — ayrıntılar sağ panelde";
                 }
