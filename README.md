@@ -60,6 +60,9 @@ DC ve AC (fazör) devrelerin hepsinde çalışır; AC değerleri [etkin ya da te
 
 <table>
   <tr>
+    <td colspan="2"><img src="docs/ekran/12-akim-isigi.png" alt="Akım ışığı: seçilen direncin kolu parlıyor, yanında değerlerini gösteren cam kart"><br><sub><b>Akım ışığı</b> — çözümden sonra tellerde akımın gerçek yönünde ışık akar; bir elemana tıklayınca kolu parlar ve yanında akımını, gerilimini, gücünü ve düğümdeki akım dengesini gösteren bir kart açılır. AC devrelerde ışık yavaşlatılmış olarak gidip gelir, fazı görünür.</sub></td>
+  </tr>
+  <tr>
     <td width="50%"><img src="docs/ekran/02-alistirma.png" alt="Alıştırma modu: cevaplar kontrol ediliyor"><br><sub><b>Alıştırma modu</b> — önce siz çözün. Yanlışsa <i>neden</i> yanlış olduğunu söyler: işaret hatası, birim öneki, tepe/etkin değer karışıklığı…</sub></td>
     <td width="50%"><img src="docs/ekran/07-delta-y.png" alt="Wheatstone köprüsü: Thevenin eşdeğeri ve Δ–Y dönüşümü"><br><sub><b>Δ–Y dönüşümü</b> — Wheatstone köprüsünün Thevenin eşdeğeri, adım adım.</sub></td>
   </tr>
@@ -73,7 +76,7 @@ DC ve AC (fazör) devrelerin hepsinde çalışır; AC değerleri [etkin ya da te
   </tr>
 </table>
 
-**Ayrıca:** sürükle-bırak çizim · bağımlı kaynaklar (GKGK, GKAK, AKGK, AKAK) · anahtarlar (t = 0) · ölçüm probu · hazır örnek devreler · 4 haneli **soru kodları** (öğretmen kodu paylaşır, bütün sınıf aynı soruyu açar) · kaydet/aç (`.devre`) · geri al/yinele · yazdır/PDF · ondalık virgül (`4,7k` de `4.7k` de yazılabilir) · açık ve koyu tema.
+**Ayrıca:** sürükle-bırak çizim · bağımlı kaynaklar (GKGK, GKAK, AKGK, AKAK) · anahtarlar (t = 0) · ölçüm probu · hazır örnek devreler · 4 haneli **soru kodları** (öğretmen kodu paylaşır, bütün sınıf aynı soruyu açar) · kaydet/aç (`.devre`) · geri al/yinele · yazdır/PDF · ondalık virgül (`4,7k` de `4.7k` de yazılabilir) · fare tekerleğiyle yakınlaştırma · adım adım açılan çözüm zinciri · Windows 11 görünümü, açık ve koyu tema.
 
 ## Kurulum
 
