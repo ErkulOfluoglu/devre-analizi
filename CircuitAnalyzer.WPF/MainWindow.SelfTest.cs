@@ -289,6 +289,32 @@ namespace CircuitAnalyzer.WPF
                     System.Windows.Media.CompositionTarget.Rendering -= onFrame;
                     summary.AppendLine($"Kare/sn: {frames / 3.0:0.0}");
                 }
+                // Diyalog akıcılığı: --dialog-timing N, diyaloğu N kez açıp kapatır; ilk karenin gecikmesini
+                // ve açılıştaki en uzun kare boşluğunu yazar (her açılış ayrı satır)
+                int dt = Array.FindIndex(cmd, a => string.Equals(a, "--dialog-timing", StringComparison.OrdinalIgnoreCase));
+                if (dt >= 0 && dt + 1 < cmd.Length && int.TryParse(cmd[dt + 1], out int repeats))
+                {
+                    for (int n = 0; n < repeats; n++)
+                    {
+                        var stamps = new List<double>();
+                        var clock = System.Diagnostics.Stopwatch.StartNew();
+                        EventHandler onFrame = (_, _) => stamps.Add(clock.Elapsed.TotalMilliseconds);
+                        System.Windows.Media.CompositionTarget.Rendering += onFrame;
+                        var closer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+                        closer.Tick += (_, _) => { closer.Stop(); DialogOverlay.Close(); };
+                        closer.Start();
+                        clock.Restart();
+                        Inform("Yazdır / PDF", "Önce devreyi çözün. Yazdırılacak güncel bir çözüm yok.");
+                        System.Windows.Media.CompositionTarget.Rendering -= onFrame;
+                        var opening = stamps.Where(t => t <= 400).ToList();
+                        double maxGap = 0;
+                        for (int k = 1; k < opening.Count; k++)
+                            maxGap = Math.Max(maxGap, opening[k] - opening[k - 1]);
+                        summary.AppendLine($"Diyalog {n + 1}: ilk kare {(opening.Count > 0 ? opening[0] : -1):0} ms, " +
+                                           $"ilk 400 ms'de {opening.Count} kare, en uzun boşluk {maxGap:0} ms");
+                        await Task.Delay(300);
+                    }
+                }
 
                 // Düzenin ve etiketlerin çizilmesini bekle
                 await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
