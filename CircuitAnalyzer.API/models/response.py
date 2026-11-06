@@ -452,6 +452,14 @@ class AnswerCheckResponse(BaseModel):
     total: int = Field(..., description="Değerlendirilen soru sayısı")
 
 
+class LlmDeviceOption(BaseModel):
+    """'Çalıştığı yer' seçeneklerinden biri."""
+    id: str = Field(..., description="auto | gpu | cpu | npu")
+    label: str = Field(..., description="Görünen ad")
+    available: bool = Field(..., description="Bu bilgisayarda seçilebilir mi")
+    note: str = Field(default="", description="Seçeneğin altındaki Türkçe açıklama ya da kullanılamama sebebi")
+
+
 class LlmStatusResponse(BaseModel):
     """GET /llm/status — yerel yapay zekâ (Ollama) durumu."""
     available: bool = Field(..., description="Ollama çalışıyor mu")
@@ -470,6 +478,14 @@ class LlmStatusResponse(BaseModel):
         description="Belleğe göre uygunluk: good (≥16 GB), ok (8–16 GB), low (<8 GB), unknown")
     approx_size_gb: float = Field(default=0.0, description="Önerilen modelin yaklaşık indirme boyutu (GB)")
     advice_message: str = Field(default="", description="Belleğe göre Türkçe tavsiye cümlesi")
+    device_options: List[LlmDeviceOption] = Field(
+        default_factory=list, description="Çalıştığı yer seçenekleri (Otomatik, Ekran kartı, İşlemci, NPU)")
+    auto_device: str = Field(default="cpu", description="Otomatik seçilince kullanılacak yer: npu | gpu | cpu")
+    placement: Optional[str] = Field(
+        default=None, description="Modelin şu an çalıştığı yer (ör. 'ekran kartında'); bilinmiyorsa boş")
+    gpu_needs_restart: bool = Field(
+        default=False,
+        description="Tümleşik ekran kartı var ama Ollama onu kullanacak ayarla açılmadı (POST /llm/gpu/enable)")
 
 
 class LlmPullStatus(BaseModel):
@@ -504,6 +520,9 @@ class LlmAnswerResponse(BaseModel):
     numbers: List[LlmNumberCheck] = Field(default_factory=list, description="Cevaptaki sayıların denetimi")
     note: Optional[str] = Field(
         default=None, description="Doğrulanamayan / gizlenen sayılar için Türkçe uyarı")
+    device: str = Field(default="ollama", description="Cevabın üretildiği yer: npu | gpu | cpu | ollama")
+    placement: Optional[str] = Field(
+        default=None, description="Cevaptan sonra modelin çalıştığı yer (ör. 'ekran kartında')")
 
 
 class TransientQuantityResult(BaseModel):

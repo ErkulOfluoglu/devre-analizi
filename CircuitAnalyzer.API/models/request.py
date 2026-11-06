@@ -407,6 +407,9 @@ class LlmAskRequest(AnalysisRequest):
     """
     question: str = Field(..., min_length=1, max_length=1000, description="Öğrencinin sorusu")
     model: Optional[str] = Field(default=None, description="Ollama model adı; boşsa otomatik seçilir")
+    device: Optional[str] = Field(
+        default="auto",
+        description="Çalıştığı yer: auto (en hızlısı), gpu (ekran kartı), cpu (işlemci), npu (FastFlowLM)")
     history: List[ChatTurn] = Field(default_factory=list, description="Önceki soru-cevaplar (en eski önce)")
     practice: bool = Field(
         default=False, description="Alıştırma sürüyor mu — True ise model sonuçları görmez, cevap sayıları gizlenir")

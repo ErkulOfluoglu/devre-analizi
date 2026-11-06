@@ -420,16 +420,19 @@ def answer_question(
     is_dc: bool, frequency: Optional[float], terminals: Optional[TheveninTerminals],
     question: str, history: Sequence[Dict[str, str]], model: str,
     practice: bool = False, practice_questions: Sequence[PracticeQuestion] = (),
+    base: Optional[str] = None, options: Optional[Dict[str, object]] = None,
 ) -> dict:
     """
     Soruyu modele sorar, cevaptaki sayıları denetler.
+    base / options: çalıştığı yer (NPU sunucusu, işlemci için num_gpu = 0); bkz. llm/devices.py
     Dönüş: {answer, numbers: [(text, status)], note}
     Ollama hataları (OllamaUnavailable / OllamaError) çağırana iletilir.
     """
     messages = build_messages(parsed, results, analysis_type, is_dc, frequency, terminals,
                               question, history, practice, practice_questions)
     # LaTeX/Markdown → düz metin (sayı denetiminden ÖNCE: "$12$" de yakalansın)
-    raw = to_plain_text(ollama.chat(model, messages))
+    extra = {k: v for k, v in (("base", base), ("options", options)) if v}
+    raw = to_plain_text(ollama.chat(model, messages, **extra))
 
     user_texts = [question] + [t.get("content", "") for t in history if t.get("role") == "user"]
     given = known_from(texts=[circuit_text(parsed, is_dc, frequency),

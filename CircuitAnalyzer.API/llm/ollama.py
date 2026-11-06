@@ -49,8 +49,8 @@ def base_url() -> str:
     return host.rstrip("/").replace("://0.0.0.0", "://127.0.0.1")
 
 
-def _request(path: str, payload: Optional[dict], timeout: float) -> dict:
-    url = base_url() + path
+def _request(path: str, payload: Optional[dict], timeout: float, base: Optional[str] = None) -> dict:
+    url = (base or base_url()) + path
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = urllib.request.Request(
         url, data=data, method="POST" if data is not None else "GET",
@@ -103,27 +103,52 @@ def pick_model(requested: Optional[str], installed: List[str],
     return installed[0] if installed else None
 
 
-def chat(model: str, messages: List[Dict[str, str]], num_ctx: int = 8192) -> str:
-    """Tek seferlik (akışsız) sohbet isteği; modelin cevap metnini döndürür."""
+def running_models() -> Optional[List[dict]]:
+    """Ollama'da bellekte duran modeller (/api/ps: size ve size_vram ile). Hata fırlatmaz."""
+    try:
+        return _request("/api/ps", None, STATUS_TIMEOUT).get("models", [])
+    except (OllamaUnavailable, OllamaError, ValueError):
+        return None
+
+
+def unload_all():
+    """Ollama'nın bellekte tuttuğu modelleri hemen boşaltır (keep_alive = 0). Hata fırlatmaz."""
+    for m in running_models() or []:
+        name = m.get("name") or m.get("model")
+        if not name:
+            continue
+        try:
+            _request("/api/generate", {"model": name, "keep_alive": 0}, STATUS_TIMEOUT)
+        except (OllamaUnavailable, OllamaError, ValueError):
+            pass
+
+
+def chat(model: str, messages: List[Dict[str, str]], num_ctx: int = 8192,
+         base: Optional[str] = None, options: Optional[Dict[str, object]] = None) -> str:
+    """
+    Tek seferlik (akışsız) sohbet isteği; modelin cevap metnini döndürür.
+    base: başka bir Ollama uyumlu sunucu (ör. NPU için FastFlowLM).
+    options: ek model ayarları (ör. işlemcide çalışsın diye num_gpu = 0).
+    """
     payload = {
         "model": model,
         "messages": messages,
         "stream": False,
         # Düşük sıcaklık: anlatım tutarlı olsun, sayı uydurma eğilimi azalsın.
         # num_ctx: varsayılan 2048 belirteç anlatımın tamamına yetmez.
-        "options": {"temperature": 0.2, "num_ctx": num_ctx},
+        "options": {"temperature": 0.2, "num_ctx": num_ctx, **(options or {})},
         # "Düşünme" kapalı: çözüm zaten programdan geliyor; açıkken cevap
         # işlemcide ~7 kat yavaş (gemma4:e4b ile ölçüm: 37 s → 5 s)
         "think": False,
     }
     try:
-        data = _request("/api/chat", payload, CHAT_TIMEOUT)
+        data = _request("/api/chat", payload, CHAT_TIMEOUT, base)
     except OllamaError as e:
         # Eski Ollama sürümleri / düşünme desteği olmayan modeller bu alanı reddedebilir
         if "think" not in str(e).lower():
             raise
         payload.pop("think")
-        data = _request("/api/chat", payload, CHAT_TIMEOUT)
+        data = _request("/api/chat", payload, CHAT_TIMEOUT, base)
     content = (data.get("message") or {}).get("content", "")
     if not content.strip():
         raise OllamaError("Model boş cevap döndürdü.")
