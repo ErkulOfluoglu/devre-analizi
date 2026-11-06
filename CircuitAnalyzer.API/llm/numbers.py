@@ -8,8 +8,9 @@ sayıyı (birim/önek ile) bulur ve çözücünün bildiği değerlerle karşıl
     unverified  → hiçbir bilinen değerle uyuşmuyor (öğrenci uyarılır)
     redacted    → alıştırma modunda bir sorunun cevabını veriyor → gizlenir
 
-Sayım için kullanılan küçük tam sayılar ("2 düğüm", "1. adım") ve eleman
-adlarındaki rakamlar (R1, V2, I_R1, V₂) denetlenmez.
+Sayım için kullanılan küçük tam sayılar ("2 düğüm", "1. adım"), sıfır
+(GND, başlangıç değeri), eleman adlarındaki rakamlar (R1, V2, I_R1, V₂) ve
+konunun sabitleri (90°, 120°, √3, 5τ'da %99,3) denetlenmez.
 """
 
 import cmath
@@ -21,6 +22,13 @@ from typing import Iterable, List, Optional, Sequence, Set
 REL_MATCH = 0.01          # doğrulama toleransı
 REL_REDACT = 0.02         # alıştırmada cevabı gizleme toleransı
 REDACTED = "■■"
+
+# Her devrede doğru olan ders sabitleri (yalnız birimsiz ya da "°" ile):
+# faz açıları, √2, √3, 1/√2, π, 2π ve RC/RL'de 1τ…5τ yüzdeleri
+_CONSTANTS = (30.0, 45.0, 60.0, 90.0, 120.0, 180.0, 270.0, 360.0,
+              math.sqrt(2), math.sqrt(3), 1 / math.sqrt(2), 1 / math.sqrt(3), math.pi, 2 * math.pi,
+              63.2, 86.5, 95.0, 98.2, 99.3, 36.8, 13.5, 1.8)
+REL_CONSTANT = 0.002
 
 _PREFIX = {"p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "μ": 1e-6, "m": 1e-3,
            "k": 1e3, "K": 1e3, "M": 1e6, "G": 1e9}
@@ -73,13 +81,28 @@ def find_numbers(text: str) -> List[FoundNumber]:
         # "5 m" gibi birimsiz önek yakalanmaz (regex birim ister); "°"de önek olmaz
         if unit == "°":
             scale = 1.0
-        out.append(FoundNumber(m.group(0), m.start(), m.end(), raw, raw * scale, unit))
+        start = m.start()
+        sign = m.group("sign")
+        if sign and sign != sign.strip() and m.group(0)[len(sign):].lstrip()[:1] != "j":
+            # "12 V - 0 V": boşluklu eksi çıkarma işaretidir, sayının parçası
+            # değil; yazılan hâlden çıkarılır (karşılaştırma zaten işaretsiz)
+            start = m.start("num")
+        out.append(FoundNumber(text[start:m.end()], start, m.end(), raw, raw * scale, unit))
     return out
 
 
 def _is_counting(n: FoundNumber) -> bool:
-    """Birimsiz küçük tam sayılar (sayım, adım no) denetlenmez."""
+    """Birimsiz küçük tam sayılar (sayım, adım no) ve sıfır denetlenmez."""
+    if n.value == 0:
+        return True   # GND = 0 V, V_C(0⁻) = 0 V, I_N = 0 A: gösterilecek bir uyarı yok
     return n.unit is None and float(n.raw).is_integer() and abs(n.raw) <= 10
+
+
+def _is_constant(n: FoundNumber) -> bool:
+    """90°, 120°, √3 = 1,732, %99,3 gibi ders sabitleri (yalnız birimsiz ya da açı)."""
+    if n.unit not in (None, "°"):
+        return False
+    return any(_close(abs(n.raw), c, REL_CONSTANT) for c in _CONSTANTS)
 
 
 def _close(a: float, b: float, rel: float) -> bool:
@@ -160,7 +183,7 @@ def check_answer_numbers(
             pieces.append(REDACTED)
             pos = n.end
             checks.append(NumberCheck(n.text, "redacted"))
-        elif known.contains(n):
+        elif known.contains(n) or _is_constant(n):
             checks.append(NumberCheck(n.text, "verified"))
         else:
             checks.append(NumberCheck(n.text, "unverified"))

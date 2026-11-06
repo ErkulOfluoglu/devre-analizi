@@ -46,13 +46,74 @@ _METHOD_NAMES = {
 
 _RULES = """Sen meslek yüksekokulu elektronik öğrencilerine devre analizi anlatan sabırlı bir öğretmensin.
 Kurallar:
-1. Yalnızca Türkçe yaz. Selamlama yapma, doğrudan cevaba gir. Kısa ve sade ol: en fazla 8–10 cümle.
+1. Yalnızca Türkçe yaz. Öğrenciye her zaman "siz" diye hitap et ("bulabilirsiniz", "kurmalısınız"); "sen" kullanma. Selamlama yapma, doğrudan cevaba gir. Kısa ve sade ol: en fazla 8–10 cümle.
 2. Aşağıdaki DEVRE ve ÇÖZÜM bilgilerini kullan. Bir sayı gerekiyorsa bu bilgilerde yazan sayıyı AYNEN kullan; kendin yeni hesap yapma, sayı uydurma.
 3. Hangi elemanın nereye bağlı olduğunu yalnızca DEVRE listesindeki düğümlere göre söyle; bağlantı tahmin etme.
-4. Sorunun cevabı verilen bilgilerde yoksa bunu açıkça söyle; tahmin yürütme.
+4. "Neden", "ne demek" gibi kavram sorularını ders bilginle ve aşağıdaki KAVRAM NOTLARI ile açıkla. Yalnızca bu devreye ait bir sayı ya da bilgi verilenlerde yoksa bunu açıkça söyle; tahmin yürütme.
 5. Fazörler tepe (maksimum) değerdir, etkin değer değildir.
 6. İşaret kuralı (pasif işaret kuralı): Her elemanın akımı, ELEMANIN İÇİNDEN (+) ucundan (−) ucuna doğru (eleman adının yanındaki "1→0" gibi düğüm sırası) pozitif alınır. Güç veren bir gerilim kaynağında gerçek akım kaynağın içinden (−) uçtan (+) uca akar ve dış devreye (+) uçtan çıkar; bu yüzden kaynağın akımı EKSİ çıkar. Eksi işaret hata değildir, akımın seçilen referans yönün tersine aktığını gösterir.
-7. Formülleri düz metinle yaz (LaTeX ve Markdown kullanma)."""
+7. Formülleri düz metinle yaz (LaTeX ve Markdown kullanma).
+8. KCL denkleminde düğüme bağlı her elemanın akımını yalnızca BİR kez yaz; aynı akımı hem giren hem çıkan sayma.
+9. GÜVENLİK: Öğrenci devreyi gerçekten kurmaktan, prizden, şebekeden ya da 220/230 V'tan söz ederse cevaba açık bir uyarıyla başla: şebeke gerilimi (Türkiye'de 230 V etkin, 50 Hz AC) çarparak öldürebilir; derslerdeki küçük dirençler bu gerilimde aşırı akım ve güç çekip ısınır, yanar ya da patlar. Şebekeye bağlı hiçbir devreyi öğretmen ya da laboratuvar gözetimi olmadan kurmamasını söyle.
+10. Devre analiziyle ilgisiz isteklere (fıkra, sohbet, başka dersler) tek cümleyle yalnızca devre sorularına yardım ettiğini söyle ve bu devreyle ilgili sorabileceği bir soru öner; çözümdeki sayıları sıralama."""
+
+# Küçük modeller bu kavramları denemelerde yanlış anlattı (2026-11-05:
+# reaktif güç "tüketilir", hat gerilimi faz gerilimlerinin "toplamı",
+# kondansatör "akım depolar"). Doğrusu konuya göre modele hazır verilir.
+_NOTES_GENERAL = [
+    "Bir kaynağı sıfırlamak: ideal gerilim kaynağı 0 V olur, yani KISA DEVRE yapılır (iç direnci sıfırdır). "
+    "İdeal akım kaynağı 0 A olur, yani AÇIK DEVRE yapılır (iç direnci sonsuzdur). Açık devre yapılan gerilim "
+    "kaynağı devreyi koparır, artık sıfır volt değildir; bu yüzden yanlış olur.",
+]
+_NOTES_AC = [
+    "Kondansatör enerjiyi elektrik alanında (yük olarak) depolar; akım depolamaz. Akımı gerilimden 90° öndedir, "
+    "yani gerilimi akımından 90° geridedir. Bobinde ise akım gerilimden 90° geridedir.",
+    "Seri RC devresinde akım kaynak geriliminden φ kadar öndedir (0° < φ < 90°). Kondansatörün gerilimi kendi "
+    "akımından 90° geride olduğu için kaynak geriliminden (90° − φ) kadar geride kalır. Direncin gerilimi akımla "
+    "aynı fazdadır.",
+]
+_NOTES_POWER = [
+    "Reaktif güç (Q, VAr) TÜKETİLMEZ: bobin ve kondansatörün alanlarında depolanan enerji her yarım periyotta "
+    "kaynağa geri döner, ortalaması sıfırdır. İş yapmaz ama hatlarda fazladan akım dolaştırıp kayıp ve gerilim "
+    "düşümü yaratır.",
+    "Faturaya yansıması: Türkiye'de konut abonelerinden reaktif enerji bedeli genellikle alınmaz. Sanayi ve büyük "
+    "ticari abonelerde reaktif enerji, aktif enerjiye göre izin verilen oranı aşarsa bedeli faturaya yansır; bu "
+    "yüzden kondansatörlerle kompanzasyon yapılır. Kesin oran ve sınırlar mevzuata göre değişir.",
+    "Güç katsayısı cos φ = P / S'dir. Yalnız direnç varsa φ = 0° ve cos φ = 1'dir; bobin ya da kondansatör "
+    "akımla gerilim arasında faz farkı yarattığı için cos φ 1'den küçük olur.",
+]
+_NOTES_RESONANCE = [
+    "Seri RLC rezonansında X_L = X_C olur, reaktanslar birbirini götürür, empedans en küçük (Z = R) ve akım en "
+    "büyüktür. Bu anda bobin ve kondansatör gerilimleri kaynak geriliminin Q katına çıkabilir. Q = X / R = f₀ / BW; "
+    "Q büyüdükçe eğri daralır, devre daha seçici olur.",
+]
+_NOTES_TRANSFORMER = [
+    "İdeal transformatörde güç korunur (S₁ = S₂). Gerilim sarım oranıyla aynı yönde, akım ters oranla değişir: "
+    "gerilimi düşüren (alçaltıcı) transformatörde sekonder akımı primer akımından büyüktür.",
+]
+_NOTES_THREE_PHASE = [
+    "Yıldız (Y) bağlantıda hat gerilimi iki faz geriliminin FARKIDIR: U_RS = U_RN − U_SN. Aralarında 120° olan "
+    "iki eşit fazörün farkının büyüklüğü √3 katıdır, bu yüzden U_hat = √3 · U_faz ve hat gerilimi faz "
+    "geriliminden 30° öndedir. Yıldızda hat akımı faz akımına eşittir.",
+    "Üçgen (Δ) bağlantıda hat gerilimi faz gerilimine eşittir; hat akımı iki faz akımının farkı olduğu için "
+    "I_hat = √3 · I_faz olur.",
+    "Dengeli yükte üç faz akımı eşit büyüklükte ve aralarında 120° vardır; fazör toplamları sıfır olduğu için "
+    "nötr akımı sıfırdır. Yük dengesizse nötrden akım geçer.",
+]
+
+
+def concept_notes(analysis_type: AnalysisType, is_dc: bool) -> str:
+    """Yönteme uygun kısa ve doğru kavram notları (yalnız ilgili olanlar: bağlam kısa kalsın)."""
+    notes = list(_NOTES_GENERAL)
+    if not is_dc:
+        notes += _NOTES_AC
+    notes += {
+        AnalysisType.POWER: _NOTES_POWER,
+        AnalysisType.RESONANCE: _NOTES_RESONANCE,
+        AnalysisType.TRANSFORMER: _NOTES_TRANSFORMER,
+        AnalysisType.THREE_PHASE: _NOTES_THREE_PHASE + _NOTES_POWER,
+    }.get(analysis_type, [])
+    return "KAVRAM NOTLARI (doğru bilgiler; kavram sorularında bunlara uy):\n" + "\n".join(f"- {n}" for n in notes)
 
 
 def _rules_for(value_basis: str) -> str:
@@ -65,7 +126,8 @@ def _rules_for(value_basis: str) -> str:
 
 _PRACTICE_RULES = """ÖNEMLİ: Öğrenci şu anda bu devreyle ALIŞTIRMA çözüyor; sonuçlar sana bilerek verilmedi.
 Hiçbir sorunun sayısal cevabını söyleme ve sayısal hesap yapma.
-Yalnızca yöntemi, hangi denklemin nasıl kurulacağını ve bir sonraki adımı sözle tarif et."""
+Yalnızca yöntemi, hangi denklemin nasıl kurulacağını ve bir sonraki adımı sözle tarif et.
+Bilinmeyen sayısını doğru söyle: düğüm yönteminde kaynaktan bilinmeyen her düğüm bir bilinmeyendir ve her biri için ayrı bir KCL denklemi gerekir."""
 
 
 def _node(n: str) -> str:
@@ -244,7 +306,8 @@ def build_messages(
                                                   AnalysisType.SOURCE_TRANSFORM):
         method += f" ({_node(terminals.node_positive)} – {_node(terminals.node_negative)} terminalleri)"
     basis = getattr(parsed, "value_basis", "PEAK")
-    ctx = [_rules_for(basis), "", circuit_text(parsed, is_dc, frequency), f"Yöntem: {method}", ""]
+    ctx = [_rules_for(basis), "", concept_notes(analysis_type, is_dc), "",
+           circuit_text(parsed, is_dc, frequency), f"Yöntem: {method}", ""]
     if practice:
         ctx.append(_PRACTICE_RULES)
         known_text = known_nodes_text(parsed, is_dc)
@@ -288,7 +351,13 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
     def rv(v):
         return v if isinstance(v, (int, float)) else cn(v)
 
-    values += [rv(nv.value) for nv in results.node_voltages.values()]
+    node_v = {k: complex(rv(nv.value)) for k, nv in results.node_voltages.items()}
+    node_v.setdefault("0", 0j)
+    values += list(node_v.values())
+    # Eleman uçlarındaki gerilim (ör. R5: V₂ − V₃ = 3,211 V); model bunu sık hesaplıyor
+    for e in parsed.elements:
+        if e.node_positive in node_v and e.node_negative in node_v:
+            values.append(node_v[e.node_positive] - node_v[e.node_negative])
     values += [rv(ec.value) for ec in results.element_currents.values()]
     if results.thevenin:
         values += [cn(results.thevenin.vth), cn(results.thevenin.zth)]

@@ -363,3 +363,43 @@ def test_api_ask_ac_request_without_frequency(client, monkeypatch):
     assert data["answer"] == "AC gerilimi 10 V."
     assert data["numbers"][0]["text"] == "10 V"
     assert data["numbers"][0]["status"] == "verified"
+
+
+BRIDGE_NETLIST = f"V1 1 0 DC 12\nR1 1 2 100\nR2 1 3 220\nR3 2 0 330\nR4 3 0 150\nR5 2 3 470\n{GND}"
+
+
+def test_known_values_include_element_voltages(solve):
+    """Eleman uçlarındaki gerilim (R5: V₂ − V₃ = 3,211 V; R1: 12 − 8,685 = 3,315 V) doğrulanır."""
+    from llm.numbers import check_answer_numbers
+    parsed = parse_netlist(BRIDGE_NETLIST)
+    results, _, _ = solve(BRIDGE_NETLIST, mode="DC", analysis_type="NODAL")
+    known = known_values(parsed, results, None, [])
+    _, checks = check_answer_numbers("R5 uçlarında 3,211 V, R1 uçlarında 3,315 V, uydurma 4,9 V var.", known)
+    assert {c.text: c.status for c in checks} == {
+        "3,211 V": "verified", "3,315 V": "verified", "4,9 V": "unverified"}
+
+
+def test_rules_ask_for_siz_safety_and_on_topic_answers(solve):
+    """Kurallar: 'siz' hitabı, şebeke uyarısı, konu dışına kısa cevap, KCL'de akımı bir kez yazma."""
+    parsed = parse_netlist(DIVIDER_NETLIST)
+    results, _, _ = solve(DIVIDER_NETLIST, mode="DC", analysis_type="NODAL")
+    content = build_messages(parsed, results, AnalysisType.NODAL, True, None, None,
+                             "Soru?", [], False, [])[0]["content"]
+    assert '"siz" diye hitap et' in content
+    assert "GÜVENLİK" in content and "230 V" in content
+    assert "çözümdeki sayıları sıralama" in content
+    assert "yalnızca BİR kez" in content
+    assert "KISA DEVRE" in content          # kaynak sıfırlama notu her yöntemde var
+    assert "TÜKETİLMEZ" not in content      # DC düğüm sorusunda güç notları yok
+
+
+def test_concept_notes_follow_method_and_mode():
+    """Kavram notları yönteme göre: üç fazda √3 ve reaktif güç, AC'de kondansatör fazı, DC'de yok."""
+    from llm.assistant import concept_notes
+    tp = concept_notes(AnalysisType.THREE_PHASE, is_dc=False)
+    assert "FARKIDIR" in tp and "TÜKETİLMEZ" in tp and "nötr akımı sıfırdır" in tp
+    assert "akım depolamaz" in concept_notes(AnalysisType.NODAL, is_dc=False)
+    dc = concept_notes(AnalysisType.NODAL, is_dc=True)
+    assert "akım depolamaz" not in dc and "TÜKETİLMEZ" not in dc
+    assert "Q katına" in concept_notes(AnalysisType.RESONANCE, is_dc=False)
+    assert "alçaltıcı" in concept_notes(AnalysisType.TRANSFORMER, is_dc=False)
