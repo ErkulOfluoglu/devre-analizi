@@ -71,6 +71,7 @@ namespace CircuitAnalyzer.WPF
                 return await _api.AskAsync(req, ct);
             };
             AnalysisPanel.LlmStartOllama = ct => _api != null ? _api.StartOllamaAsync(ct) : Task.FromResult(false);
+            AnalysisPanel.LlmEnableGpu = ct => _api != null ? _api.EnableGpuAsync(ct) : Task.FromResult(false);
             AnalysisPanel.LlmStartPull = (m, ct) => _api != null ? _api.StartModelPullAsync(m, ct) : Task.FromException<LlmPullStatusDto>(new BackendUnavailableException("Çözücü hazır değil."));
             AnalysisPanel.LlmGetPull = ct => _api != null ? _api.GetModelPullAsync(ct) : Task.FromResult<LlmPullStatusDto?>(null);
             AnalysisPanel.LlmCancelPull = ct => _api != null ? _api.CancelModelPullAsync(ct) : Task.FromResult(false);

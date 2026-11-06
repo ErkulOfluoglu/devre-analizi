@@ -118,6 +118,23 @@ namespace CircuitAnalyzer.WPF.Services
             }
         }
 
+        /// <summary>
+        /// Ollama'yı tümleşik ekran kartı ayarıyla yeniden başlatır (yalnız bu oturum).
+        /// Hata fırlatmaz: başarısızsa false.
+        /// </summary>
+        public async Task<bool> EnableGpuAsync(CancellationToken ct = default)
+        {
+            try
+            {
+                var r = await PostAsync<object, LlmActionResultDto>("/llm/gpu/enable", new { }, ct);
+                return r.Ok;
+            }
+            catch (Exception ex) when (ex is AnalysisRequestException or BackendUnavailableException)
+            {
+                return false;
+            }
+        }
+
         /// <summary>Kurulu ama kapalı Ollama'yı başlatır. Hata fırlatmaz: başarısızsa false.</summary>
         public async Task<bool> StartOllamaAsync(CancellationToken ct = default)
         {

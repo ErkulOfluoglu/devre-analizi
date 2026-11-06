@@ -262,6 +262,9 @@ namespace CircuitAnalyzer.WPF
                     {
                         await assistant.AskAsync(question);
                     }
+                    // Yapay zekâ kartı panelin sonunda: görüntüye girsin
+                    AnalysisPanel.UpdateLayout();
+                    (AnalysisPanel.ResultsCard as ScrollViewer)?.ScrollToEnd();
                 }
 
                 if (options.ZoomPercent is { } zoomVal)

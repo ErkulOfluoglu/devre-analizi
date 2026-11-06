@@ -39,6 +39,13 @@ namespace CircuitAnalyzer.WPF.Services
             set => Set("AcValueDisplay", value);
         }
 
+        /// <summary>Yapay zekânın çalıştığı yer: "auto" (varsayılan) | "gpu" | "cpu" | "npu"</summary>
+        public static string AiDevice
+        {
+            get => GetString("AiDevice") ?? AiDeviceIds.Auto;
+            set => Set("AiDevice", value);
+        }
+
         /// <summary>İlk açılış tanıtımı gösterildi mi (atlandıysa da true).</summary>
         public static bool OnboardingCompleted
         {
