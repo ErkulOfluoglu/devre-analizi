@@ -529,7 +529,9 @@ public partial class AnalysisPanel : UserControl
         }
 
         double? powerFactorTarget = null;
-        if (string.Equals(analysisType, AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase))
+        // Kutu Güç ve Üç Faz yöntemlerinde görünür; ikisinde de çözücüye gönderilir
+        if (string.Equals(analysisType, AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(analysisType, AnalysisTypes.ThreePhase, StringComparison.OrdinalIgnoreCase))
         {
             string pfText = TxtPowerFactorTarget?.Text?.Trim() ?? "";
             if (!string.IsNullOrEmpty(pfText))

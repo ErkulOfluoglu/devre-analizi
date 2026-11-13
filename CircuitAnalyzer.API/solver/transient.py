@@ -39,6 +39,19 @@ class TransientNotApplicable(Exception):
     """Geçici durum bu devre için uygulanamaz; mesaj öğrenciye gösterilen Türkçe gerekçedir."""
 
 
+def _volts_text(v: float) -> str:
+    """Uyarı metni için kısa gerilim yazımı: 9 → '9 V', 0.0123 → '12,3 mV'."""
+    a = abs(v)
+    if a >= 1 or a == 0:
+        val, unit = v, "V"
+    elif a >= 1e-3:
+        val, unit = v * 1e3, "mV"
+    else:
+        val, unit = v * 1e6, "µV"
+    text = f"{val:.4g}".replace(".", ",").replace("-", "−")
+    return f"{text} {unit}"
+
+
 # ═══════════════════════════════════════════════════════
 #  KÜÇÜK DC ÇÖZÜCÜ (R, V, I, C, L)
 # ═══════════════════════════════════════════════════════
@@ -371,7 +384,9 @@ def analyze_transient(parsed: ParsedCircuit, is_dc: bool = True) -> TransientAna
             f"t > 0 konumunda {sa.id} bir tel (kapalı anahtar) ile kısa devre ediliyor; "
             "zaman sabiti sıfır olur ve değişim anında biter.")
     if not dc_connected(rest, pa[0], pa[1]):
-        what = ("kondansatör hiçbir direnç yoluyla devreye bağlı değil; gerilimi değişmez"
+        what = ("kondansatör hiçbir direnç yoluyla devreye bağlı değil; boşalacak yolu "
+                f"olmadığından t < 0'daki gerilimini korur: {sa.id} gerilimi "
+                f"{_volts_text(x_before)} kalır (devre üzerinde gösterilen değer bunu yansıtmaz)"
                 if kind == "C" else
                 "bobinin akım yolu kesiliyor (seri açık devre); bobin akımı bir anda sıfıra "
                 "düşmeye çalışır ve ideal modelde zaman sabiti tanımsız olur")

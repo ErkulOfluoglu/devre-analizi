@@ -153,6 +153,17 @@ def _raise_if_netlist_invalid(parsed) -> None:
         )
 
 
+def _raise_if_request_invalid(request) -> None:
+    """İstekteki seçimler çelişkiliyse HTTP 400 + Türkçe açıklama."""
+    t = request.thevenin_terminals
+    if t is not None and t.node_positive.strip().upper() == t.node_negative.strip().upper():
+        # Aynı düğüm: uçlar arası gerilim hep 0 → sahte "Rth = 0 Ω" çıkar
+        raise HTTPException(
+            status_code=400,
+            detail="+ ve − terminaller aynı düğüm olamaz; eşdeğer devre iki farklı düğüm "
+                   "arasında bulunur.")
+
+
 # ═══════════════════════════════════════════════════════
 #  ENDPOINT'LER
 # ═══════════════════════════════════════════════════════
@@ -234,6 +245,7 @@ def analyze_circuit(
         )
 
     _raise_if_netlist_invalid(parsed)
+    _raise_if_request_invalid(request)
 
     # Netlist'teki prob bilgilerini request'teki ile birleştir
     probes = list(request.target_probes or [])
@@ -595,6 +607,7 @@ def llm_ask(request: LlmAskRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Netlist ayrıştırma hatası: {str(e)}")
     _raise_if_netlist_invalid(parsed)
+    _raise_if_request_invalid(request)
 
     with _SOLVE_LOCK:
         results, _, _ = solve_circuit(

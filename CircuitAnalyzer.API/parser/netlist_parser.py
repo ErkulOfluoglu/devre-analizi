@@ -392,6 +392,7 @@ def parse_netlist(netlist_text: str, value_basis: str = "PEAK") -> ParsedCircuit
     circuit = ParsedCircuit(raw_netlist=netlist_text)
     all_nodes = set()
     lines = netlist_text.strip().split("\n")
+    first_line: Dict[str, int] = {}   # eleman adı (büyük harf) → ilk geçtiği satır
 
     for line_num, raw_line in enumerate(lines, 1):
         line = raw_line.strip()
@@ -408,6 +409,14 @@ def parse_netlist(netlist_text: str, value_basis: str = "PEAK") -> ParsedCircuit
         # Eleman satırı
         element = _parse_element_line(line, line_num, circuit)
         if element:
+            key = element.id.upper()
+            if key in first_line:
+                # İkinci eleman birincinin yerine geçer ya da yok sayılır: sonuç sessizce yanlış çıkar
+                _reject(circuit,
+                        f"Satır {line_num}: “{element.id}” adı {first_line[key]}. satırda da kullanılmış. "
+                        "Her elemanın adı farklı olmalı.")
+                continue
+            first_line[key] = line_num
             circuit.elements.append(element)
 
     # Bağımlı kaynakların kontrol elemanları (satır sırasından bağımsız denetlenir)
@@ -610,10 +619,11 @@ def _parse_element_line(
                 "(H ve F için I(<kontrol>)).")
         return None
 
-    # Tanınmayan satır → uyarı
-    circuit.warnings.append(
-        f"Satır {line_num}: Tanınmayan format → '{line}'"
-    )
+    # Tanınmayan satır: sessizce atlanırsa devre eksik çözülür ve yanlış sonuç çıkar → hata
+    _reject(circuit,
+            f"Satır {line_num} anlaşılamadı → '{line}'. Bu satır atlanırsa devre eksik çözülür. "
+            "Değerlerde ondalık için nokta kullanın (2.2k), düğüm adlarında yalnızca harf, "
+            "rakam ve _ olsun.")
     return None
 
 
