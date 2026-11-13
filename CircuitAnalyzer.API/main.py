@@ -12,15 +12,19 @@ Endpoint'ler:
     GET  /llm/status → İsteğe bağlı yerel yapay zekâ (Ollama) durumu
     POST /llm/ask    → Çözüm hakkında yapay zekâya soru (sayılar denetlenir)
     POST /llm/start  → Kurulu ama kapalı Ollama'yı başlat
+    POST /llm/gpu/enable → Ollama'yı tümleşik ekran kartı ayarıyla yeniden başlat
     POST /llm/pull   → Modeli indir (GET: ilerleme, POST /llm/pull/cancel: iptal)
 """
 
 import json
+import threading
+from contextlib import asynccontextmanager
+from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException, Body, Request
+from fastapi.responses import JSONResponse
 
-from llm import ollama, pull, system_info
+from llm import devices, ollama, pull, system_info
 from llm.assistant import answer_question
 from models.request import (
     AnalysisRequest, AnalysisMode, AnalysisType, ProbeTarget,
@@ -29,7 +33,7 @@ from models.request import (
 from models.response import (
     AnalysisResponse, AnalysisResults, SolutionStep,
     NodeVoltage, ElementCurrent, ProbeResult, ComplexNumber,
-    AnswerCheckResponse, LlmActionResult, LlmAnswerResponse, LlmNumberCheck,
+    AnswerCheckResponse, LlmActionResult, LlmAnswerResponse, LlmDeviceOption, LlmNumberCheck,
     LlmPullStatus, LlmStatusResponse
 )
 from practice.checker import check_answer
@@ -63,7 +67,17 @@ tags_metadata = [
     },
 ]
 
+@asynccontextmanager
+async def _lifespan(_app):
+    # NPU denetimi (~4 sn) açılışta arka planda yapılır; yapay zekâ kartı açılınca beklenmez
+    devices.warm_up()
+    yield
+    # Programın açtığı NPU sunucusu ~9 GB RAM tutar; kapanırken bırakılmasın
+    devices.stop_flm()
+
+
 app = FastAPI(
+    lifespan=_lifespan,
     title="Circuit Analyzer API",
     description=(
         "Devre analizi eğitim uygulaması — Python Backend.\n\n"
@@ -74,14 +88,47 @@ app = FastAPI(
     openapi_tags=tags_metadata,
 )
 
-# CORS — C# WPF HttpClient'ten gelen istekleri kabul et
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ═══════════════════════════════════════════════════════
+#  YALNIZCA BU BİLGİSAYARDAKİ PROGRAM
+# ═══════════════════════════════════════════════════════
+# Çözücü yalnızca 127.0.0.1'de dinler, ama bilgisayarda açık bir web sayfası da
+# oraya istek gönderebilir (ör. Ollama'yı yeniden başlatma, model indirme). WPF
+# programı Origin başlığı göndermez; tarayıcılar başka siteden gelen her POST'ta
+# gönderir. Başka bir ada yönelen istekler (DNS rebinding) de reddedilir.
+# CORS izni bilerek verilmez: tarayıcı cevapları okuyamaz.
+
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]", "testserver"}   # testserver: pytest TestClient
+_FORBIDDEN_DETAIL = "Bu istek yalnızca Devre Analizi programından yapılabilir."
+
+
+def _host_name(host_header: str) -> str:
+    """'127.0.0.1:8123' → '127.0.0.1', '[::1]:80' → '[::1]'."""
+    host = host_header.strip().lower()
+    if host.startswith("["):
+        return host.split("]", 1)[0] + "]"
+    return host.rsplit(":", 1)[0] if ":" in host else host
+
+
+def is_local_request(headers) -> bool:
+    """İstek bu bilgisayardaki programdan mı (tarayıcıdaki bir siteden değil)?"""
+    host = headers.get("host") or ""
+    if _host_name(host) not in _LOCAL_HOSTS:
+        return False
+    origin = headers.get("origin")
+    # Aynı adresteki /docs sayfası (geliştirici) kendi Origin'ini gönderir; ona izin var
+    return origin is None or origin.lower() == f"http://{host.strip().lower()}"
+
+
+@app.middleware("http")
+async def _local_only(request: Request, call_next):
+    if not is_local_request(request.headers):
+        return JSONResponse(status_code=403, content={"detail": _FORBIDDEN_DETAIL})
+    return await call_next(request)
+
+
+# lcapy/SymPy çözümleri iş parçacığı havuzunda çalışır (sunucu donmaz, /health cevap
+# verir) ama aynı anda tek çözüm yapılır: önbellekleri iş parçacığı güvenli değil.
+_SOLVE_LOCK = threading.Lock()
 
 
 # ═══════════════════════════════════════════════════════
@@ -104,6 +151,17 @@ def _raise_if_netlist_invalid(parsed) -> None:
             status_code=400,
             detail="Netlist'te hiçbir devre elemanı bulunamadı."
         )
+
+
+def _raise_if_request_invalid(request) -> None:
+    """İstekteki seçimler çelişkiliyse HTTP 400 + Türkçe açıklama."""
+    t = request.thevenin_terminals
+    if t is not None and t.node_positive.strip().upper() == t.node_negative.strip().upper():
+        # Aynı düğüm: uçlar arası gerilim hep 0 → sahte "Rth = 0 Ω" çıkar
+        raise HTTPException(
+            status_code=400,
+            detail="+ ve − terminaller aynı düğüm olamaz; eşdeğer devre iki farklı düğüm "
+                   "arasında bulunur.")
 
 
 # ═══════════════════════════════════════════════════════
@@ -155,7 +213,7 @@ async def health_check():
         422: {"description": "Doğrulama hatası"},
     },
 )
-async def analyze_circuit(
+def analyze_circuit(
     request: AnalysisRequest = Body(
         ...,
         openapi_examples=ANALYSIS_REQUEST_EXAMPLES,
@@ -187,6 +245,7 @@ async def analyze_circuit(
         )
 
     _raise_if_netlist_invalid(parsed)
+    _raise_if_request_invalid(request)
 
     # Netlist'teki prob bilgilerini request'teki ile birleştir
     probes = list(request.target_probes or [])
@@ -199,17 +258,20 @@ async def analyze_circuit(
                 )
 
     # ── 2. DEVRE ÇÖZÜMÜ (lcapy) ──
+    # Senkron uç nokta: FastAPI iş parçacığı havuzunda çalıştırır, uzun bir çözüm
+    # sürerken sunucu öbür isteklere (/health, yapay zekâ durumu) cevap verir.
     warnings: list = []
-    results, solution_steps, errors = solve_circuit(
-        parsed=parsed,
-        mode=request.mode,
-        frequency=request.frequency,
-        analysis_type=request.analysis_type,
-        thevenin_terminals=request.thevenin_terminals,
-        target_probes=probes if probes else None,
-        warnings=warnings,
-        power_factor_target=request.power_factor_target,
-    )
+    with _SOLVE_LOCK:
+        results, solution_steps, errors = solve_circuit(
+            parsed=parsed,
+            mode=request.mode,
+            frequency=request.frequency,
+            analysis_type=request.analysis_type,
+            thevenin_terminals=request.thevenin_terminals,
+            target_probes=probes if probes else None,
+            warnings=warnings,
+            power_factor_target=request.power_factor_target,
+        )
 
     # Tekil devre: sonuç yok, tek Türkçe açıklamayla "Devre çözülemedi"
     unsolvable = next((m for m in errors if m.startswith(UNSOLVABLE_PREFIX)), None)
@@ -264,7 +326,7 @@ async def analyze_circuit(
         422: {"description": "Doğrulama hatası"},
     },
 )
-async def parse_only(
+def parse_only(
     request: AnalysisRequest = Body(
         ...,
         openapi_examples=ANALYSIS_REQUEST_EXAMPLES,
@@ -332,7 +394,7 @@ async def parse_only(
     ),
     response_description="Her soru için durum ve Türkçe geri bildirim",
 )
-async def practice_check(request: AnswerCheckRequest):
+def practice_check(request: AnswerCheckRequest):
     verdicts = [check_answer(item.question, item.answer) for item in request.items]
     return AnswerCheckResponse(
         verdicts=verdicts,
@@ -350,6 +412,32 @@ _OLLAMA_INSTALL_HELP = (
 _OLLAMA_STOPPED_HELP = (
     "Ollama bu bilgisayarda kurulu ama şu an kapalı. “Başlat” düğmesiyle açabilirsiniz."
 )
+
+
+def _device_options(selected: Optional[str]):
+    """Çalıştığı yer seçenekleri, otomatik seçim ve ekran kartı ayarı gerekip gerekmediği."""
+    npu = devices.npu_info(selected)
+    gpu = devices.gpu_info()
+    auto = devices.auto_choice(npu, gpu)
+    auto_name = {"npu": "NPU", "gpu": "ekran kartı", "cpu": "işlemci"}[auto]
+    if gpu.kind == "dedicated":
+        gpu_note = f"{gpu.name}; Ollama kendiliğinden kullanır."
+    elif gpu.kind == "integrated":
+        gpu_note = f"{gpu.name}; Ollama ekran kartı ayarıyla yeniden başlatılır."
+    else:
+        gpu_note = "Bu bilgisayarda yapay zekâya uygun ekran kartı bulunamadı."
+    options = [
+        LlmDeviceOption(id="auto", label="Otomatik", available=True,
+                        note=f"En hızlısını seçer. Bu bilgisayarda: {auto_name}."),
+        LlmDeviceOption(id="gpu", label="Ekran kartı", available=gpu.kind != "none", note=gpu_note),
+        LlmDeviceOption(id="cpu", label="İşlemci", available=True,
+                        note="Her bilgisayarda çalışır; en yavaşı olabilir."),
+        LlmDeviceOption(id="npu", label="NPU", available=npu.available,
+                        note=("FastFlowLM ile. İşlemci ve ekran kartı boş kalır." if npu.available
+                              else npu.reason)),
+    ]
+    needs_restart = gpu.kind == "integrated" and not devices.igpu_enabled()
+    return options, auto, needs_restart
 
 
 @app.get(
@@ -373,6 +461,7 @@ def llm_status():
     else:
         message = f"Yapay zekâ hazır — model: {selected}"
     disk = system_info.free_disk_gb()
+    options, auto, needs_restart = _device_options(selected)
     return LlmStatusResponse(
         available=st.available, version=st.version, models=st.models,
         recommended_model=advice.model, selected_model=selected, message=message,
@@ -380,7 +469,25 @@ def llm_status():
         ram_gb=round(ram, 1) if ram is not None else None,
         free_disk_gb=round(disk, 1) if disk is not None else None,
         fit=advice.fit, approx_size_gb=advice.approx_size_gb, advice_message=advice.message,
+        device_options=options, auto_device=auto, gpu_needs_restart=needs_restart,
+        placement=devices.placement_text(ollama.running_models() if st.available else None),
     )
+
+
+@app.post(
+    "/llm/gpu/enable",
+    response_model=LlmActionResult,
+    tags=["Yapay Zekâ"],
+    summary="Ollama'yı tümleşik ekran kartı ayarıyla yeniden başlat",
+    description=(
+        "Ollama'yı kapatıp OLLAMA_IGPU_ENABLE=1 ile yeniden açar (yalnız bu oturum; Windows ayarı "
+        "değişmez, program kapanınca bu Ollama da kapanır). Hazır olmasını beklemez."
+    ),
+)
+def llm_gpu_enable():
+    if devices.restart_ollama_with_igpu():
+        return LlmActionResult(ok=True, message="Ollama ekran kartı ayarıyla yeniden başlatılıyor…")
+    return LlmActionResult(ok=False, message="Ollama bu bilgisayarda bulunamadı.")
 
 
 @app.post(
@@ -481,10 +588,15 @@ def llm_ask(request: LlmAskRequest):
     # Senkron uç nokta: FastAPI iş parçacığı havuzunda çalıştırır, uzun model
     # cevabı beklenirken diğer istekler (ör. /health) bloklanmaz.
     st = ollama.get_status()
+    preferred = system_info.recommend(system_info.total_ram_gb()).model
+    npu_first = request.device in (None, devices.AUTO, devices.NPU)
     if not st.available:
-        raise HTTPException(status_code=503, detail=_OLLAMA_INSTALL_HELP)
-    model = ollama.pick_model(request.model, st.models,
-                              preferred=system_info.recommend(system_info.total_ram_gb()).model)
+        # NPU seçiliyse (ya da Otomatik NPU'yu seçecekse) Ollama'nın açık olması gerekmez
+        if not (npu_first and devices.npu_info(request.model or preferred).available):
+            raise HTTPException(status_code=503, detail=_OLLAMA_INSTALL_HELP)
+        model = request.model or preferred
+    else:
+        model = ollama.pick_model(request.model, st.models, preferred=preferred)
     if model is None:
         raise HTTPException(
             status_code=400,
@@ -495,13 +607,19 @@ def llm_ask(request: LlmAskRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Netlist ayrıştırma hatası: {str(e)}")
     _raise_if_netlist_invalid(parsed)
+    _raise_if_request_invalid(request)
 
-    results, _, _ = solve_circuit(
-        parsed=parsed, mode=request.mode, frequency=request.frequency,
-        analysis_type=request.analysis_type, thevenin_terminals=request.thevenin_terminals,
-        warnings=[],
-        power_factor_target=request.power_factor_target,
-    )
+    with _SOLVE_LOCK:
+        results, _, solve_errors = solve_circuit(
+            parsed=parsed, mode=request.mode, frequency=request.frequency,
+            analysis_type=request.analysis_type, thevenin_terminals=request.thevenin_terminals,
+            warnings=[],
+            power_factor_target=request.power_factor_target,
+        )
+    # Çözülemeyen devre: model sonuçsuz kalır ve sayı uydurur; /analyze ile aynı açıklama
+    unsolvable = next((m for m in solve_errors if m.startswith(UNSOLVABLE_PREFIX)), None)
+    if unsolvable:
+        raise HTTPException(status_code=422, detail=unsolvable[len(UNSOLVABLE_PREFIX):])
     is_dc = request.mode == AnalysisMode.DC
     frequency = request.frequency
     if frequency is None and not is_dc:
@@ -516,19 +634,41 @@ def llm_ask(request: LlmAskRequest):
     # konumuyla çözülmüştür, asistan da aynı devreyi görsün
     shown = parsed if results.transient is not None else circuit_at_time(parsed, "after")
     try:
+        r = devices.route(request.device, model)
+    except devices.DeviceUnavailable as e:
+        raise HTTPException(status_code=400, detail=f"Seçilen yer kullanılamıyor: {e}")
+    devices.make_room(r)   # önce öbür modeli RAM'den çıkar, sonra bunu yükle
+    if r.where == devices.NPU and not devices.ensure_flm(r.model):
+        if request.device == devices.NPU:
+            raise HTTPException(status_code=503, detail="NPU programı (FastFlowLM) başlatılamadı.")
+        if not st.available:
+            raise HTTPException(status_code=503, detail=_OLLAMA_INSTALL_HELP)
+        r = devices.Route("ollama", None, model)   # Otomatik: NPU açılmazsa Ollama ile devam
+        devices.make_room(r)
+    try:
         out = answer_question(
             shown, results, request.analysis_type, is_dc, frequency,
             request.thevenin_terminals, request.question,
-            [t.model_dump() for t in request.history], model,
+            [t.model_dump() for t in request.history], r.model,
             practice=request.practice, practice_questions=request.practice_questions,
+            base=r.base_url, options=r.options,
         )
+    except ollama.OllamaTimeout:
+        raise HTTPException(
+            status_code=504,
+            detail="Yapay zekâ zamanında cevap veremedi; model bu bilgisayarda yavaş çalışıyor olabilir. "
+                   "Daha kısa bir soru deneyin ya da “Çalıştığı yer” ayarını değiştirin.")
     except ollama.OllamaUnavailable:
+        if r.where == devices.NPU:
+            raise HTTPException(status_code=503, detail="NPU programı (FastFlowLM) cevap vermiyor.")
         raise HTTPException(status_code=503, detail=_OLLAMA_INSTALL_HELP)
     except ollama.OllamaError as e:
         raise HTTPException(status_code=400, detail=f"Yapay zekâ hatası: {e}")
+    devices.remember(r)
 
     return LlmAnswerResponse(
-        answer=out["answer"], model=model,
+        answer=out["answer"], model=r.model,
         numbers=[LlmNumberCheck(text=t, status=s) for t, s in out["numbers"]],
-        note=out["note"],
+        note=out["note"], device=r.where,
+        placement=devices.placement_text(ollama.running_models() if r.where != devices.NPU else None),
     )

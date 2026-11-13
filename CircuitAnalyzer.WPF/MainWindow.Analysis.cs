@@ -71,6 +71,7 @@ namespace CircuitAnalyzer.WPF
                 return await _api.AskAsync(req, ct);
             };
             AnalysisPanel.LlmStartOllama = ct => _api != null ? _api.StartOllamaAsync(ct) : Task.FromResult(false);
+            AnalysisPanel.LlmEnableGpu = ct => _api != null ? _api.EnableGpuAsync(ct) : Task.FromResult(false);
             AnalysisPanel.LlmStartPull = (m, ct) => _api != null ? _api.StartModelPullAsync(m, ct) : Task.FromException<LlmPullStatusDto>(new BackendUnavailableException("Çözücü hazır değil."));
             AnalysisPanel.LlmGetPull = ct => _api != null ? _api.GetModelPullAsync(ct) : Task.FromResult<LlmPullStatusDto?>(null);
             AnalysisPanel.LlmCancelPull = ct => _api != null ? _api.CancelModelPullAsync(ct) : Task.FromResult(false);
@@ -284,6 +285,10 @@ namespace CircuitAnalyzer.WPF
                             ? $"Çözüldü — {netlist.NodeCount} düğüm, {stepCount} adım"
                             : $"Çözüldü — {netlist.NodeCount} düğüm"
                         : "Uyarılarla çözüldü — ayrıntılar sağ panelde";
+                    // Geçici durumda devre üzerindeki değerler anahtardan çok sonraki kararlı hâldir;
+                    // söylenmezse öğrenci her yerde "0 A" görüp şaşırıyor
+                    if (response.Transient != null)
+                        TxtStatus.Text += " · devre üzerindeki değerler: t → ∞ (yeni kararlı hâl); zamanla değişim grafikte";
                 }
             }
             catch (AnalysisRequestException ex)
@@ -407,6 +412,9 @@ namespace CircuitAnalyzer.WPF
         public void LoadExample(ExampleCircuit example)
         {
             ClearCircuit();
+            // Örnek ya da soru yeni bir belgedir: Ctrl+S öğrencinin önceki dosyasının üstüne yazmasın.
+            // (OpenFile dosya yolunu bundan sonra kendisi atar.)
+            _currentFilePath = null;
             _problemCode = example.ProblemCode;
             AnalysisPanel.SetProblemCode(example.ProblemCode);
 

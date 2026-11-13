@@ -14,8 +14,10 @@
                    Style="{DynamicResource Text.Caption}"
                    Margin="0,0,0,3"/>
 
-        <TextBlock Text="Yazım: 4m · 4 mA · 0,004 · 2,5k   |   AC: 3,03∠-72,3 veya 0,92-j2,89"
+        <TextBlock x:Name="TxtFormatHint"
+                   Text="Yazım: 4m · 4 mA · 0,004 · 2,5k   |   AC: 3,03∠-72,3 veya 0,92-j2,89"
                    Style="{DynamicResource Text.Caption}"
+                   TextWrapping="Wrap"
                    Margin="0,0,0,10"/>
 
         <!-- b) Skor Metni (İlk kontrole kadar gizli) -->
@@ -82,12 +84,18 @@
                 Style="{DynamicResource InfoBar.Success}"
                 Margin="0,4,0,8"
                 Visibility="Collapsed">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <!-- Grid: yatay StackPanel içinde metin satır kıramaz ve kesilir -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
                 <controls:Icon Data="{DynamicResource Icon.Check}" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                <TextBlock Text="Tebrikler! Asıl soruların hepsi doğru. İsterseniz çözümü inceleyebilirsiniz."
+                <TextBlock Grid.Column="1"
+                           Text="Tebrikler! Asıl soruların hepsi doğru. İsterseniz çözümü inceleyebilirsiniz."
                            TextWrapping="Wrap"
                            VerticalAlignment="Center"/>
-            </StackPanel>
+            </Grid>
         </Border>
 
         <!-- g) Hata Metni -->

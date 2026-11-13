@@ -154,8 +154,12 @@ namespace CircuitAnalyzer.WPF
 
                 if (result == OnboardingResult.StartExample)
                 {
-                    LoadExample(ExampleCircuits.All[0]());
-                    _ = SolveAsync();
+                    // Tanıtım menüden yeniden açıldıysa tuvalde kaydedilmemiş bir devre olabilir
+                    if (PromptSaveIfDirty())
+                    {
+                        LoadExample(ExampleCircuits.All[0]());
+                        _ = SolveAsync();
+                    }
                 }
                 else if (result == OnboardingResult.StartTour)
                 {
@@ -231,6 +235,13 @@ namespace CircuitAnalyzer.WPF
             if (e.Key == Key.F5)
             {
                 AnalysisPanel.RequestSolve();
+                e.Handled = true;
+                return;
+            }
+
+            // ── Esc: açık eleman listesini kapatır (önce bu; HandleKeyDown ile aynı sıra) ──
+            if (e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None && CloseElementDrawer())
+            {
                 e.Handled = true;
                 return;
             }

@@ -53,20 +53,116 @@
                                Margin="0,2,0,8"
                                Visibility="Collapsed"/>
 
-            <!-- Model Seçici -->
+            <!-- Model ve çalıştığı yer (ekran kartı / işlemci / NPU) -->
             <Grid x:Name="RowModel" Margin="0,0,0,8" Visibility="Collapsed">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
                 <TextBlock Text="Model:"
                            Style="{DynamicResource Text.Caption}"
                            VerticalAlignment="Center"
                            Margin="0,0,8,0"/>
                 <ComboBox x:Name="CmbModel"
                           Grid.Column="1"
+                          AutomationProperties.Name="Model"
                           SelectionChanged="CmbModel_SelectionChanged"/>
+
+                <TextBlock x:Name="LblDevice"
+                           Grid.Row="1"
+                           Text="Çalıştığı yer:"
+                           Style="{DynamicResource Text.Caption}"
+                           VerticalAlignment="Center"
+                           Margin="0,8,8,0"/>
+                <ComboBox x:Name="CmbDevice"
+                          Grid.Row="1"
+                          Grid.Column="1"
+                          Margin="0,8,0,0"
+                          AutomationProperties.Name="Çalıştığı yer"
+                          SelectionChanged="CmbDevice_SelectionChanged">
+                    <ComboBox.ItemContainerStyle>
+                        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                            <Setter Property="IsEnabled" Value="{Binding Available}"/>
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Display}"/>
+                            <Setter Property="AutomationProperties.HelpText" Value="{Binding Note}"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.55"/>
+                                    <Setter Property="Cursor" Value="Arrow"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ComboBox.ItemContainerStyle>
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Display}"/>
+                                <TextBlock x:Name="Note"
+                                           Text="{Binding Note}"
+                                           Style="{DynamicResource Text.Caption}"
+                                           TextWrapping="Wrap"
+                                           MaxWidth="320"
+                                           Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <DataTemplate.Triggers>
+                                <!-- Seçili kutuda (açılır listenin dışında) yalnız ad görünür -->
+                                <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ComboBoxItem}}" Value="{x:Null}">
+                                    <Setter TargetName="Note" Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <StackPanel x:Name="RowPlacement"
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            Margin="2,6,0,0"
+                            Visibility="Collapsed">
+                    <Ellipse x:Name="DotPlacement"
+                             Width="8" Height="8"
+                             Margin="0,0,6,0"
+                             VerticalAlignment="Center"
+                             Fill="{DynamicResource Brush.Success}"/>
+                    <TextBlock x:Name="TxtPlacement"
+                               Style="{DynamicResource Text.Caption}"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
             </Grid>
+
+            <!-- Tümleşik ekran kartı: Ollama'yı ayarla yeniden başlatma onayı -->
+            <Border x:Name="GpuRestartBar"
+                    Style="{DynamicResource InfoBar.Warning}"
+                    Margin="0,0,0,8"
+                    Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock x:Name="TxtGpuRestart"
+                               Text="Ollama bu ekran kartını kendiliğinden kullanmıyor. Ekran kartı ayarıyla yeniden başlatılsın mı? Ayar yalnız program açıkken geçerlidir; Windows ayarlarınız değişmez."
+                               TextWrapping="Wrap"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button x:Name="BtnGpuRestart"
+                                Content="Yeniden başlat"
+                                Style="{DynamicResource Button.Primary}"
+                                Height="32"
+                                Padding="12,0"
+                                Click="BtnGpuRestart_Click"/>
+                        <Button x:Name="BtnGpuCancel"
+                                Content="Vazgeç"
+                                Style="{DynamicResource Button.Secondary}"
+                                Height="32"
+                                Padding="12,0"
+                                Margin="8,0,0,0"
+                                Click="BtnGpuCancel_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
 
             <!-- 2. Alıştırma Uyarısı -->
             <Border x:Name="PracticeNotice"
@@ -104,8 +200,10 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Düşünüyor… (işlemcide 1 dakikayı bulabilir)"
+                <TextBlock x:Name="TxtBusy"
+                           Text="Düşünüyor… (işlemcide 1 dakikayı bulabilir)"
                            Style="{DynamicResource Text.Caption}"
+                           TextWrapping="Wrap"
                            VerticalAlignment="Center"/>
                 <Button x:Name="BtnCancel"
                         Grid.Column="1"

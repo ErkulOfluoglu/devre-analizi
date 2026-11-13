@@ -109,6 +109,16 @@ namespace CircuitAnalyzer.WPF.Models
         /// </summary>
         public static bool TryParse(string input, out ComplexValue result)
         {
+            // "NaN", "Infinity" ya da "1e999" gibi sonlu olmayan değerler kabul edilmez
+            if (TryParseCore(input, out result) &&
+                double.IsFinite(result.Real) && double.IsFinite(result.Imaginary))
+                return true;
+            result = new ComplexValue();
+            return false;
+        }
+
+        private static bool TryParseCore(string input, out ComplexValue result)
+        {
             result = new ComplexValue();
             if (string.IsNullOrWhiteSpace(input))
                 return false;
@@ -249,25 +259,25 @@ namespace CircuitAnalyzer.WPF.Models
         /// Dikdörtgensel formatta gösterir: "50+j30" veya "50−j30"
         /// Elektronik mühendisliği standardında 'j' kullanılır.
         /// </summary>
-        public string ToRectangularString()
+        public string ToRectangularString(string format = "G4")
         {
             if (Math.Abs(Imaginary) < 1e-10)
-                return TurkishNumber.Format(Real, "G4");
+                return TurkishNumber.Format(Real, format);
             if (Math.Abs(Real) < 1e-10)
-                return $"{(Imaginary < 0 ? "−" : "")}j{TurkishNumber.Format(Math.Abs(Imaginary), "G4")}";
+                return $"{(Imaginary < 0 ? "−" : "")}j{TurkishNumber.Format(Math.Abs(Imaginary), format)}";
 
             string sign = Imaginary >= 0 ? "+" : "−";
-            return $"{TurkishNumber.Format(Real, "G4")}{sign}j{TurkishNumber.Format(Math.Abs(Imaginary), "G4")}";
+            return $"{TurkishNumber.Format(Real, format)}{sign}j{TurkishNumber.Format(Math.Abs(Imaginary), format)}";
         }
 
         /// <summary>
         /// Kutupsal formatta gösterir: "58.31∠30.96°" -> "58,31∠30,96°"
         /// </summary>
-        public string ToPolarString()
+        public string ToPolarString(string format = "G4")
         {
             if (Math.Abs(Magnitude) < 1e-10)
                 return "0∠0°";
-            return $"{TurkishNumber.Format(Magnitude, "G4")}∠{TurkishNumber.Format(AngleDegrees, "G4")}°";
+            return $"{TurkishNumber.Format(Magnitude, format)}∠{TurkishNumber.Format(AngleDegrees, format)}°";
         }
 
         /// <summary>

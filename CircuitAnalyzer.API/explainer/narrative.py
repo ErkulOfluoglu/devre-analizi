@@ -1422,6 +1422,12 @@ def _thevenin(ctx: _Ctx) -> List[_Section]:
     return sections
 
 
+def _pq(p: float, q: float) -> str:
+    """Karmaşık güç: '33,17 W − j57,46 VAR' (işaret j'nin önünde, '+ j−' değil)."""
+    sign = MINUS if q < 0 else "+"
+    return f"{eng(p, 'W')} {sign} j{eng(abs(q), 'VAR')}"
+
+
 def _norton(ctx: _Ctx) -> List[_Section]:
     no = ctx.results.norton
     if ctx.analysis_type != AnalysisType.NORTON or no is None or _port(ctx) is None:
@@ -1432,7 +1438,11 @@ def _norton(ctx: _Ctx) -> List[_Section]:
     sym_r = "Rn" if ctx.is_dc else "Zn"
     vth = ctx.node_value(a) - ctx.node_value(b)
 
-    s1 = _Section("1. Adım — In (Kısa Devre Akımı)")
+    conversion = (not ctx.has_dependent and zn is not None and abs(zn) > 1e-15
+                  and _close(vth / zn, i_n, 1e-4))
+    # Dönüşümle bulunuyorsa önce Rn, sonra In = Vth / Rn: Rn bulunmadan kullanılmasın
+    n_in, n_rn = (2, 1) if conversion else (1, 2)
+    s1 = _Section(f"{n_in}. Adım — In (Kısa Devre Akımı)")
     s1.text(f"Terminaller (Düğüm {a} ve Düğüm {b}) bir tel ile kısa devre edildiğinde "
             "telden akan akım In'dir.")
     if ctx.has_dependent:
@@ -1442,9 +1452,9 @@ def _norton(ctx: _Ctx) -> List[_Section]:
             s1.text("Devrede bağımlı kaynak var; bağımlı kaynak aktif kalır. Terminaller "
                     "kısa devre edilip devre bu hâliyle yeniden çözüldüğünde telden "
                     f"{_flow_text(a, b)} yönünde geçen akım In'dir.")
-    elif zn is not None and abs(zn) > 1e-15 and _close(vth / zn, i_n, 1e-4):
-        s1.text("Thevenin–Norton dönüşümüyle kolayca bulunur: önce açık devre gerilimi "
-                f"Vth = {node_v(a)} {MINUS} {node_v(b)} = {ctx.val(vth, 'V')}, sonra:")
+    elif conversion:
+        s1.text(f"{sym_r} bir önceki adımda bulundu. Thevenin–Norton dönüşümüyle: önce açık devre "
+                f"gerilimi Vth = {node_v(a)} {MINUS} {node_v(b)} = {ctx.val(vth, 'V')}, sonra:")
         if ctx.is_dc:
             s1.math(f"In = Vth / {sym_r} = {eng(vth.real, 'V')} / {eng(zn.real, 'Ω')}")
         else:
@@ -1453,10 +1463,13 @@ def _norton(ctx: _Ctx) -> List[_Section]:
 
     sections = [s1]
     if zn is not None:
-        s2, _ = _port_reduction_section(ctx, f"2. Adım — {sym_r} (Norton {'Direnci' if ctx.is_dc else 'Empedansı'})",
+        s2, _ = _port_reduction_section(ctx, f"{n_rn}. Adım — {sym_r} (Norton {'Direnci' if ctx.is_dc else 'Empedansı'})",
                                         sym_r, zn)
         s2.note(f"Norton empedansı Thevenin empedansıyla aynıdır: {sym_r} = Rth.")
-        sections.append(s2)
+        if conversion:
+            sections.insert(0, s2)
+        else:
+            sections.append(s2)
 
     s3 = _Section("Norton Eşdeğer Devresi")
     if zn is None:
@@ -1514,7 +1527,7 @@ def _power(ctx: _Ctx) -> List[_Section]:
                     s.math(f"Q_{name} = −|I|²·|X_C| = −({eng(i_mag, 'A')})² · {eng(abs(z.imag), 'Ω')} = "
                            f"{eng(ep.reactive_power, 'VAR')} (kondansatör reaktif güç üretir, P = 0)")
                 else:
-                    s.math(f"S_{name} = |I|²·Z = {eng(ep.active_power, 'W')} + j{eng(ep.reactive_power, 'VAR')}")
+                    s.math(f"S_{name} = |I|²·Z = {_pq(ep.active_power, ep.reactive_power)}")
             else:
                 if t == ElementType.RESISTOR:
                     s.math(f"P_{name} = ½·|I|²·R = ½ · ({eng(i_mag, 'A')})² · {eng(e.value, 'Ω')} = {eng(ep.active_power, 'W')}")
@@ -1525,7 +1538,7 @@ def _power(ctx: _Ctx) -> List[_Section]:
                     s.math(f"Q_{name} = −½·|I|²·|X_C| = −½ · ({eng(i_mag, 'A')})² · {eng(abs(z.imag), 'Ω')} = "
                            f"{eng(ep.reactive_power, 'VAR')} (kondansatör reaktif güç üretir, P = 0)")
                 else:
-                    s.math(f"S_{name} = ½·|I|²·Z = {eng(ep.active_power, 'W')} + j{eng(ep.reactive_power, 'VAR')}")
+                    s.math(f"S_{name} = ½·|I|²·Z = {_pq(ep.active_power, ep.reactive_power)}")
 
     for e in ctx.sources():
         ep = pw.elements.get(e.id)

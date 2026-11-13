@@ -200,3 +200,36 @@ def test_check_answer_numbers_tolerance():
     _, checks_far = check_answer_numbers("Gerilim 8.2 V.", known)
     assert len(checks_far) == 1
     assert checks_far[0].status == "unverified"
+
+
+def test_zero_values_are_not_flagged():
+    """GND = 0 V, V_C(0⁻) = 0 V, I_N = 0 A: sıfır denetlenmez, uyarı çıkmaz."""
+    known = known_from([12])
+    _, checks = check_answer_numbers("V_C(0⁻) = 0 V, I_N = 0 A, (12 V − 0 V) farkı", known)
+    assert [c.text for c in checks] == ["12 V"]
+
+
+def test_subtraction_minus_is_not_part_of_the_number():
+    """'8,685 V - 5,474 V' içindeki boşluklu eksi çıkarma işaretidir; yazılan hâle girmez."""
+    known = known_from([8.685, 5.474])
+    _, checks = check_answer_numbers("Fark 8,685 V - 5,474 V olur.", known)
+    assert [c.text for c in checks] == ["8,685 V", "5,474 V"]
+    assert all(c.status == "verified" for c in checks)
+    # Bitişik eksi sayının işaretidir
+    assert find_numbers("I = -62,81 mA")[0].text == "-62,81 mA"
+    # Karmaşık sayının boşluklu sanal kısmı işaretini korur
+    assert find_numbers("0.92 − j2.89 V")[1].raw == pytest.approx(-2.89)
+
+
+def test_lesson_constants_are_verified_only_without_units():
+    """90°, 120°, √3 ve %99,3 her devrede doğrudur; birimli '90 V' ise değildir."""
+    known = known_from([12])
+    _, checks = check_answer_numbers(
+        "Akım 90° öndedir, fazlar 120 derece aralıklı, √3 = 1,732, 5τ sonunda %99,3 dolar; uydurma 90 V.",
+        known)
+    status = {c.text: c.status for c in checks}
+    assert status["90°"] == "verified"
+    assert status["120"] == "verified"
+    assert status["1,732"] == "verified"
+    assert status["99,3"] == "verified"
+    assert status["90 V"] == "unverified"

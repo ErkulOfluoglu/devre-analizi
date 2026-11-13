@@ -217,6 +217,8 @@
                             <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="Transparent"/>
                         </ScrollViewer.Resources>
                         <Canvas x:Name="CircuitCanvas"
+                                Focusable="True"
+                                FocusVisualStyle="{x:Null}"
                                 Width="4000" Height="3000"
                                 Background="{DynamicResource Brush.Canvas.Grid}"
                                 MouseLeftButtonDown="CircuitCanvas_MouseLeftButtonDown"

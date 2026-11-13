@@ -2,6 +2,7 @@ using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using CircuitAnalyzer.WPF.Helpers;
@@ -46,7 +47,7 @@ namespace CircuitAnalyzer.WPF
             string? json = _undoHistory.Undo();
             if (json != null)
             {
-                RestoreCircuitFromSnapshot(json);
+                TryRestoreCircuitFromSnapshot(json);
             }
         }
 
@@ -56,7 +57,20 @@ namespace CircuitAnalyzer.WPF
             string? json = _undoHistory.Redo();
             if (json != null)
             {
+                TryRestoreCircuitFromSnapshot(json);
+            }
+        }
+
+        /// <summary>Geri yükleme başarısız olursa program çökmez; tuvaldeki devre olduğu gibi kalır.</summary>
+        private void TryRestoreCircuitFromSnapshot(string json)
+        {
+            try
+            {
                 RestoreCircuitFromSnapshot(json);
+            }
+            catch (CircuitFileException ex)
+            {
+                Inform("Geri alınamadı", ex.Message, DialogKind.Error);
             }
         }
 
@@ -108,6 +122,14 @@ namespace CircuitAnalyzer.WPF
                 DefaultExt = CircuitDocument.FileExtension,
                 FileName = initialName,
             };
+            if (!string.IsNullOrEmpty(_currentFilePath))
+            {
+                // Farklı kaydet açık dosyanın adı ve klasöründen başlar
+                dialog.FileName = System.IO.Path.GetFileName(_currentFilePath);
+                string? folder = System.IO.Path.GetDirectoryName(_currentFilePath);
+                if (!string.IsNullOrEmpty(folder) && System.IO.Directory.Exists(folder))
+                    dialog.InitialDirectory = folder;
+            }
 
             if (dialog.ShowDialog(this) == true)
             {
@@ -159,6 +181,7 @@ namespace CircuitAnalyzer.WPF
                 var doc = CircuitDocument.Load(path);
                 string fileName = System.IO.Path.GetFileNameWithoutExtension(path);
                 var circuit = doc.ToCircuit(fileName);
+                EnsureSerializable(circuit);
 
                 LoadExample(circuit);
                 AnalysisPanel.RestoreAnalysisSettings(doc.Analysis);
@@ -197,6 +220,22 @@ namespace CircuitAnalyzer.WPF
             }
         }
 
+        /// <summary>
+        /// Devre kaydedilebiliyor mu diye önceden dener. Dosyada sonsuz ya da tanımsız bir sayı varsa
+        /// tuvaldeki devre silinmeden önce hata verilir.
+        /// </summary>
+        private static void EnsureSerializable(ExampleCircuit circuit)
+        {
+            try
+            {
+                CircuitDocument.Snapshot(circuit.Elements, circuit.Wires);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or InvalidOperationException)
+            {
+                throw new CircuitFileException("Dosyada geçersiz (sonsuz ya da tanımsız) bir sayı var.", ex);
+            }
+        }
+
         private void PromptAndOpenFileDialog()
         {
             if (!PromptSaveIfDirty()) return;
@@ -221,6 +260,8 @@ namespace CircuitAnalyzer.WPF
             ClearCircuit();
             _problemCode = null;
             AnalysisPanel.SetProblemCode(null);
+            // Eski çözüm bayatlar (Ctrl+P eski devreyi yazdırmasın), boş tuval ipucu geri gelir
+            OnCircuitChanged();
             _currentFilePath = null;
             _isDirty = false;
             _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
@@ -265,7 +306,10 @@ namespace CircuitAnalyzer.WPF
             base.OnClosing(e);
         }
 
-        /// <summary>Başlıktaki "Dosya" menüsü: aç, son açılanlar, kaydet, yazdır, netlist, temizle.</summary>
+        /// <summary>
+        /// Başlıktaki "Dosya" menüsü: yeni, aç, kaydet, farklı kaydet, yazdır, son açılanlar, netlist, temizle.
+        /// Son açılanlar alt menü değil, düz listedir (menü şablonunda alt menü açılmıyordu).
+        /// </summary>
         private void BtnFile_Click(object sender, RoutedEventArgs e)
         {
             var menu = new ContextMenu
@@ -281,13 +325,18 @@ namespace CircuitAnalyzer.WPF
                 return item;
             }
 
+            menu.Items.Add(Item("Yeni", "Ctrl+N", NewCircuit));
             menu.Items.Add(Item("Aç…", "Ctrl+O", PromptAndOpenFileDialog));
-            var recentMenu = new MenuItem { Header = "Son açılanlar" };
-            AddRecentFileItems(recentMenu);
-            recentMenu.IsEnabled = recentMenu.Items.Count > 0;
-            menu.Items.Add(recentMenu);
             menu.Items.Add(Item("Kaydet", "Ctrl+S", () => SaveCircuit()));
-            menu.Items.Add(Item("Yazdır / PDF", null, () => PrintOrExportPdf()));
+            menu.Items.Add(Item("Farklı kaydet…", "Ctrl+Shift+S", () => SaveAsCircuit()));
+            menu.Items.Add(Item("Yazdır / PDF", "Ctrl+P", () => PrintOrExportPdf()));
+            if (AppSettings.RecentFiles.Count > 0)
+            {
+                menu.Items.Add(new Separator());
+                // Başlık: tıklanmaz, soluk yazılır
+                menu.Items.Add(new MenuItem { Header = "Son açılanlar", IsEnabled = false, Cursor = Cursors.Arrow });
+                AddRecentFileItems(menu.Items);
+            }
             menu.Items.Add(new Separator());
             menu.Items.Add(Item("Netlist oluştur", null, () => BtnGenerateNetlist_Click(BtnFile, new RoutedEventArgs())));
             menu.Items.Add(Item("Temizle", null, () => BtnClearCanvas_Click(BtnFile, new RoutedEventArgs())));
@@ -295,7 +344,7 @@ namespace CircuitAnalyzer.WPF
             menu.IsOpen = true;
         }
 
-        private void AddRecentFileItems(MenuItem menu)
+        private void AddRecentFileItems(ItemCollection items)
         {
             var recent = AppSettings.RecentFiles;
             if (recent.Count > 0)
@@ -319,7 +368,7 @@ namespace CircuitAnalyzer.WPF
                         if (!PromptSaveIfDirty()) return;
                         OpenFile(filePath);
                     };
-                    menu.Items.Add(item);
+                    items.Add(item);
                 }
             }
         }

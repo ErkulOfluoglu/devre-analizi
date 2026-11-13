@@ -349,6 +349,31 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("approx_size_gb")] public double ApproxSizeGb { get; set; }
         /// <summary>Belleğe göre Türkçe tavsiye cümlesi.</summary>
         [JsonPropertyName("advice_message")] public string AdviceMessage { get; set; } = "";
+        /// <summary>"Çalıştığı yer" seçenekleri (Otomatik, Ekran kartı, İşlemci, NPU).</summary>
+        [JsonPropertyName("device_options")] public List<LlmDeviceOptionDto> DeviceOptions { get; set; } = new();
+        /// <summary>Otomatik seçilince kullanılacak yer: AiDeviceIds.Npu / Gpu / Cpu.</summary>
+        [JsonPropertyName("auto_device")] public string AutoDevice { get; set; } = AiDeviceIds.Cpu;
+        /// <summary>Modelin şu an çalıştığı yer ("ekran kartında", "işlemcide"…); bilinmiyorsa null.</summary>
+        [JsonPropertyName("placement")] public string? Placement { get; set; }
+        /// <summary>Tümleşik ekran kartı var ama Ollama onu kullanacak ayarla açılmadı.</summary>
+        [JsonPropertyName("gpu_needs_restart")] public bool GpuNeedsRestart { get; set; }
+    }
+
+    public static class AiDeviceIds
+    {
+        public const string Auto = "auto";
+        public const string Gpu = "gpu";
+        public const string Cpu = "cpu";
+        public const string Npu = "npu";
+    }
+
+    public sealed class LlmDeviceOptionDto
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("label")] public string Label { get; set; } = "";
+        [JsonPropertyName("available")] public bool Available { get; set; }
+        /// <summary>Seçeneğin altındaki açıklama ya da kullanılamama sebebi.</summary>
+        [JsonPropertyName("note")] public string Note { get; set; } = "";
     }
 
     public static class LlmFits
@@ -423,6 +448,8 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("question")] public string Question { get; set; } = "";
         /// <summary>Boşsa sunucu seçer (önerilen ya da ilk kurulu model).</summary>
         [JsonPropertyName("model")] public string? Model { get; set; }
+        /// <summary>Çalıştığı yer: AiDeviceIds sabitlerinden biri.</summary>
+        [JsonPropertyName("device")] public string Device { get; set; } = AiDeviceIds.Auto;
         /// <summary>Önceki soru-cevaplar, en eski önce (sunucu son 6'sını kullanır).</summary>
         [JsonPropertyName("history")] public List<ChatTurnDto> History { get; set; } = new();
         /// <summary>Alıştırma sürüyor mu: true → model sonuçları görmez, cevap sayıları gizlenir.</summary>
@@ -463,6 +490,10 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("numbers")] public List<LlmNumberCheckDto> Numbers { get; set; } = new();
         /// <summary>Doğrulanamayan / gizlenen sayılar için Türkçe uyarı (yoksa null).</summary>
         [JsonPropertyName("note")] public string? Note { get; set; }
+        /// <summary>Cevabın üretildiği yer: npu | gpu | cpu | ollama.</summary>
+        [JsonPropertyName("device")] public string Device { get; set; } = "ollama";
+        /// <summary>Cevaptan sonra modelin çalıştığı yer ("ekran kartında"…); bilinmiyorsa null.</summary>
+        [JsonPropertyName("placement")] public string? Placement { get; set; }
     }
 
     public sealed class TransientQuantityDto

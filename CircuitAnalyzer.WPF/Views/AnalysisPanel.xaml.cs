@@ -86,6 +86,7 @@ public partial class AnalysisPanel : UserControl
     public Func<CancellationToken, Task<LlmStatusDto?>>? LlmStatusProvider { get; set; }
     public Func<LlmAskRequestDto, CancellationToken, Task<LlmAnswerDto>>? LlmAsker { get; set; }
     public Func<CancellationToken, Task<bool>>? LlmStartOllama { get; set; }
+    public Func<CancellationToken, Task<bool>>? LlmEnableGpu { get; set; }
     public Func<string?, CancellationToken, Task<LlmPullStatusDto>>? LlmStartPull { get; set; }
     public Func<CancellationToken, Task<LlmPullStatusDto?>>? LlmGetPull { get; set; }
     public Func<CancellationToken, Task<bool>>? LlmCancelPull { get; set; }
@@ -389,7 +390,10 @@ public partial class AnalysisPanel : UserControl
         if (BtnDisplayRms != null) BtnDisplayRms.IsChecked = !isPeak;
         if (BtnDisplayPeak != null) BtnDisplayPeak.IsChecked = isPeak;
 
-        AppSettings.AcValueDisplay = normalized;
+        // Varsayılan yalnız öğrencinin kendi seçimiyle değişir (notify = düğmeye tıklandı).
+        // Tepe değerle kaydedilmiş bir dosyayı açmak sonraki devrelerin ayarını değiştirmez.
+        if (notify)
+            AppSettings.AcValueDisplay = normalized;
 
         if (notify && changed)
         {
@@ -528,7 +532,9 @@ public partial class AnalysisPanel : UserControl
         }
 
         double? powerFactorTarget = null;
-        if (string.Equals(analysisType, AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase))
+        // Kutu Güç ve Üç Faz yöntemlerinde görünür; ikisinde de çözücüye gönderilir
+        if (string.Equals(analysisType, AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(analysisType, AnalysisTypes.ThreePhase, StringComparison.OrdinalIgnoreCase))
         {
             string pfText = TxtPowerFactorTarget?.Text?.Trim() ?? "";
             if (!string.IsNullOrEmpty(pfText))
@@ -622,6 +628,7 @@ public partial class AnalysisPanel : UserControl
                 StatusProvider = LlmStatusProvider,
                 Asker = LlmAsker,
                 StartOllama = LlmStartOllama,
+                EnableGpu = LlmEnableGpu,
                 StartPull = LlmStartPull,
                 GetPull = LlmGetPull,
                 CancelPull = LlmCancelPull
@@ -679,12 +686,6 @@ public partial class AnalysisPanel : UserControl
                 AddMessageCard(msg);
             }
 
-            // Yapay zekâ asistanı
-            if (CurrentAssistantView != null)
-            {
-                ResultsContainer.Children.Add(CurrentAssistantView);
-            }
-
             // 3. PracticeView oluştur
             var practiceView = new PracticeView
             {
@@ -696,6 +697,12 @@ public partial class AnalysisPanel : UserControl
             CurrentPracticeView = practiceView;
 
             ResultsContainer.Children.Add(practiceView);
+
+            // Yapay zekâ asistanı soruların altında (önce öğrenci kendisi denesin)
+            if (CurrentAssistantView != null)
+            {
+                ResultsContainer.Children.Add(CurrentAssistantView);
+            }
         }
         else
         {

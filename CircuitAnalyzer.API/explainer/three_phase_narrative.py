@@ -115,8 +115,9 @@ def _voltage_section(an: ThreePhaseAnalysis) -> List[_Section]:
            f"(faz sırası {an.sequence}):")
     for ph in PHASES:
         s.math(f"V_{ph}N = {_c(an.v_ph[ph], 'V')}")
+    lead = "öndedir" if an.sequence == "RST" else "geridedir"
     s.text("Hat gerilimi iki faz geriliminin farkıdır; büyüklüğü faz geriliminin √3 katıdır "
-           "ve fazı 30° kayar:")
+           f"ve faz sırası {an.sequence} olduğundan V_RS, V_RN'den 30° {lead}:")
     vl = line_voltages(an.v_ph)
     s.math(f"V_RS = V_RN {MINUS} V_SN = {_c(vl['RS'], 'V')}")
     s.math(f"V_ST = V_SN {MINUS} V_TN = {_c(vl['ST'], 'V')}")
@@ -147,8 +148,10 @@ def _balanced_sections(an: ThreePhaseAnalysis) -> List[_Section]:
         s.text("Yıldız bağlantıda hat akımı faz akımına eşittir: I_h = I_f.")
         s.math(f"I_f = V_RN / Z = {_c(an.v_ph['R'], 'V')} / {_z(z0)} = {_c(h['i_line']['R'], 'A')}")
     else:
-        s.text("Üçgen yükte her kol hat gerilimini görür: U_f = U_h. Hat akımı faz akımının "
-               "√3 katıdır ve 30° geridedir.")
+        # U_f yukarıda kaynağın faz gerilimi (U_h/√3) olarak kullanıldı; üçgen yükün kolu için ayrı ad
+        lag = "geridedir" if an.sequence == "RST" else "öndedir"
+        s.text("Üçgen yükte her kol hat gerilimini görür: kol gerilimi U_kol = U_h. Hat akımı kol "
+               f"akımının √3 katıdır ve faz sırası {an.sequence} olduğundan kol akımından 30° {lag}.")
         vl = line_voltages(an.v_ph)
         s.math(f"I_RS = V_RS / Z = {_c(vl['RS'], 'V')} / {_z(z0)} = {_c(h['i_phase']['RS'], 'A')}")
         s.math(f"I_ST = {_c(h['i_phase']['ST'], 'A')},  I_TR = {_c(h['i_phase']['TR'], 'A')}")
@@ -237,9 +240,11 @@ def _power_section(an: ThreePhaseAnalysis) -> List[_Section]:
                f"{eng(an.p, 'W')}")
         if an.conn_l == "Y":
             uf_r, if_r = an.to_rms(an.uf), ih_r
+            arm = "U_f · I_f"
         else:
             uf_r, if_r = uh_r, an.to_rms(abs(h["i_phase"]["RS"]))
-        s.math(f"P = 3 · U_f · I_f · cos φ = 3 · {num(uf_r)} · {num(if_r)} · {num(cosphi)} = "
+            arm = "U_kol · I_kol"
+        s.math(f"P = 3 · {arm} · cos φ = 3 · {num(uf_r)} · {num(if_r)} · {num(cosphi)} = "
                f"{eng(3 * uf_r * if_r * cosphi, 'W')}")
         sgn = "" if z0.imag >= 0 else MINUS
         s.math(f"Q = √3 · U_h · I_h · sin φ = {sgn}{eng(SQRT3 * uh_r * ih_r * sinphi, 'VAR')}")
@@ -383,7 +388,7 @@ def _short_sections(an: ThreePhaseAnalysis, transformer: bool) -> List[_Section]
 
 def _check_section(an: ThreePhaseAnalysis) -> _Section:
     s = _Section("Kontrol")
-    s.check("Elle türetilen hat akımları çözücünün (lcapy) sonuçlarıyla uyuşuyor.")
+    s.check("Elle türetilen hat akımları programın çözücüsünün sonuçlarıyla uyuşuyor.")
     if an.i_n is not None:
         s.check(f"Nötr akımı I_N = {eng(abs(an.i_n), 'A')}.")
     s.check("Toplam güç, kaynağın verdiği güçle aynı: "

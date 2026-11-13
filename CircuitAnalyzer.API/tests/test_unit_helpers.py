@@ -398,12 +398,12 @@ class TestNetlistParser:
         circuit2 = parse_netlist(netlist_without_gnd)
         assert circuit2.has_ground is False
 
-    def test_unknown_line_warning(self):
-        """Tanınmayan eleman formatı circuit.warnings listesine uyarı ekler."""
+    def test_unknown_line_is_an_error(self):
+        """Tanınmayan satır hata verir: atlanırsa devre eksik çözülür (Fable denetimi)."""
         netlist = "X1 1 2 foo\n.end"
         circuit = parse_netlist(netlist)
-        assert len(circuit.warnings) == 1
-        assert "Tanınmayan" in circuit.warnings[0]
+        assert len(circuit.errors) == 1
+        assert "Satır 1 anlaşılamadı" in circuit.errors[0]
 
     def test_end_ignored_and_node_count(self):
         """.end satırı eleman sayılmamalı ve 0 dahil benzersiz düğüm sayısı hesaplanmalıdır."""

@@ -657,6 +657,9 @@ def _solve_transient(
         reason = f"Geçici durum hesaplanırken beklenmeyen bir hata oluştu ({type(e).__name__})."
 
     if analysis is None:
+        # Yeşil "Çözüm başarılı" yanıltır: öğrenci geçici durum sonucunu görmüyor
+        errors.append(f"⚠ Geçici durum uygulanamadı: {reason} Gösterilen sonuçlar "
+                      "anahtarların t > 0 konumundaki kararlı hâldir.")
         fb = ExplanationSection(title="Geçici Durum (Anahtar)", blocks=[ExplanationBlock(
             kind="note",
             text=(f"Bu devrede geçici durum analizi uygulanamadı: {reason} "
@@ -846,7 +849,7 @@ def _solve_core(
             step_number=2,
             title="Devre Modeli Oluşturma",
             description=(
-                "Netlist lcapy formatına dönüştürüldü ve "
+                "Devre, çözücünün okuyacağı satırlara çevrildi ve "
                 "sembolik devre modeli oluşturuldu." + model_note
             ),
             equations=lcapy_text.split("\n"),

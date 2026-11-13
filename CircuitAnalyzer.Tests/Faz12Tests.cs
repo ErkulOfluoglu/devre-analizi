@@ -105,7 +105,7 @@ public class Faz12Tests
     [InlineData("10 µF", 10e-6)]
     [InlineData("100n", 100e-9)]
     [InlineData("22p", 22e-12)]
-    [InlineData("10f", 10e-15)]
+    [InlineData("10fF", 10e-15)]   // tek başına "10f" artık 10 farad (DataSafetyTests)
     [InlineData("2G", 2e9)]
     [InlineData("1T", 1e12)]
     [InlineData("-3,2mA", -0.0032)]

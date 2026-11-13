@@ -269,13 +269,15 @@ namespace CircuitAnalyzer.WPF.Views
             }
         }
 
-        private static Point BelowOrRight(CircuitElement element)
+        internal static Point BelowOrRight(CircuitElement element)
         {
             double cx = element.Position.X + element.VisualWidth / 2;
             double cy = element.Position.Y + element.VisualHeight / 2;
             bool vertical = Math.Abs(element.Rotation % 180 - 90) < 1;
+            // Dikey elemanda değer yazısı ("200Ω") gövdenin sağında, ortada durur: akım etiketi
+            // aynı yere konunca yazıyı örtüyordu ("200C"). Etiket sağda ama yazının altına iner.
             return vertical
-                ? new Point(cx + element.VisualHeight / 2 + 14, cy - 8)
+                ? new Point(cx + 12, cy + 12)
                 : new Point(cx - element.VisualWidth / 2, cy + element.VisualHeight / 2 + 2);
         }
 

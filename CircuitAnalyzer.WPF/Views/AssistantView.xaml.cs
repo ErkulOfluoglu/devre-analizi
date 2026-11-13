@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Shapes;
 using CircuitAnalyzer.WPF.Controls;
 using CircuitAnalyzer.WPF.Services;
 
@@ -20,6 +21,8 @@ public partial class AssistantView : UserControl
     private AnalysisRequestDto? _analysisRequest;
     private IReadOnlyList<PracticeQuestionDto> _practiceQuestions = Array.Empty<PracticeQuestionDto>();
     private readonly List<ChatTurnDto> _history = new();
+    /// <summary>Çözücüye gönderilen en fazla geçmiş mesajı (sunucu sınırı 40).</summary>
+    internal const int MaxSentTurns = 20;
     private LlmStatusDto? _lastStatus;
     private bool _statusFetched;
     private CancellationTokenSource? _cts;
@@ -28,6 +31,8 @@ public partial class AssistantView : UserControl
     public Func<CancellationToken, Task<LlmStatusDto?>>? StatusProvider { get; set; }
     public Func<LlmAskRequestDto, CancellationToken, Task<LlmAnswerDto>>? Asker { get; set; }
     public Func<CancellationToken, Task<bool>>? StartOllama { get; set; }
+    /// <summary>Ollama'yı tümleşik ekran kartı ayarıyla yeniden başlatır (POST /llm/gpu/enable).</summary>
+    public Func<CancellationToken, Task<bool>>? EnableGpu { get; set; }
     public Func<string?, CancellationToken, Task<LlmPullStatusDto>>? StartPull { get; set; }
     public Func<CancellationToken, Task<LlmPullStatusDto?>>? GetPull { get; set; }
     public Func<CancellationToken, Task<bool>>? CancelPull { get; set; }
@@ -41,6 +46,18 @@ public partial class AssistantView : UserControl
     public string StatusText => _statusText;
 
     public string? SelectedModel => CmbModel?.SelectedItem as string ?? _lastStatus?.SelectedModel;
+
+    /// <summary>Seçili "Çalıştığı yer" (AiDeviceIds); liste dolmadıysa Otomatik.</summary>
+    public string SelectedDevice => (CmbDevice?.SelectedItem as AiDeviceItem)?.Id ?? AiDeviceIds.Auto;
+
+    /// <summary>"Şu an: …" satırı (gizliyse null).</summary>
+    public string? PlacementText => RowPlacement?.Visibility == Visibility.Visible ? TxtPlacement?.Text : null;
+
+    /// <summary>Tümleşik ekran kartı için yeniden başlatma sorusu görünüyor mu.</summary>
+    public bool IsGpuRestartShown => GpuRestartBar?.Visibility == Visibility.Visible;
+
+    private bool _fillingDevices;
+    private string? _placement;
 
     public IReadOnlyList<ChatTurnDto> History => _history;
 
@@ -137,6 +154,7 @@ public partial class AssistantView : UserControl
                     }
                 }
                 _statusText = $"Hazır — {SelectedModel}";
+                FillDevices(status);
             }
             else
             {
@@ -232,7 +250,9 @@ public partial class AssistantView : UserControl
 
         var req = LlmAskRequestDto.From(_analysisRequest, question);
         req.Model = SelectedModel;
-        req.History = new List<ChatTurnDto>(_history);
+        req.Device = SelectedDevice;
+        // Model yalnızca son birkaç soru-cevabı kullanır; uzun sohbette istek büyümesin
+        req.History = _history.Skip(Math.Max(0, _history.Count - MaxSentTurns)).ToList();
         req.Practice = IsPractice;
         req.PracticeQuestions = new List<PracticeQuestionDto>(_practiceQuestions);
 
@@ -251,14 +271,18 @@ public partial class AssistantView : UserControl
             var assistantTurn = new ChatTurnDto { Role = ChatRoles.Assistant, Content = answer.Answer };
             _history.Add(assistantTurn);
             AddAssistantBubble(answer);
+            ShowPlacement(AiDevices.PlacementFromAnswer(answer));
         }
         catch (OperationCanceledException)
         {
+            // Cevapsız kalan soru sohbet geçmişinde kalmasın (sonraki sorularda modele gitmesin)
+            _history.Remove(userTurn);
             LastError = "İptal edildi.";
             ShowError(LastError);
         }
         catch (Exception ex)
         {
+            _history.Remove(userTurn);
             LastError = ex.Message;
             ShowError(LastError);
         }
@@ -413,6 +437,12 @@ public partial class AssistantView : UserControl
         if (RowBusy != null)
             RowBusy.Visibility = IsBusy ? Visibility.Visible : Visibility.Collapsed;
 
+        if (TxtBusy != null)
+            TxtBusy.Text = AiDevices.BusyText(AiDevices.Effective(SelectedDevice, _lastStatus));
+
+        if (CmbDevice != null)
+            CmbDevice.IsEnabled = !IsBusy;
+
         if (BtnSend != null)
             BtnSend.IsEnabled = !IsBusy;
 
@@ -483,6 +513,99 @@ public partial class AssistantView : UserControl
                 TxtStatusLine.Text = _statusText;
             }
         }
+    }
+
+    // ── Çalıştığı yer (ekran kartı / işlemci / NPU) ──
+
+    private void FillDevices(LlmStatusDto status)
+    {
+        if (CmbDevice == null) return;
+        var items = AiDevices.Items(status);
+        _fillingDevices = true;
+        try
+        {
+            CmbDevice.ItemsSource = items;
+            CmbDevice.SelectedItem = AiDevices.Pick(items, AppSettings.AiDevice);
+        }
+        finally
+        {
+            _fillingDevices = false;
+        }
+        // Tek seçenek (eski çözücü) varsa satır gösterilmez
+        var rowVisibility = items.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        if (LblDevice != null) LblDevice.Visibility = rowVisibility;
+        CmbDevice.Visibility = rowVisibility;
+        ShowPlacement(status.Placement);
+        UpdateGpuRestartBar();
+    }
+
+    private void ShowPlacement(string? placement)
+    {
+        _placement = placement;
+        var line = AiDevices.PlacementLine(placement);
+        if (RowPlacement == null || TxtPlacement == null || DotPlacement == null) return;
+        RowPlacement.Visibility = line == null ? Visibility.Collapsed : Visibility.Visible;
+        TxtPlacement.Text = line ?? "";
+        bool mismatch = AiDevices.IsMismatch(AiDevices.Effective(SelectedDevice, _lastStatus), placement);
+        DotPlacement.SetResourceReference(Shape.FillProperty, mismatch ? "Brush.Warning" : "Brush.Success");
+    }
+
+    private void UpdateGpuRestartBar()
+    {
+        if (GpuRestartBar == null) return;
+        bool ask = SelectedDevice == AiDeviceIds.Gpu && _lastStatus?.GpuNeedsRestart == true;
+        GpuRestartBar.Visibility = ask ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void CmbDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_fillingDevices || CmbDevice?.SelectedItem is not AiDeviceItem item) return;
+        AppSettings.AiDevice = item.Id;
+        UpdateGpuRestartBar();
+        ShowPlacement(_placement);
+        UpdateBusyState();
+    }
+
+    private async void BtnGpuRestart_Click(object sender, RoutedEventArgs e)
+    {
+        if (EnableGpu == null) return;
+        BtnGpuRestart.IsEnabled = false;
+        BtnGpuCancel.IsEnabled = false;
+        TxtGpuRestart.Text = "Ollama ekran kartı ayarıyla yeniden başlatılıyor…";
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            if (!await EnableGpu(cts.Token))
+            {
+                TxtGpuRestart.Text = "Ollama yeniden başlatılamadı. İşlemciyle devam edebilirsiniz.";
+                return;
+            }
+            // Ollama'nın açılmasını bekle (en fazla ~30 sn), sonra durumu yenile
+            for (int i = 0; i < 30; i++)
+            {
+                await Task.Delay(1000);
+                if (StatusProvider == null) break;
+                using var c2 = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                var st = await StatusProvider(c2.Token);
+                if (st is { Available: true }) break;
+            }
+            await RefreshStatusAsync();
+        }
+        catch (Exception)
+        {
+            TxtGpuRestart.Text = "Ollama yeniden başlatılamadı. İşlemciyle devam edebilirsiniz.";
+        }
+        finally
+        {
+            BtnGpuRestart.IsEnabled = true;
+            BtnGpuCancel.IsEnabled = true;
+        }
+    }
+
+    private void BtnGpuCancel_Click(object sender, RoutedEventArgs e)
+    {
+        if (CmbDevice?.ItemsSource is IReadOnlyList<AiDeviceItem> items)
+            CmbDevice.SelectedItem = items.First(i => i.Id == AiDeviceIds.Auto);
     }
 
     private void BtnCancel_Click(object sender, RoutedEventArgs e)

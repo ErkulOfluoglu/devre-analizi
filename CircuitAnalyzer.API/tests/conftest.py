@@ -19,6 +19,24 @@ def client():
     return TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def no_real_ai_hardware(monkeypatch):
+    """
+    Testler bilgisayardaki gerçek NPU'ya, ekran kartına ya da çalışan Ollama'ya
+    dokunmasın: varsayılan olarak NPU yok, ekran kartı yok, bellekte model yok.
+    Bunları deneyen testler kendi değerlerini monkeypatch ile verir.
+    """
+    from llm import devices, ollama
+    monkeypatch.setattr(devices, "_probe_npu",
+                        lambda: devices.NpuInfo(False, None, "Bu bilgisayarda FastFlowLM kurulu değil."))
+    monkeypatch.setattr(devices, "_npu_cached", None)
+    monkeypatch.setattr(devices, "_display_adapters", lambda: [])
+    monkeypatch.setattr(devices, "flm_running", lambda: False)
+    monkeypatch.setattr(devices, "_igpu_started", False)
+    monkeypatch.setattr(devices, "_last_where", None)
+    monkeypatch.setattr(ollama, "running_models", lambda: None)
+
+
 @pytest.fixture
 def solve():
     def _solve(netlist, mode="DC", frequency=None, analysis_type="NODAL",

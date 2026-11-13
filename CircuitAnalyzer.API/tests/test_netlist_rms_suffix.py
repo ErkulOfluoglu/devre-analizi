@@ -16,7 +16,8 @@ def test_rms_suffix_rejected_on_non_ac_lines(line):
 
 def test_rms_inside_an_id_is_not_a_suffix():
     assert not parse_netlist("R1 1 0 10").errors
-    assert not any("RMS" in e for e in parse_netlist("XRMS").errors)
+    # Tanınmayan satır hatası verir, ama RMS eki hatası değil
+    assert all("anlaşılamadı" in e for e in parse_netlist("XRMS").errors)
 
 
 def test_long_whitespace_line_parses_quickly():

@@ -46,13 +46,95 @@ _METHOD_NAMES = {
 
 _RULES = """Sen meslek yüksekokulu elektronik öğrencilerine devre analizi anlatan sabırlı bir öğretmensin.
 Kurallar:
-1. Yalnızca Türkçe yaz. Selamlama yapma, doğrudan cevaba gir. Kısa ve sade ol: en fazla 8–10 cümle.
+1. Yalnızca Türkçe yaz. Öğrenciye her zaman "siz" diye hitap et ("bulabilirsiniz", "kurmalısınız"); "sen" kullanma. Selamlama yapma, doğrudan cevaba gir. Kısa ve sade ol: en fazla 8–10 cümle.
 2. Aşağıdaki DEVRE ve ÇÖZÜM bilgilerini kullan. Bir sayı gerekiyorsa bu bilgilerde yazan sayıyı AYNEN kullan; kendin yeni hesap yapma, sayı uydurma.
 3. Hangi elemanın nereye bağlı olduğunu yalnızca DEVRE listesindeki düğümlere göre söyle; bağlantı tahmin etme.
-4. Sorunun cevabı verilen bilgilerde yoksa bunu açıkça söyle; tahmin yürütme.
+4. "Neden", "ne demek" gibi kavram sorularını ders bilginle ve aşağıdaki KAVRAM NOTLARI ile açıkla. Yalnızca bu devreye ait bir sayı ya da bilgi verilenlerde yoksa bunu açıkça söyle; tahmin yürütme.
 5. Fazörler tepe (maksimum) değerdir, etkin değer değildir.
 6. İşaret kuralı (pasif işaret kuralı): Her elemanın akımı, ELEMANIN İÇİNDEN (+) ucundan (−) ucuna doğru (eleman adının yanındaki "1→0" gibi düğüm sırası) pozitif alınır. Güç veren bir gerilim kaynağında gerçek akım kaynağın içinden (−) uçtan (+) uca akar ve dış devreye (+) uçtan çıkar; bu yüzden kaynağın akımı EKSİ çıkar. Eksi işaret hata değildir, akımın seçilen referans yönün tersine aktığını gösterir.
-7. Formülleri düz metinle yaz (LaTeX ve Markdown kullanma)."""
+7. Formülleri düz metinle yaz (LaTeX ve Markdown kullanma).
+8. KCL denkleminde düğüme bağlı her elemanın akımını yalnızca BİR kez yaz; aynı akımı hem giren hem çıkan sayma.
+9. GÜVENLİK: Öğrenci devreyi gerçekten kurmaktan, prizden, şebekeden ya da 220/230 V'tan söz ederse cevaba açık bir uyarıyla başla: şebeke gerilimi (Türkiye'de 230 V etkin, 50 Hz AC) çarparak öldürebilir; derslerdeki küçük dirençler bu gerilimde aşırı akım ve güç çekip ısınır, yanar ya da patlar. Şebekeye bağlı hiçbir devreyi öğretmen ya da laboratuvar gözetimi olmadan kurmamasını söyle.
+10. Devre analiziyle ilgisiz isteklere (fıkra, sohbet, başka dersler) tek cümleyle yalnızca devre sorularına yardım ettiğini söyle ve bu devreyle ilgili sorabileceği bir soru öner; çözümdeki sayıları sıralama."""
+
+# Küçük modeller bu kavramları denemelerde yanlış anlattı (2026-11-05:
+# reaktif güç "tüketilir", hat gerilimi faz gerilimlerinin "toplamı",
+# kondansatör "akım depolar"). Doğrusu konuya göre modele hazır verilir.
+_NOTES_GENERAL = [
+    "Bir kaynağı sıfırlamak: ideal gerilim kaynağı 0 V olur, yani KISA DEVRE yapılır (iç direnci sıfırdır). "
+    "İdeal akım kaynağı 0 A olur, yani AÇIK DEVRE yapılır (iç direnci sonsuzdur). Açık devre yapılan gerilim "
+    "kaynağı devreyi koparır, artık sıfır volt değildir; bu yüzden yanlış olur.",
+]
+_NOTES_AC = [
+    "Kondansatör enerjiyi elektrik alanında (yük olarak) depolar; akım depolamaz. Akımı gerilimden 90° öndedir, "
+    "yani gerilimi akımından 90° geridedir. Bobinde ise akım gerilimden 90° geridedir.",
+]
+# Yalnız devrede kondansatör var, bobin yoksa
+_NOTE_SERIES_RC = (
+    "Seri RC devresinde akım kaynak geriliminden φ kadar öndedir (0° < φ < 90°). Kondansatörün gerilimi kendi "
+    "akımından 90° geride olduğu için kaynak geriliminden (90° − φ) kadar geride kalır. Direncin gerilimi akımla "
+    "aynı fazdadır.")
+# Yalnız devrede bobin var, kondansatör yoksa
+_NOTE_SERIES_RL = (
+    "Seri RL devresinde akım kaynak geriliminden φ kadar geridedir (0° < φ < 90°). Bobinin gerilimi kendi "
+    "akımından 90° önde olduğu için kaynak geriliminden (90° − φ) kadar önde olur. Direncin gerilimi akımla "
+    "aynı fazdadır.")
+_NOTES_POWER = [
+    "Reaktif güç (Q, VAr) TÜKETİLMEZ: bobin ve kondansatör enerjiyi bir çeyrek periyotta alanlarında depolar, "
+    "sonraki çeyrek periyotta kaynağa geri verir; ortalaması sıfırdır. İş yapmaz ama hatlarda fazladan akım "
+    "dolaştırıp kayıp ve gerilim düşümü yaratır.",
+    "Faturaya yansıması: Türkiye'de konut abonelerinden reaktif enerji bedeli genellikle alınmaz. Sanayi ve büyük "
+    "ticari abonelerde reaktif enerji, aktif enerjiye göre izin verilen oranı aşarsa bedeli faturaya yansır; bu "
+    "yüzden kondansatörlerle kompanzasyon yapılır. Kesin oran ve sınırlar mevzuata göre değişir.",
+    "Güç katsayısı cos φ = P / S'dir. Yalnız direnç varsa φ = 0° ve cos φ = 1'dir; bobin ya da kondansatör "
+    "akımla gerilim arasında faz farkı yarattığı için cos φ 1'den küçük olur.",
+]
+_NOTES_RESONANCE = [
+    "Seri RLC rezonansında X_L = X_C olur, reaktanslar birbirini götürür, empedans en küçük (Z = R) ve akım en "
+    "büyüktür. Bu anda bobin ve kondansatör gerilimleri kaynak geriliminin Q katına çıkabilir. Q = X / R = f₀ / BW; "
+    "Q büyüdükçe eğri daralır, devre daha seçici olur.",
+    "Paralel RLC rezonansında da X_L = X_C'dir ve f₀ = 1 / (2π√(LC)) aynıdır; ama bu kez bobin ve kondansatör "
+    "kollarının akımları birbirini götürür: kaynağın gördüğü empedans en BÜYÜK (Z = R), kaynak akımı en küçüktür. "
+    "Bobin ve kondansatör kollarındaki akımlar kaynak akımının Q katı olabilir (Q = R / X).",
+    "Rezonansta akım ile kaynak gerilimi aynı fazdadır (φ = 0°), güç katsayısı cos φ = 1'dir; devre kaynağa saf "
+    "direnç gibi görünür.",
+]
+_NOTES_TRANSFORMER = [
+    "İdeal transformatörde güç korunur (S₁ = S₂). Gerilim sarım oranıyla aynı yönde, akım ters oranla değişir: "
+    "gerilimi düşüren (alçaltıcı) transformatörde sekonder akımı primer akımından büyüktür.",
+]
+_NOTES_THREE_PHASE = [
+    "Yıldız (Y) bağlantıda hat gerilimi iki faz geriliminin FARKIDIR: U_RS = U_RN − U_SN. Aralarında 120° olan "
+    "iki eşit fazörün farkının büyüklüğü √3 katıdır, bu yüzden U_hat = √3 · U_faz. Faz sırası RST (pozitif) ise "
+    "hat gerilimi faz geriliminden 30° öndedir; RTS sırasında 30° geridedir. Yıldızda hat akımı faz akımına eşittir.",
+    "Üçgen (Δ) bağlantıda hat gerilimi faz gerilimine eşittir; hat akımı iki faz akımının farkıdır. Yük dengeliyse "
+    "I_hat = √3 · I_faz olur; yük dengesizse √3 kuralı geçerli değildir, hat akımı faz akımlarının fazör farkından "
+    "bulunur.",
+    "Dengeli yükte üç faz akımı eşit büyüklükte ve aralarında 120° vardır; fazör toplamları sıfır olduğu için "
+    "nötr akımı sıfırdır. Yük dengesizse nötrden akım geçer.",
+]
+
+
+def concept_notes(analysis_type: AnalysisType, is_dc: bool,
+                  has_c: bool = False, has_l: bool = False) -> str:
+    """
+    Yönteme uygun kısa ve doğru kavram notları (yalnız ilgili olanlar: bağlam kısa kalsın).
+    has_c / has_l: devrede kondansatör / bobin var mı (seri RC ve RL notları yalnız kendi devresine).
+    """
+    notes = list(_NOTES_GENERAL)
+    if not is_dc:
+        notes += _NOTES_AC
+        if has_c and not has_l:
+            notes.append(_NOTE_SERIES_RC)
+        elif has_l and not has_c:
+            notes.append(_NOTE_SERIES_RL)
+    notes += {
+        AnalysisType.POWER: _NOTES_POWER,
+        AnalysisType.RESONANCE: _NOTES_RESONANCE,
+        AnalysisType.TRANSFORMER: _NOTES_TRANSFORMER,
+        AnalysisType.THREE_PHASE: _NOTES_THREE_PHASE + _NOTES_POWER,
+    }.get(analysis_type, [])
+    return "KAVRAM NOTLARI (doğru bilgiler; kavram sorularında bunlara uy):\n" + "\n".join(f"- {n}" for n in notes)
 
 
 def _rules_for(value_basis: str) -> str:
@@ -65,7 +147,8 @@ def _rules_for(value_basis: str) -> str:
 
 _PRACTICE_RULES = """ÖNEMLİ: Öğrenci şu anda bu devreyle ALIŞTIRMA çözüyor; sonuçlar sana bilerek verilmedi.
 Hiçbir sorunun sayısal cevabını söyleme ve sayısal hesap yapma.
-Yalnızca yöntemi, hangi denklemin nasıl kurulacağını ve bir sonraki adımı sözle tarif et."""
+Yalnızca yöntemi, hangi denklemin nasıl kurulacağını ve bir sonraki adımı sözle tarif et.
+Bilinmeyen sayısını doğru söyle: düğüm yönteminde kaynaktan bilinmeyen her düğüm bir bilinmeyendir ve her biri için ayrı bir KCL denklemi gerekir."""
 
 
 def _node(n: str) -> str:
@@ -221,7 +304,8 @@ def current_directions_text(parsed: ParsedCircuit, results: AnalysisResults, is_
             ap = powers[e.id].active_power
             if ap < -1e-15:
                 sign_text = ("akımı eksi çıkar" if is_dc else
-                             "akım fazörü referansa göre yaklaşık 180° ters fazlıdır (eksi işaretli)")
+                             "akım fazörü ile kaynak gerilimi arasındaki açı 90°'den büyüktür "
+                             "(cos φ < 0, P < 0)")
                 lines.append(f"  {e.id} devreye güç VERİYOR (P = {eng(-ap, 'W')}): gerçek akım kaynağın "
                              f"içinden (−) uçtan (+) uca akar ve dış devreye (+) ucundan ({p}) çıkar. "
                              f"Referans yön (+) → (−) olduğu için {sign_text}.")
@@ -244,7 +328,11 @@ def build_messages(
                                                   AnalysisType.SOURCE_TRANSFORM):
         method += f" ({_node(terminals.node_positive)} – {_node(terminals.node_negative)} terminalleri)"
     basis = getattr(parsed, "value_basis", "PEAK")
-    ctx = [_rules_for(basis), "", circuit_text(parsed, is_dc, frequency), f"Yöntem: {method}", ""]
+    kinds = {e.element_type for e in parsed.elements}
+    notes = concept_notes(analysis_type, is_dc,
+                          has_c=ElementType.CAPACITOR in kinds, has_l=ElementType.INDUCTOR in kinds)
+    ctx = [_rules_for(basis), "", notes, "",
+           circuit_text(parsed, is_dc, frequency), f"Yöntem: {method}", ""]
     if practice:
         ctx.append(_PRACTICE_RULES)
         known_text = known_nodes_text(parsed, is_dc)
@@ -269,18 +357,40 @@ def build_messages(
 
 def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Optional[float],
                  texts: Sequence[str]) -> KnownValues:
-    """Çözümde/devrede geçen tüm değerler (cevap doğrulaması için)."""
+    """
+    Çözümde/devrede geçen tüm değerler, birimleriyle (cevap doğrulaması için).
+    Birimi belirsiz olanlar (kazanç, cos φ, Q, karmaşık güç toplamları) birimsiz eklenir.
+    """
     values = []
+
+    def put(v, unit=None):
+        if v is not None:
+            values.append((v, unit))
+
+    def source_unit(e):
+        if e.element_type in VOLTAGE_SOURCES:
+            return "V"
+        if e.element_type in CURRENT_SOURCES:
+            return "A"
+        return None
+
+    element_unit = {ElementType.RESISTOR: "Ω", ElementType.CAPACITOR: "F",
+                    ElementType.INDUCTOR: "H", ElementType.IMPEDANCE: "Ω"}
     for e in parsed.elements:
-        values.append(complex(e.params.get("impedance", e.value)) if e.element_type == ElementType.IMPEDANCE
-                      else e.value)
-        for key in ("amplitude", "input_value", "frequency", "phase"):
-            if e.params.get(key) is not None:
-                values.append(e.params[key])
+        if e.element_type == ElementType.IMPEDANCE:
+            put(complex(e.params.get("impedance", e.value)), "Ω")
+        else:
+            put(e.value, element_unit.get(e.element_type) or source_unit(e))
+        put(e.params.get("amplitude"), source_unit(e))
+        put(e.params.get("input_value"))
+        put(e.params.get("frequency"), "Hz")
+        put(e.params.get("phase"), "°")
         if e.element_type == ElementType.THREE_PHASE_LOAD:
-            values += list(e.params["z"])
+            for z in e.params["z"]:
+                put(z, "Ω")
     if frequency:
-        values += [frequency, 2 * 3.141592653589793 * frequency]
+        put(frequency, "Hz")
+        put(2 * 3.141592653589793 * frequency, "rad/s")
 
     def cn(c):
         return complex(c.real, c.imaginary)
@@ -288,61 +398,104 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
     def rv(v):
         return v if isinstance(v, (int, float)) else cn(v)
 
-    values += [rv(nv.value) for nv in results.node_voltages.values()]
-    values += [rv(ec.value) for ec in results.element_currents.values()]
+    node_v = {k: complex(rv(nv.value)) for k, nv in results.node_voltages.items()}
+    node_v.setdefault("0", 0j)
+    for v in node_v.values():
+        put(v, "V")
+    # Eleman uçlarındaki gerilim (ör. R5: V₂ − V₃ = 3,211 V); model bunu sık hesaplıyor
+    for e in parsed.elements:
+        if e.node_positive in node_v and e.node_negative in node_v:
+            put(node_v[e.node_positive] - node_v[e.node_negative], "V")
+    for ec in results.element_currents.values():
+        put(rv(ec.value), "A")
     if results.thevenin:
-        values += [cn(results.thevenin.vth), cn(results.thevenin.zth)]
+        put(cn(results.thevenin.vth), "V")
+        put(cn(results.thevenin.zth), "Ω")
     if results.norton:
-        values += [cn(results.norton.i_n), cn(results.norton.y_n)]
+        put(cn(results.norton.i_n), "A")
+        put(cn(results.norton.y_n), "S")
         if results.norton.z_n:
-            values.append(cn(results.norton.z_n))
-    values += [cn(m.current) for m in results.meshes]
+            put(cn(results.norton.z_n), "Ω")
+    for m in results.meshes:
+        put(cn(m.current), "A")
     tr = getattr(results, "transient", None)
     if tr is not None:
-        values += [tr.tau, tr.r_th]
+        put(tr.tau, "s")
+        put(tr.r_th, "Ω")
         for q in tr.quantities:
-            values += [q.before, q.start, q.final]
+            for v in (q.before, q.start, q.final):
+                put(v, q.unit)
     for c in results.superposition:
-        values += [cn(v) for v in c.node_voltages.values()]
-        values += [cn(v) for v in c.element_currents.values()]
+        for v in c.node_voltages.values():
+            put(cn(v), "V")
+        for v in c.element_currents.values():
+            put(cn(v), "A")
     if results.power:
         for ep in results.power.elements.values():
-            values += [cn(ep.complex_power), ep.active_power, ep.reactive_power, ep.apparent_power]
-            if ep.power_factor is not None:
-                values.append(ep.power_factor)
-        values += [cn(results.power.total_supplied), cn(results.power.total_absorbed)]
+            put(cn(ep.complex_power))
+            put(ep.active_power, "W")
+            put(ep.reactive_power, "VAR")
+            put(ep.apparent_power, "VA")
+            put(ep.power_factor)
+        put(cn(results.power.total_supplied))
+        put(cn(results.power.total_absorbed))
     ps = getattr(results, "power_summary", None)
     if ps is not None:
-        values += [ps.p, ps.q, ps.s, ps.pf, ps.phi_deg]
+        put(ps.p, "W")
+        put(ps.q, "VAR")
+        put(ps.s, "VA")
+        put(ps.pf)
+        put(ps.phi_deg, "°")
         if ps.compensation is not None:
-            values.append(ps.compensation.target_pf)
-            for v in (ps.compensation.q_c, ps.compensation.c,
-                      ps.compensation.i_before, ps.compensation.i_after):
-                if v is not None:
-                    values.append(v)
+            put(ps.compensation.target_pf)
+            put(ps.compensation.q_c, "VAR")
+            put(ps.compensation.c, "F")
+            put(ps.compensation.i_before, "A")
+            put(ps.compensation.i_after, "A")
     rs = getattr(results, "resonance", None)
     if rs is not None:
-        values += [rs.f0, rs.w0, rs.x, rs.q, rs.bw, rs.f1, rs.f2, rs.f1_exact, rs.f2_exact,
-                   rs.z0, rs.i0, rs.v0]
+        for v in (rs.f0, rs.bw, rs.f1, rs.f2, rs.f1_exact, rs.f2_exact):
+            put(v, "Hz")
+        put(rs.w0, "rad/s")
+        put(rs.x, "Ω")
+        put(rs.z0, "Ω")
+        put(rs.q)
+        put(rs.i0, "A")
+        put(rs.v0, "V")
     tp = getattr(results, "three_phase", None)
     if tp is not None:
-        values += [tp.u_line, tp.u_phase, tp.p, tp.q, tp.s, tp.pf]
-        values += [cn(v) for v in tp.line_currents.values()]
+        put(tp.u_line, "V")
+        put(tp.u_phase, "V")
+        put(tp.p, "W")
+        put(tp.q, "VAR")
+        put(tp.s, "VA")
+        put(tp.pf)
+        for v in tp.line_currents.values():
+            put(cn(v), "A")
         if tp.neutral_current is not None:
-            values.append(cn(tp.neutral_current))
+            put(cn(tp.neutral_current), "A")
         if tp.load_phase_currents:
-            values += [cn(v) for v in tp.load_phase_currents.values()]
+            for v in tp.load_phase_currents.values():
+                put(cn(v), "A")
         if tp.aron is not None:
-            values += [tp.aron.p_a, tp.aron.p_b]
+            put(tp.aron.p_a, "W")
+            put(tp.aron.p_b, "W")
         if tp.compensation is not None:
-            values.append(tp.compensation.target_pf)
-            values += [v for v in (tp.compensation.q_c, tp.compensation.c_y, tp.compensation.c_delta)
-                       if v is not None]
-    values += [w.p for w in getattr(results, "wattmeters", [])]
+            put(tp.compensation.target_pf)
+            put(tp.compensation.q_c, "VAR")
+            put(tp.compensation.c_y, "F")
+            put(tp.compensation.c_delta, "F")
+    for w in getattr(results, "wattmeters", []):
+        put(w.p, "W")
     tr = getattr(results, "transformer", None)
     if tr is not None:
-        values += [cn(tr.v1), cn(tr.v2), cn(tr.i1), cn(tr.i2)]
-        values += [v for v in (tr.a, tr.k, tr.m) if v is not None]
+        put(cn(tr.v1), "V")
+        put(cn(tr.v2), "V")
+        put(cn(tr.i1), "A")
+        put(cn(tr.i2), "A")
+        put(tr.a)
+        put(tr.k)
+        put(tr.m, "H")
     return known_from(values, texts)
 
 
@@ -351,23 +504,28 @@ def answer_question(
     is_dc: bool, frequency: Optional[float], terminals: Optional[TheveninTerminals],
     question: str, history: Sequence[Dict[str, str]], model: str,
     practice: bool = False, practice_questions: Sequence[PracticeQuestion] = (),
+    base: Optional[str] = None, options: Optional[Dict[str, object]] = None,
 ) -> dict:
     """
     Soruyu modele sorar, cevaptaki sayıları denetler.
+    base / options: çalıştığı yer (NPU sunucusu, işlemci için num_gpu = 0); bkz. llm/devices.py
     Dönüş: {answer, numbers: [(text, status)], note}
     Ollama hataları (OllamaUnavailable / OllamaError) çağırana iletilir.
     """
     messages = build_messages(parsed, results, analysis_type, is_dc, frequency, terminals,
                               question, history, practice, practice_questions)
     # LaTeX/Markdown → düz metin (sayı denetiminden ÖNCE: "$12$" de yakalansın)
-    raw = to_plain_text(ollama.chat(model, messages))
+    extra = {k: v for k, v in (("base", base), ("options", options)) if v}
+    raw = to_plain_text(ollama.chat(model, messages, **extra))
 
     user_texts = [question] + [t.get("content", "") for t in history if t.get("role") == "user"]
-    given = known_from(texts=[circuit_text(parsed, is_dc, frequency),
-                              known_nodes_text(parsed, is_dc)] + user_texts)
+    circuit_texts = [circuit_text(parsed, is_dc, frequency), known_nodes_text(parsed, is_dc)]
+    # Gizlemeden muaf olan yalnız devrede verilen değerlerdir. Öğrencinin soruda yazdığı
+    # sayı ("V2 8 V mu?") muaf değildir; yoksa model "evet, 8 V" diyerek cevabı onaylar.
+    given = known_from(texts=circuit_texts)
     if practice:
         # Sonuçlar bilinmiyor sayılır: yalnız devrede verilen değerler doğrulanır
-        known = given
+        known = known_from(texts=circuit_texts + user_texts)
         forbidden = [complex(q.expected.real, q.expected.imaginary) for q in practice_questions]
     else:
         known = known_values(parsed, results, frequency,

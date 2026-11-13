@@ -148,7 +148,7 @@ def test_balanced_wheatstone_bridge(solve):
     assert_close(as_complex(results.norton.z_n), 100.0 / 3.0)
     assert_close(as_complex(results.norton.i_n), 0.3)
 
-    rn_sec = section_by_title(results.explanation, "2. Adım — Rn")
+    rn_sec = section_by_title(results.explanation, "1. Adım — Rn")   # önce Rn, sonra In = Vth/Rn
     assert rn_sec is not None
     assert any("üçgen (Δ) bağlı" in t for t in section_texts(rn_sec))
 

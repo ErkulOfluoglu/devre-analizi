@@ -522,7 +522,7 @@ def test_practice_answers_hz_khz_and_units():
     # önek unutuldu: 1,59155 yazıldı (1000 kat küçük) → önek uyarısı, örnek kHz ile
     pref = check_answer(f0, "1.59155")
     assert pref.status == "wrong"
-    assert "kHz" in pref.message and "1.000 katı küçük" in pref.message
+    assert "kHz" in pref.message and "bin katı küçük" in pref.message
     # ω₀ yazıldı
     omega = check_answer(f0, "10000")
     assert omega.status == "wrong" and "açısal frekans" in omega.message

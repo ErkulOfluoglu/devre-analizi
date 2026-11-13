@@ -121,11 +121,14 @@ def build_transient_questions(
               "sonra iki tarafın doğal logaritmasını (ln) alın: "
               f"t = τ · ln[({x_lbl}(0) − {x_lbl}(∞)) / ({x_lbl}(t) − {x_lbl}(∞))]."),
         sign_hint="Süre pozitif çıkmalı: ln içindeki oran 1'den büyük olacak şekilde yazın.",
-        alternatives=[
-            (tau * math.log10(ratio), "Doğal logaritma (ln) kullanılmalı, 10 tabanlı logaritma (log) değil."),
-            (5 * tau, "Bu 5τ (değişimin pratikte bittiği süre); sorulan, belirtilen değere ulaşma süresi."),
-            (tau, "Bu bir τ'dur (değişimin %63,2'si); belirtilen değere ulaşma süresini ln ile bulun."),
-        ],
+        alternatives=(
+            # %90'da log10(oran) = 1 olur ve τ ile çakışır: τ yazana yanlış teşhis konmasın
+            ([] if abs(math.log10(ratio) - 1.0) < 1e-6 else
+             [(tau * math.log10(ratio),
+               "Doğal logaritma (ln) kullanılmalı, 10 tabanlı logaritma (log) değil.")])
+            + [(5 * tau, "Bu 5τ (değişimin pratikte bittiği süre); sorulan, belirtilen değere ulaşma süresi."),
+               (tau, "Bu bir τ'dur (değişimin %63,2'si); belirtilen değere ulaşma süresini ln ile bulun.")]
+        ),
     ))
 
     # ── Seçilen bir anda x(t) (ek) ──
@@ -148,14 +151,17 @@ def build_transient_questions(
         f"t = 0⁺ anında {o_what} {o_lbl} (Düğüm {n1} → Düğüm {n2} yönünde"
         + (")" if is_c else f"; V = V({n1}) − V({n2}))"),
         o_unit, "extra", o0, o_scale,
-        hint=((f"t = 0⁺ anında {sid} değeri {eng(x0, unit)} olan bir gerilim kaynağı gibidir "
-               f"(boşsa kısa devre). Devreyi bu modelle çözün; ya da {o_lbl}(0⁺) = "
-               f"({x_lbl}(∞) − {x_lbl}(0⁺)) / R_th.") if is_c else
-              (f"t = 0⁺ anında {sid} değeri {eng(x0, unit)} olan bir akım kaynağı gibidir "
-               f"(enerjisizse açık devre). Devreyi bu modelle çözün; ya da {o_lbl}(0⁺) = "
-               f"({x_lbl}(∞) − {x_lbl}(0⁺)) · R_th.")),
-        sign_hint=(f"İşaret ters: {o_lbl} için yön {sid}'nin Düğüm {n1} → Düğüm {n2} sırasıdır; "
-                   "deşarj olurken kondansatör akımı bu yönün tersine aktığı için eksi çıkar."
+        # İpucu değeri söylemez: x(0⁺) asıl sorulardan biridir
+        hint=((f"t = 0⁺ anında {sid}, t = 0⁻'daki gerilimini koruyan bir gerilim kaynağı gibidir "
+               f"(boşsa kısa devre). Önce {x_lbl}(0⁺)'ı bulun, devreyi bu modelle çözün; ya da "
+               f"{o_lbl}(0⁺) = ({x_lbl}(∞) − {x_lbl}(0⁺)) / R_th.") if is_c else
+              (f"t = 0⁺ anında {sid}, t = 0⁻'daki akımını koruyan bir akım kaynağı gibidir "
+               f"(enerjisizse açık devre). Önce {x_lbl}(0⁺)'ı bulun, devreyi bu modelle çözün; ya da "
+               f"{o_lbl}(0⁺) = ({x_lbl}(∞) − {x_lbl}(0⁺)) · R_th.")),
+        sign_hint=(f"İşaret ters: {o_lbl} için yön {sid}'nin Düğüm {n1} → Düğüm {n2} sırasıdır. "
+                   + ("t = 0⁺ anında akım bu yönde akar, işareti artıdır."
+                      if o0 >= 0 else
+                      "t = 0⁺ anında akım bu yönün tersine akar, işareti eksidir.")
                    if is_c else
                    f"İşaret ters: V_{sid} = V({n1}) − V({n2}) alınır."),
     ))

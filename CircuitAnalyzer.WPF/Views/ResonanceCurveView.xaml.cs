@@ -151,7 +151,8 @@ namespace CircuitAnalyzer.WPF.Views
                 hl.LinePattern = ScottPlot.LinePattern.Dashed;
                 hl.Color = markerCol;
                 hl.LineWidth = 1.0f;
-                hl.Text = "0,707";
+                // Eksen paralelde Ω, seride A: etiket neyin 0,707 katı olduğunu söylesin
+                hl.Text = isParallel ? "0,707·Z₀" : "0,707·I_max";
             }
 
             // Eğri noktalarını çiz
