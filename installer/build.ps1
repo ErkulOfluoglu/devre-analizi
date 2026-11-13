@@ -46,7 +46,11 @@ $Iscc   = Find-Tool "ISCC" @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
 $DotnetRoot = Split-Path -Parent $Dotnet
 
 Step "Eski çıktılar temizleniyor"
-if (Test-Path $Build) { Remove-Item -Recurse -Force $Build -ErrorAction Stop }
+# build\installer silinmez: önceki sürümlerin kurulum dosyaları ve sürüm notları orada durur.
+foreach ($sub in "app", "dist", "work") {
+    $old = Join-Path $Build $sub
+    if (Test-Path $old) { Remove-Item -Recurse -Force $old -ErrorAction Stop }
+}
 New-Item -ItemType Directory -Force $App -ErrorAction Stop | Out-Null
 
 Step "Python çözücüsü paketleniyor (PyInstaller)"

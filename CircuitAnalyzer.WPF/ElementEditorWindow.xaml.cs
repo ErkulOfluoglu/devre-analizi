@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -34,6 +35,15 @@ namespace CircuitAnalyzer.WPF
         private readonly List<Action<double>> _setters = new();
         private readonly List<double> _unitScales = new();
 
+        // Faz gibi işareti serbest alanlar: 0 ve eksi değer kabul edilir
+        private readonly HashSet<TextBox> _anySignBoxes = new();
+
+        // ── Ad alanları: Uygula'da her şeyden önce denetlenir ──
+        private readonly List<(TextBox Box, Func<string?> Check)> _nameChecks = new();
+
+        // ── Pencere açıldığındaki eleman durumu: Uygula başarıyla bitmezse geri yüklenir ──
+        private readonly List<(PropertyInfo Property, object? Value)> _originalState;
+
         // ── Karmaşık sayı alanları ──
         private readonly List<(TextBox Box, Action<ComplexValue> Setter)> _complexInputs = new();
         private TextBox? _complexInputBox = null;
@@ -62,7 +72,39 @@ namespace CircuitAnalyzer.WPF
             CircuitAnalyzer.WPF.Services.ThemeManager.ApplyTitleBar(this);
             _element = element;
             _circuitElements = circuitElements?.ToList() ?? new List<CircuitElement>();
+            _originalState = CaptureState(element);
             BuildForm();
+        }
+
+        /// <summary>Elemanın herkese açık, yazılabilir özelliklerinin o anki değerlerini saklar.</summary>
+        internal static List<(PropertyInfo Property, object? Value)> CaptureState(CircuitElement element) =>
+            element.GetType()
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanRead && p.GetSetMethod() != null && p.GetIndexParameters().Length == 0)
+                .Select(p => (p, p.GetValue(element)))
+                .ToList();
+
+        /// <summary>CaptureState ile saklanan değerleri elemana geri yazar.</summary>
+        internal static void RestoreState(CircuitElement element, IEnumerable<(PropertyInfo Property, object? Value)> state)
+        {
+            foreach (var (property, value) in state)
+            {
+                try { property.SetValue(element, value); }
+                catch (TargetInvocationException) { /* geçersiz sayılan eski değer: olduğu gibi kalır */ }
+            }
+        }
+
+        private void RestoreOriginalState() => RestoreState(_element, _originalState);
+
+        /// <summary>
+        /// Uygula başarıyla bitmediyse (İptal, Esc, ×) pencerede yapılan her değişiklik geri alınır:
+        /// mod/radyo seçimleri ve hatalı bir Uygula'dan önce yazılmış alanlar dahil.
+        /// </summary>
+        protected override void OnClosed(EventArgs e)
+        {
+            if (DialogResult != true)
+                RestoreOriginalState();
+            base.OnClosed(e);
         }
 
         // ═══════════════════════════════════════════════════════
@@ -200,8 +242,8 @@ namespace CircuitAnalyzer.WPF
 
             // Metin giriş alanı
             string currentText = z.InputMode == ImpedanceInputMode.Rectangular
-                ? z.Impedance.ToRectangularString()
-                : z.Impedance.ToPolarString();
+                ? z.Impedance.ToRectangularString("G10")
+                : z.Impedance.ToPolarString("G10");
 
             AddComplexField("Empedans değeri:", currentText, cv =>
             {
@@ -307,7 +349,7 @@ namespace CircuitAnalyzer.WPF
                 AddFieldTo(_dynamicPanel, "Frekans (Hz)", ac.Frequency,
                     v => ac.Frequency = v);
                 AddFieldTo(_dynamicPanel, "Faz (°)", ac.Phase,
-                    v => ac.Phase = v);
+                    v => ac.Phase = v, anySign: true);
             }
             else
             {
@@ -316,7 +358,7 @@ namespace CircuitAnalyzer.WPF
                     ? "Fazör değeri, etkin (V∠θ°)"
                     : "Fazör değeri, tepe (Um∠θ°)";
 
-                string currentText = $"{TurkishNumber.Format(ac.Amplitude, "G4")}∠{TurkishNumber.Format(ac.Phase, "G4")}";
+                string currentText = $"{TurkishNumber.Format(ac.Amplitude, "G10")}∠{TurkishNumber.Format(ac.Phase, "G10")}";
 
                 AddComplexFieldTo(_dynamicPanel, phasorLabel,
                     currentText, cv =>
@@ -426,7 +468,7 @@ namespace CircuitAnalyzer.WPF
                 AddFieldTo(_dynamicPanel, "Frekans (Hz)", ac.Frequency,
                     v => ac.Frequency = v);
                 AddFieldTo(_dynamicPanel, "Faz (°)", ac.Phase,
-                    v => ac.Phase = v);
+                    v => ac.Phase = v, anySign: true);
             }
             else
             {
@@ -434,7 +476,7 @@ namespace CircuitAnalyzer.WPF
                     ? "Fazör değeri, etkin (A∠θ°)"
                     : "Fazör değeri, tepe (Im∠θ°)";
 
-                string currentText = $"{TurkishNumber.Format(ac.Amplitude, "G4")}∠{TurkishNumber.Format(ac.Phase, "G4")}";
+                string currentText = $"{TurkishNumber.Format(ac.Amplitude, "G10")}∠{TurkishNumber.Format(ac.Phase, "G10")}";
 
                 AddComplexFieldTo(_dynamicPanel, phasorLabel,
                     currentText, cv =>
@@ -565,6 +607,29 @@ namespace CircuitAnalyzer.WPF
             return (labels, ids, selected);
         }
 
+        private static readonly Regex ValidNameRegex = new("^[A-Za-z][A-Za-z0-9_]{0,15}$", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Yeni eleman adını denetler; sorun yoksa null, varsa öğrenciye gösterilecek mesajı döndürür.
+        /// Çözücü elemanın türünü adın ilk harfinden anlar (S anahtar, W wattmetre…): ilk harf korunur.
+        /// Boş ad değişiklik sayılmaz (eski ad kalır).
+        /// </summary>
+        internal static string? CheckElementName(string? text, string currentId, CircuitElement self,
+            IEnumerable<CircuitElement> circuitElements)
+        {
+            text = (text ?? string.Empty).Trim();
+            if (text.Length == 0 || string.Equals(text, currentId, StringComparison.Ordinal))
+                return null;
+            char prefix = currentId.Length > 0 ? char.ToUpperInvariant(currentId[0]) : 'X';
+            if (!ValidNameRegex.IsMatch(text) || char.ToUpperInvariant(text[0]) != prefix)
+                return $"Ad “{prefix}” harfiyle başlamalı; yalnızca harf, rakam ve _ içerebilir " +
+                       $"(Türkçe karakter olmadan, en çok 16 karakter). Örnek: {prefix}2";
+            if (circuitElements.Any(other => !ReferenceEquals(other, self) &&
+                                             string.Equals(other.Id, text, StringComparison.OrdinalIgnoreCase)))
+                return $"“{text}” adı devrede zaten kullanılıyor. Başka bir ad seçin.";
+            return null;
+        }
+
         private TextBox AddNameField(string currentId, Action<string> setter)
         {
             var lbl = new TextBlock
@@ -582,6 +647,8 @@ namespace CircuitAnalyzer.WPF
 
             PropertiesPanel.Children.Add(lbl);
             PropertiesPanel.Children.Add(textBox);
+
+            _nameChecks.Add((textBox, () => CheckElementName(textBox.Text, currentId, _element, _circuitElements)));
 
             _commitActions.Add(() =>
             {
@@ -769,7 +836,7 @@ namespace CircuitAnalyzer.WPF
 
             AddField("Değer (V)", src.Value, v => src.Value = v);
             AddField("Frekans (Hz)", src.Frequency, f => src.Frequency = f);
-            AddField("Faz (°)", src.Phase, p => src.Phase = p);
+            AddField("Faz (°)", src.Phase, p => src.Phase = p, anySign: true);
 
             AddModeSelector("Sıra:", "RST", "RTS", src.Sequence == ThreePhaseSequence.Rst, isRst =>
             {
@@ -829,7 +896,7 @@ namespace CircuitAnalyzer.WPF
 
             if (load.Balanced)
             {
-                AddComplexFieldTo(_dynamicPanel, "Empedans Z:", load.ZR.ToRectangularString(), cv =>
+                AddComplexFieldTo(_dynamicPanel, "Empedans Z:", load.ZR.ToRectangularString("G10"), cv =>
                 {
                     load.ZR = cv;
                     load.ZS = ComplexValue.FromRectangular(cv.Real, cv.Imaginary);
@@ -839,9 +906,9 @@ namespace CircuitAnalyzer.WPF
             else
             {
                 var labels = ThreePhaseLoad.GetPhaseLabels(load.Connection);
-                AddComplexFieldTo(_dynamicPanel, $"{labels[0]}:", load.ZR.ToRectangularString(), cv => load.ZR = cv);
-                AddComplexFieldTo(_dynamicPanel, $"{labels[1]}:", load.ZS.ToRectangularString(), cv => load.ZS = cv);
-                AddComplexFieldTo(_dynamicPanel, $"{labels[2]}:", load.ZT.ToRectangularString(), cv => load.ZT = cv);
+                AddComplexFieldTo(_dynamicPanel, $"{labels[0]}:", load.ZR.ToRectangularString("G10"), cv => load.ZR = cv);
+                AddComplexFieldTo(_dynamicPanel, $"{labels[1]}:", load.ZS.ToRectangularString("G10"), cv => load.ZS = cv);
+                AddComplexFieldTo(_dynamicPanel, $"{labels[2]}:", load.ZT.ToRectangularString("G10"), cv => load.ZT = cv);
             }
 
             if (_complexInputBox != null)
@@ -865,14 +932,15 @@ namespace CircuitAnalyzer.WPF
         /// <summary>Standart sayısal alan ekler (ana panele).</summary>
         /// <param name="unitScale">Alan birimi SI biriminin kaçta biriyse (µF için 1e6). Önekli
         /// girişler ("100µ", "47 mH") SI değeri olarak okunup alan birimine çevrilir.</param>
-        private void AddField(string label, double currentValue, Action<double> setter, double unitScale = 1)
+        private void AddField(string label, double currentValue, Action<double> setter, double unitScale = 1,
+            bool anySign = false)
         {
-            AddFieldTo(PropertiesPanel, label, currentValue, setter, unitScale);
+            AddFieldTo(PropertiesPanel, label, currentValue, setter, unitScale, anySign);
         }
 
         /// <summary>Standart sayısal alan ekler (belirtilen panele).</summary>
         private void AddFieldTo(Panel panel, string label, double currentValue,
-            Action<double> setter, double unitScale = 1)
+            Action<double> setter, double unitScale = 1, bool anySign = false)
         {
             var lbl = new TextBlock
             {
@@ -883,9 +951,12 @@ namespace CircuitAnalyzer.WPF
 
             var textBox = new TextBox
             {
-                Text = currentValue.ToString("G6", TurkishNumber.Culture),
+                // G12: pencereyi açıp hiçbir şeyi değiştirmeden Uygula'ya basınca değer yuvarlanmasın
+                Text = currentValue.ToString("G12", TurkishNumber.Culture),
                 Margin = new Thickness(0, 0, 0, 8)
             };
+            if (anySign)
+                _anySignBoxes.Add(textBox);
 
             panel.Children.Add(lbl);
             panel.Children.Add(textBox);
@@ -1103,6 +1174,19 @@ namespace CircuitAnalyzer.WPF
         private void BtnApply_Click(object sender, RoutedEventArgs e)
         {
             ErrorBar.Visibility = Visibility.Collapsed;
+            // ── 0. Ad alanları (aynı ad iki elemanda olursa geri al ve dosya açma bozulur) ──
+            foreach (var (nameBox, check) in _nameChecks)
+            {
+                string? nameError = check();
+                if (nameError != null)
+                {
+                    ShowInputError(nameError);
+                    nameBox.Focus();
+                    nameBox.SelectAll();
+                    return;
+                }
+            }
+
             // ── 1. Standart sayısal alanları doğrula ──
             for (int i = 0; i < _valueBoxes.Count; i++)
             {
@@ -1119,16 +1203,16 @@ namespace CircuitAnalyzer.WPF
                     return;
                 }
 
-                // Faz açısı dışındaki değerler pozitif olmalı (CurrentSource hariç: negatif serbest, sıfır yasak)
-                bool isPhaseField = i == _valueBoxes.Count - 1 &&
-                    ((_element is AcVoltageSource vac && vac.InputMode == AcInputMode.Physical) ||
-                     (_element is AcCurrentSource iac && iac.InputMode == AcInputMode.Physical));
+                // Faz açısı dışındaki değerler pozitif olmalı (DC kaynaklar hariç: eksi serbest, sıfır yasak)
+                bool isPhaseField = _anySignBoxes.Contains(_valueBoxes[i]);
 
-                if (_element is CurrentSource)
+                if (_element is CurrentSource || _element is VoltageSource)
                 {
                     if (Math.Abs(val) < 1e-15)
                     {
-                        ShowInputError("Akım değeri sıfır olamaz.");
+                        ShowInputError(_element is VoltageSource
+                            ? "Gerilim değeri sıfır olamaz."
+                            : "Akım değeri sıfır olamaz.");
 
                         _valueBoxes[i].Focus();
                         _valueBoxes[i].SelectAll();
@@ -1195,6 +1279,13 @@ namespace CircuitAnalyzer.WPF
                             "  Saf reel: 100\n" +
                             "  Saf sanal: j50, -j30");
 
+                        box.Focus();
+                        box.SelectAll();
+                        return;
+                    }
+                    if (cv.Magnitude < 1e-12)
+                    {
+                        ShowInputError("Değer sıfır olamaz.");
                         box.Focus();
                         box.SelectAll();
                         return;

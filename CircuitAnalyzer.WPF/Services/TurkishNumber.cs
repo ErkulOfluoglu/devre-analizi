@@ -68,7 +68,12 @@ namespace CircuitAnalyzer.WPF.Services
                 return false;
 
             string normalized = trimmed.Replace(',', '.');
-            return double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+            // "NaN", "Infinity" ya da "1e999" gibi sonlu olmayan değerler kabul edilmez
+            if (double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
+                double.IsFinite(value))
+                return true;
+            value = 0;
+            return false;
         }
 
         /// <summary>
@@ -87,7 +92,8 @@ namespace CircuitAnalyzer.WPF.Services
                 return false;
 
             string numPart = match.Groups[1].Value.Replace(',', '.');
-            if (!double.TryParse(numPart, NumberStyles.Float, CultureInfo.InvariantCulture, out double num))
+            if (!double.TryParse(numPart, NumberStyles.Float, CultureInfo.InvariantCulture, out double num) ||
+                !double.IsFinite(num))
                 return false;
 
             string suffix = match.Groups[2].Value.ToLowerInvariant();
@@ -101,7 +107,10 @@ namespace CircuitAnalyzer.WPF.Services
             bool upperM = match.Groups[2].Value.StartsWith('M') && !suffix.StartsWith("mil");
 
             double multiplier = 1.0;
-            if (suffix.StartsWith("meg") || upperM) multiplier = 1e6;
+            // Tek başına "F" farad birimidir ("10 F" = 10 farad); femto yalnızca ardından
+            // birim gelirse ("10 fF"). "°" açı birimidir ("30°" = 30).
+            if (suffix == "f" || suffix.StartsWith("farad") || suffix == "°") multiplier = 1.0;
+            else if (suffix.StartsWith("meg") || upperM) multiplier = 1e6;
             else if (suffix.StartsWith("mil")) multiplier = 25.4e-6;
             else if (suffix.StartsWith("g")) multiplier = 1e9;
             else if (suffix.StartsWith("t")) multiplier = 1e12;
@@ -117,7 +126,7 @@ namespace CircuitAnalyzer.WPF.Services
                 return false;
 
             val = num * multiplier;
-            return true;
+            return double.IsFinite(val);
         }
     }
 }

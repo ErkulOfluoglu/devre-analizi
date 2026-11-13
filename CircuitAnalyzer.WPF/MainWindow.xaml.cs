@@ -154,8 +154,12 @@ namespace CircuitAnalyzer.WPF
 
                 if (result == OnboardingResult.StartExample)
                 {
-                    LoadExample(ExampleCircuits.All[0]());
-                    _ = SolveAsync();
+                    // Tanıtım menüden yeniden açıldıysa tuvalde kaydedilmemiş bir devre olabilir
+                    if (PromptSaveIfDirty())
+                    {
+                        LoadExample(ExampleCircuits.All[0]());
+                        _ = SolveAsync();
+                    }
                 }
                 else if (result == OnboardingResult.StartTour)
                 {

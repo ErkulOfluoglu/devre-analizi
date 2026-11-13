@@ -149,7 +149,7 @@ public class CircuitClipboardTests
         Assert.Equal("VP3", remappedProbe.Id);
         Assert.Equal("R3", remappedProbe.TargetElementId);
 
-        Assert.Equal("VP4", keptProbe.Id);
+        Assert.Equal("IP1", keptProbe.Id);   // akım ölçer IP adıyla gelir (VP değil)
         Assert.Equal("R2", keptProbe.TargetElementId);
     }
 

@@ -46,7 +46,7 @@ namespace CircuitAnalyzer.WPF
             string? json = _undoHistory.Undo();
             if (json != null)
             {
-                RestoreCircuitFromSnapshot(json);
+                TryRestoreCircuitFromSnapshot(json);
             }
         }
 
@@ -56,7 +56,20 @@ namespace CircuitAnalyzer.WPF
             string? json = _undoHistory.Redo();
             if (json != null)
             {
+                TryRestoreCircuitFromSnapshot(json);
+            }
+        }
+
+        /// <summary>Geri yükleme başarısız olursa program çökmez; tuvaldeki devre olduğu gibi kalır.</summary>
+        private void TryRestoreCircuitFromSnapshot(string json)
+        {
+            try
+            {
                 RestoreCircuitFromSnapshot(json);
+            }
+            catch (CircuitFileException ex)
+            {
+                Inform("Geri alınamadı", ex.Message, DialogKind.Error);
             }
         }
 
@@ -159,6 +172,7 @@ namespace CircuitAnalyzer.WPF
                 var doc = CircuitDocument.Load(path);
                 string fileName = System.IO.Path.GetFileNameWithoutExtension(path);
                 var circuit = doc.ToCircuit(fileName);
+                EnsureSerializable(circuit);
 
                 LoadExample(circuit);
                 AnalysisPanel.RestoreAnalysisSettings(doc.Analysis);
@@ -197,6 +211,22 @@ namespace CircuitAnalyzer.WPF
             }
         }
 
+        /// <summary>
+        /// Devre kaydedilebiliyor mu diye önceden dener. Dosyada sonsuz ya da tanımsız bir sayı varsa
+        /// tuvaldeki devre silinmeden önce hata verilir.
+        /// </summary>
+        private static void EnsureSerializable(ExampleCircuit circuit)
+        {
+            try
+            {
+                CircuitDocument.Snapshot(circuit.Elements, circuit.Wires);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or InvalidOperationException)
+            {
+                throw new CircuitFileException("Dosyada geçersiz (sonsuz ya da tanımsız) bir sayı var.", ex);
+            }
+        }
+
         private void PromptAndOpenFileDialog()
         {
             if (!PromptSaveIfDirty()) return;
@@ -221,6 +251,8 @@ namespace CircuitAnalyzer.WPF
             ClearCircuit();
             _problemCode = null;
             AnalysisPanel.SetProblemCode(null);
+            // Eski çözüm bayatlar (Ctrl+P eski devreyi yazdırmasın), boş tuval ipucu geri gelir
+            OnCircuitChanged();
             _currentFilePath = null;
             _isDirty = false;
             _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));

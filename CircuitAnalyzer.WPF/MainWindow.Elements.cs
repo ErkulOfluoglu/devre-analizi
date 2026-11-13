@@ -838,11 +838,12 @@ namespace CircuitAnalyzer.WPF
             ClearCircuit();
             _problemCode = null;
             AnalysisPanel?.SetProblemCode(null);
+            // Önce değişikliği bildir, sonra boş belgeyi "kaydedilmiş" say (başlıkta • kalmasın)
+            OnCircuitChanged();
             _currentFilePath = null;
             _isDirty = false;
             _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
             UpdateTitle();
-            OnCircuitChanged();
             AnalysisPanel?.ClearResults();
             TxtStatus.Text = "Canvas temizlendi";
         }

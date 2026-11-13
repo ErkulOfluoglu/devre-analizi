@@ -408,6 +408,9 @@ namespace CircuitAnalyzer.WPF
         public void LoadExample(ExampleCircuit example)
         {
             ClearCircuit();
+            // Örnek ya da soru yeni bir belgedir: Ctrl+S öğrencinin önceki dosyasının üstüne yazmasın.
+            // (OpenFile dosya yolunu bundan sonra kendisi atar.)
+            _currentFilePath = null;
             _problemCode = example.ProblemCode;
             AnalysisPanel.SetProblemCode(example.ProblemCode);
 
