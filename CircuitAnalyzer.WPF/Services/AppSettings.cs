@@ -247,14 +247,35 @@ namespace CircuitAnalyzer.WPF.Services
             {
                 try
                 {
-                    var o = Load();
+                    JsonObject o;
+                    try
+                    {
+                        o = File.Exists(SettingsPath)
+                            ? JsonNode.Parse(File.ReadAllText(SettingsPath)) as JsonObject ?? new JsonObject()
+                            : new JsonObject();
+                    }
+                    catch (JsonException)
+                    {
+                        o = new JsonObject();   // bozuk dosya: yeni ayarlarla düzelir
+                    }
+                    // Okuma IO hatasıyla başarısızsa (başka bir pencere o anda yazıyor) buraya gelinmez:
+                    // boş ayarlarla üstüne yazıp tema, son dosyalar ve tanıtım bilgisi silinmesin.
+
+                    string? before = o[key]?.ToJsonString();
+                    string? after = value?.ToJsonString();
+                    if (before == after)
+                        return;   // değişmedi: dosyaya dokunma
+
                     o[key] = value;
                     Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-                    File.WriteAllText(SettingsPath, o.ToJsonString(JsonIndentOptions));
+                    // Önce geçici dosyaya yaz, sonra yer değiştir: yarım yazılmış dosya kalmasın
+                    string temp = SettingsPath + ".tmp";
+                    File.WriteAllText(temp, o.ToJsonString(JsonIndentOptions));
+                    File.Move(temp, SettingsPath, overwrite: true);
                 }
                 catch (Exception)
                 {
-                    // Yazılamıyorsa (salt okunur profil) ayar yalnız bu oturumda geçerli
+                    // Yazılamıyorsa (salt okunur profil, dosya kilitli) ayar yalnız bu oturumda geçerli
                 }
             }
         }

@@ -239,6 +239,13 @@ namespace CircuitAnalyzer.WPF
                 return;
             }
 
+            // ── Esc: açık eleman listesini kapatır (önce bu; HandleKeyDown ile aynı sıra) ──
+            if (e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None && CloseElementDrawer())
+            {
+                e.Handled = true;
+                return;
+            }
+
             // Metin kutusuna yazılıyorsa kısayolları devre dışı bırak
             // (TextBox'ın kendi geri al/yinele ve yazı yazma işlevlerini korur)
             if (e.OriginalSource is TextBox || Keyboard.FocusedElement is TextBox)

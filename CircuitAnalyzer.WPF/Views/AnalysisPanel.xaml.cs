@@ -390,7 +390,10 @@ public partial class AnalysisPanel : UserControl
         if (BtnDisplayRms != null) BtnDisplayRms.IsChecked = !isPeak;
         if (BtnDisplayPeak != null) BtnDisplayPeak.IsChecked = isPeak;
 
-        AppSettings.AcValueDisplay = normalized;
+        // Varsayılan yalnız öğrencinin kendi seçimiyle değişir (notify = düğmeye tıklandı).
+        // Tepe değerle kaydedilmiş bir dosyayı açmak sonraki devrelerin ayarını değiştirmez.
+        if (notify)
+            AppSettings.AcValueDisplay = normalized;
 
         if (notify && changed)
         {

@@ -572,7 +572,17 @@
             <Setter.Value>
                 <ControlTemplate TargetType="MenuItem">
                     <Border x:Name="Bd" Background="Transparent" CornerRadius="8" Padding="12,8" MinWidth="220">
-                        <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                            <!-- Kısayol (Ctrl+S): menüde görünsün, öğrenci öğrensin -->
+                            <TextBlock Grid.Column="1" Text="{TemplateBinding InputGestureText}"
+                                       Margin="24,0,0,0" FontSize="12" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Brush.Text.Secondary}"/>
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
