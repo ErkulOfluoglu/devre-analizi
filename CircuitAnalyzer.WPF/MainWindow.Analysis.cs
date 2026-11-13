@@ -285,6 +285,10 @@ namespace CircuitAnalyzer.WPF
                             ? $"Çözüldü — {netlist.NodeCount} düğüm, {stepCount} adım"
                             : $"Çözüldü — {netlist.NodeCount} düğüm"
                         : "Uyarılarla çözüldü — ayrıntılar sağ panelde";
+                    // Geçici durumda devre üzerindeki değerler anahtardan çok sonraki kararlı hâldir;
+                    // söylenmezse öğrenci her yerde "0 A" görüp şaşırıyor
+                    if (response.Transient != null)
+                        TxtStatus.Text += " · devre üzerindeki değerler: t → ∞ (yeni kararlı hâl); zamanla değişim grafikte";
                 }
             }
             catch (AnalysisRequestException ex)

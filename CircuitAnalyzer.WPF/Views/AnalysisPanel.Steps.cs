@@ -16,6 +16,14 @@ namespace CircuitAnalyzer.WPF.Views;
 // Önceki / Sonraki zinciri bir adım ilerletir. Yazdırma bu zinciri kullanmaz.
 public partial class AnalysisPanel
 {
+    private static readonly Regex StepNumberPrefix = new(@"^\s*\d+\.\s*Adım\s*[—–-]\s*", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Zincir her adımı kendisi numaralar; anlatımın kendi "1. Adım — Vth" numarası çift
+    /// numara olurdu ("6" dairesinde "1. Adım"). Zincirde yalnız konu kalır: "Vth (Açık Devre Gerilimi)".
+    /// </summary>
+    internal static string ChainTitle(string? title) => StepNumberPrefix.Replace(title ?? string.Empty, string.Empty);
+
     private sealed class StepItem
     {
         public required Grid Root { get; init; }
@@ -123,7 +131,7 @@ public partial class AnalysisPanel
         var content = new StackPanel();
         Grid.SetColumn(content, 1);
 
-        var title = new TextBlock { Text = section.Title };
+        var title = new TextBlock { Text = ChainTitle(section.Title) };
         title.SetResourceReference(StyleProperty, "Text.ReadingHeading");
         title.FontSize = 15;
         title.LineHeight = 22;
@@ -151,7 +159,7 @@ public partial class AnalysisPanel
             HorizontalContentAlignment = HorizontalAlignment.Stretch
         };
         header.SetResourceReference(StyleProperty, "Button.Nav");
-        System.Windows.Automation.AutomationProperties.SetName(header, $"Adım {index + 1}: {section.Title}");
+        System.Windows.Automation.AutomationProperties.SetName(header, $"Adım {index + 1}: {ChainTitle(section.Title)}");
         header.Click += (_, _) => OnStepHeaderClicked(index);
         content.Children.Add(header);
 

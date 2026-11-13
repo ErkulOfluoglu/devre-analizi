@@ -42,6 +42,30 @@ namespace CircuitAnalyzer.WPF.Views
             InitializeComponent();
         }
 
+        /// <summary>Eksenin en büyük zamanına (s) göre birim: 1,5 s → s, 10 ms → ms, 50 µs → µs.</summary>
+        internal static (double Scale, string Unit) TimeUnitFor(double maxSeconds)
+        {
+            double t = Math.Abs(maxSeconds);
+            if (t < 1e-6) return (1e9, "ns");
+            if (t < 1e-3) return (1e6, "µs");
+            if (t < 1.0) return (1e3, "ms");
+            return (1.0, "s");
+        }
+
+        /// <summary>
+        /// Değer ekseni önekli birimle: 6 mA'lik akım "0,006 A" yerine "6 mA" eksende görünür
+        /// (anlatım metniyle aynı birim).
+        /// </summary>
+        internal static (double Scale, string Unit) ValueUnitFor(TransientQuantityDto q)
+        {
+            double m = Math.Max(Math.Abs(q.Before), Math.Max(Math.Abs(q.Start), Math.Abs(q.Final)));
+            if (m == 0 || m >= 1 && m < 1e3) return (1.0, q.Unit);
+            if (m >= 1e3) return (1e-3, "k" + q.Unit);
+            if (m >= 1e-3) return (1e3, "m" + q.Unit);
+            if (m >= 1e-6) return (1e6, "µ" + q.Unit);
+            return (1e9, "n" + q.Unit);
+        }
+
         public void LoadData(TransientAnalysisDto data)
         {
             _data = data;
@@ -51,27 +75,8 @@ namespace CircuitAnalyzer.WPF.Views
             double tau = data.Tau;
             if (tau <= 0) tau = 1e-3;
 
-            // Zaman birimi seçimi
-            if (tau < 1e-6)
-            {
-                _timeUnit = "ns";
-                _timeScale = 1e9;
-            }
-            else if (tau < 1e-3)
-            {
-                _timeUnit = "µs";
-                _timeScale = 1e6;
-            }
-            else if (tau < 1.0)
-            {
-                _timeUnit = "ms";
-                _timeScale = 1e3;
-            }
-            else
-            {
-                _timeUnit = "s";
-                _timeScale = 1.0;
-            }
+            // Zaman birimi grafiğin sonuna (5τ) göre seçilir: τ = 0,3 s'de eksen "1500 ms" değil "1,5 s"
+            (_timeScale, _timeUnit) = TimeUnitFor(5.0 * tau);
 
             _tMinSeconds = -0.5 * tau;
             _tMaxSeconds = 5.0 * tau;
@@ -163,6 +168,8 @@ namespace CircuitAnalyzer.WPF.Views
             plot.Axes.Color(subTextCol);
             plot.Grid.MajorLineColor = gridCol;
 
+            var (ys, yUnit) = ValueUnitFor(q);
+
             // Eğri noktalarını oluştur
             var xList = new List<double>();
             var yList = new List<double>();
@@ -174,16 +181,16 @@ namespace CircuitAnalyzer.WPF.Views
             {
                 double t = _tMinSeconds + i * dtPre;
                 xList.Add(t * _timeScale);
-                yList.Add(q.Before);
+                yList.Add(q.Before * ys);
             }
 
             // t = 0 anı (sıçrama varsa hem before hem start ekle)
             xList.Add(0.0);
-            yList.Add(q.Before);
+            yList.Add(q.Before * ys);
             if (Math.Abs(q.Before - q.Start) > 1e-12)
             {
                 xList.Add(0.0);
-                yList.Add(q.Start);
+                yList.Add(q.Start * ys);
             }
 
             // t > 0 kısmı (0'dan 5τ'ya)
@@ -194,7 +201,7 @@ namespace CircuitAnalyzer.WPF.Views
                 double t = i * dtPost;
                 double val = TransientCurveCalculator.Evaluate(q.Before, q.Start, q.Final, tau, t);
                 xList.Add(t * _timeScale);
-                yList.Add(val);
+                yList.Add(val * ys);
             }
 
             // Eğriyi çiz
@@ -203,7 +210,7 @@ namespace CircuitAnalyzer.WPF.Views
             scatter.MarkerSize = 0;
 
             // Yatay kesikli çizgi: Final (t -> sonsuz) değeri
-            var hFinal = plot.Add.HorizontalLine(q.Final);
+            var hFinal = plot.Add.HorizontalLine(q.Final * ys);
             hFinal.LinePattern = ScottPlot.LinePattern.Dashed;
             hFinal.Color = markerCol;
             hFinal.LineWidth = 1.2f;
@@ -220,16 +227,16 @@ namespace CircuitAnalyzer.WPF.Views
             }
 
             // Eksen etiketleri
-            plot.Title($"{SubscriptText.Plain(q.Label)} ({q.Unit})");
+            plot.Title($"{SubscriptText.Plain(q.Label)} ({yUnit})");
             plot.XLabel($"Zaman ({_timeUnit})");
-            plot.YLabel(q.Unit);
+            plot.YLabel(yUnit);
 
             // Eksen sınırları
             double xMin = _tMinSeconds * _timeScale;
             double xMax = _tMaxSeconds * _timeScale;
 
-            double yMin = Math.Min(q.Before, Math.Min(q.Start, q.Final));
-            double yMax = Math.Max(q.Before, Math.Max(q.Start, q.Final));
+            double yMin = Math.Min(q.Before, Math.Min(q.Start, q.Final)) * ys;
+            double yMax = Math.Max(q.Before, Math.Max(q.Start, q.Final)) * ys;
             double ySpan = Math.Max(1e-6, yMax - yMin);
             plot.Axes.SetLimits(xMin, xMax, yMin - ySpan * 0.15, yMax + ySpan * 0.15);
 
@@ -319,12 +326,13 @@ namespace CircuitAnalyzer.WPF.Views
                 return;
             }
 
-            double val = TransientCurveCalculator.Evaluate(q.Before, q.Start, q.Final, _data.Tau, tSeconds);
+            var (ys, yUnit) = ValueUnitFor(q);
+            double val = TransientCurveCalculator.Evaluate(q.Before, q.Start, q.Final, _data.Tau, tSeconds) * ys;
             crosshair.Position = new ScottPlot.Coordinates(tScaled, val);
             crosshair.IsVisible = true;
             wpfPlot.Refresh();
 
-            txtHover.Text = $"t = {TurkishNumber.Format(tScaled, "G4")} {_timeUnit}, {q.Label} = {TurkishNumber.Format(val, "G4")} {q.Unit}";
+            txtHover.Text = $"t = {TurkishNumber.Format(tScaled, "G4")} {_timeUnit}, {q.Label} = {TurkishNumber.Format(val, "G4")} {yUnit}";
             SubscriptText.Apply(txtHover);
         }
 
