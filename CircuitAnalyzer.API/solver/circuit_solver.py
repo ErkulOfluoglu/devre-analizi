@@ -849,7 +849,7 @@ def _solve_core(
             step_number=2,
             title="Devre Modeli Oluşturma",
             description=(
-                "Netlist lcapy formatına dönüştürüldü ve "
+                "Devre, çözücünün okuyacağı satırlara çevrildi ve "
                 "sembolik devre modeli oluşturuldu." + model_note
             ),
             equations=lcapy_text.split("\n"),

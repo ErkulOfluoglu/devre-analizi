@@ -362,7 +362,7 @@ def build_transient_explanation(a: TransientAnalysis) -> List[ExplanationSection
     # ── 9. Kontrol ──
     s = _Section("Kontrol")
     s.text("Bulunan sayılar ayrı bir yöntemle de hesaplandı: devre t > 0 konumunda başlangıç "
-           "koşuluyla Laplace dönüşümü kullanılarak (lcapy) çözüldü ve karşılaştırıldı.")
+           "koşuluyla Laplace dönüşümü kullanılarak çözüldü ve karşılaştırıldı.")
     s.check(f"{x_lbl}(0⁺) = {_x(a, x0)} ✓")
     s.check(f"{x_lbl}(∞) = {_x(a, xf)} ✓")
     s.check(f"τ = {tau_txt} ✓")

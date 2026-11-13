@@ -337,21 +337,21 @@ def _verify_tank(a: ResonanceAnalysis, cct) -> Optional[str]:
         chk = ResonanceCheck()
         chk.main_f0 = abs(complex(lcapy_element_current(cct, src, {}, False, a.f0)))
         if chk.main_f0 > _TOL * a.amp / a.r:
-            return "lcapy denetimi: f₀'da kaynak akımı sıfır çıkmadı."
+            return "Program denetimi: f₀'da kaynak akımı sıfır çıkmadı."
         chk.vx_f0 = vx(a.f0)
         if not _close(chk.vx_f0, a.v0):
-            return "lcapy denetimi: f₀'daki V_x gerilimi kaynak gerilimine eşit çıkmadı."
+            return "Program denetimi: f₀'daki V_x gerilimi kaynak gerilimine eşit çıkmadı."
         i_l = abs(complex(_extract_numeric(cct[a.inductor.id].I, False, a.f0)))
         i_c = abs(complex(_extract_numeric(cct[a.capacitor.id].I, False, a.f0)))
         chk.elem_f0 = i_l
         if not (_close(i_l, a.v0 / a.x) and _close(i_c, a.v0 / a.x)):
-            return "lcapy denetimi: bobin ve kondansatör akımları V/X ile uyuşmadı."
+            return "Program denetimi: bobin ve kondansatör akımları V/X ile uyuşmadı."
         half = a.v0 / math.sqrt(2.0)
         for attr, f in (("main_f1", a.f1_exact), ("main_f2", a.f2_exact)):
             val = vx(f)
             setattr(chk, attr, val)
             if not _close(val, half):
-                return "lcapy denetimi: tam yarım güç frekanslarında V_x = V/√2 sağlanmadı."
+                return "Program denetimi: tam yarım güç frekanslarında V_x = V/√2 sağlanmadı."
         a.check = chk
     except Exception as exc:
         return f"Sayılar bağımsız çözücüyle doğrulanamadı ({type(exc).__name__})."
@@ -397,26 +397,26 @@ def verify_with_lcapy(a: ResonanceAnalysis, cct) -> Optional[str]:
         z, i_in, v = port(a.f0)
         chk.z_f0 = z
         if abs(z.imag) > _TOL * abs(z) or not _close(z.real, a.r):
-            return "lcapy denetimi: f₀'da kaynaktan görülen empedans Z = R (sanal kısım sıfır) çıkmadı."
+            return "Program denetimi: f₀'da kaynaktan görülen empedans Z = R (sanal kısım sıfır) çıkmadı."
         if a.kind == "parallel" and a.source_is_current:
             chk.main_f0 = abs(v)
             if not _close(chk.main_f0, a.v0):
-                return "lcapy denetimi: f₀'daki gerilim V = I·R ile uyuşmadı."
+                return "Program denetimi: f₀'daki gerilim V = I·R ile uyuşmadı."
         else:
             chk.main_f0 = abs(i_in)
             if not _close(chk.main_f0, a.i0):
-                return "lcapy denetimi: f₀'daki akım hesaplanan değerle uyuşmadı."
+                return "Program denetimi: f₀'daki akım hesaplanan değerle uyuşmadı."
 
         if a.kind == "series":
             chk.elem_f0 = across(a.inductor, a.f0)
             if not (_close(chk.elem_f0, a.v0) and _close(across(a.capacitor, a.f0), a.v0)):
-                return "lcapy denetimi: bobin ve kondansatör gerilimleri Q·V ile uyuşmadı."
+                return "Program denetimi: bobin ve kondansatör gerilimleri Q·V ile uyuşmadı."
         else:
             i_l = abs(complex(_extract_numeric(cct[a.inductor.id].I, False, a.f0)))
             i_c = abs(complex(_extract_numeric(cct[a.capacitor.id].I, False, a.f0)))
             chk.elem_f0 = i_l
             if not (_close(i_l, a.v0 / a.x) and _close(i_c, a.v0 / a.x)):
-                return "lcapy denetimi: bobin ve kondansatör akımları Q·I ile uyuşmadı."
+                return "Program denetimi: bobin ve kondansatör akımları Q·I ile uyuşmadı."
 
         for attr, f in (("main_f1", a.f1_exact), ("main_f2", a.f2_exact)):
             z, i_in, _ = port(f)
@@ -426,7 +426,7 @@ def verify_with_lcapy(a: ResonanceAnalysis, cct) -> Optional[str]:
                 val, want = abs(z), a.r / sqrt2
             setattr(chk, attr, val)
             if not _close(val, want):
-                return "lcapy denetimi: tam yarım güç frekanslarında 1/√2 oranı sağlanmadı."
+                return "Program denetimi: tam yarım güç frekanslarında 1/√2 oranı sağlanmadı."
 
         a.check = chk
     except Exception as exc:        # lcapy çözemedi → sonucu doğrulanmamış bırakma
