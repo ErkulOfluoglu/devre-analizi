@@ -278,6 +278,11 @@ ANALYSIS_REQUEST_EXAMPLES = {
 #  ANA İSTEK MODELİ
 # ═══════════════════════════════════════════════════════
 
+# İstek boyutu sınırları (aşırı büyük istekler sunucuyu kilitlemesin)
+MAX_NETLIST_CHARS = 100_000
+MAX_CHAT_TURNS = 40
+
+
 class AnalysisRequest(BaseModel):
     """
     Devre analizi isteği — C# Frontend → Python Backend.
@@ -305,6 +310,8 @@ class AnalysisRequest(BaseModel):
         ...,
         description="C#'tan gelen SPICE Netlist metni (satırlar \\n ile ayrılır, ör: 'R1 1 2 1000')",
         min_length=1,
+        # 200 elemanlı bir devre ~10 KB; sınır aşırı büyük istekleri durdurur
+        max_length=MAX_NETLIST_CHARS,
         examples=[
             "V1 1 0 DC 12\nR1 1 2 1k\nR2 2 0 2k\n* GND1 — Referans toprak (Node 0)\n* PROBE VP1 V(2)"
         ],
@@ -374,12 +381,12 @@ class AnswerCheckItem(BaseModel):
     question: PracticeQuestion = Field(
         ..., description="/analyze yanıtındaki results.practice listesinden soru")
     answer: str = Field(
-        default="", description="Öğrencinin yazdığı cevap (ör: '4 mA', '3.03∠-72.3')")
+        default="", max_length=200, description="Öğrencinin yazdığı cevap (ör: '4 mA', '3.03∠-72.3')")
 
 
 class AnswerCheckRequest(BaseModel):
     """POST /practice/check isteği."""
-    items: List[AnswerCheckItem] = Field(..., description="Kontrol edilecek cevaplar")
+    items: List[AnswerCheckItem] = Field(..., max_length=100, description="Kontrol edilecek cevaplar")
 
 
 # ═══════════════════════════════════════════════════════
@@ -406,12 +413,15 @@ class LlmAskRequest(AnalysisRequest):
     modele doğrulanmış anlatımı verir (istemci sonuç göndermez).
     """
     question: str = Field(..., min_length=1, max_length=1000, description="Öğrencinin sorusu")
-    model: Optional[str] = Field(default=None, description="Ollama model adı; boşsa otomatik seçilir")
+    model: Optional[str] = Field(default=None, max_length=100,
+                                 description="Ollama model adı; boşsa otomatik seçilir")
     device: Optional[str] = Field(
         default="auto",
         description="Çalıştığı yer: auto (en hızlısı), gpu (ekran kartı), cpu (işlemci), npu (FastFlowLM)")
-    history: List[ChatTurn] = Field(default_factory=list, description="Önceki soru-cevaplar (en eski önce)")
+    history: List[ChatTurn] = Field(default_factory=list, max_length=MAX_CHAT_TURNS,
+                                    description="Önceki soru-cevaplar (en eski önce)")
     practice: bool = Field(
         default=False, description="Alıştırma sürüyor mu — True ise model sonuçları görmez, cevap sayıları gizlenir")
     practice_questions: List[PracticeQuestion] = Field(
-        default_factory=list, description="Alıştırma soruları (cevap sızıntısını engellemek için)")
+        default_factory=list, max_length=100,
+        description="Alıştırma soruları (cevap sızıntısını engellemek için)")

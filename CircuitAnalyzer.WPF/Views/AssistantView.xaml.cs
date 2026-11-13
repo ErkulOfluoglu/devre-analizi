@@ -21,6 +21,8 @@ public partial class AssistantView : UserControl
     private AnalysisRequestDto? _analysisRequest;
     private IReadOnlyList<PracticeQuestionDto> _practiceQuestions = Array.Empty<PracticeQuestionDto>();
     private readonly List<ChatTurnDto> _history = new();
+    /// <summary>Çözücüye gönderilen en fazla geçmiş mesajı (sunucu sınırı 40).</summary>
+    internal const int MaxSentTurns = 20;
     private LlmStatusDto? _lastStatus;
     private bool _statusFetched;
     private CancellationTokenSource? _cts;
@@ -249,7 +251,8 @@ public partial class AssistantView : UserControl
         var req = LlmAskRequestDto.From(_analysisRequest, question);
         req.Model = SelectedModel;
         req.Device = SelectedDevice;
-        req.History = new List<ChatTurnDto>(_history);
+        // Model yalnızca son birkaç soru-cevabı kullanır; uzun sohbette istek büyümesin
+        req.History = _history.Skip(Math.Max(0, _history.Count - MaxSentTurns)).ToList();
         req.Practice = IsPractice;
         req.PracticeQuestions = new List<PracticeQuestionDto>(_practiceQuestions);
 
@@ -272,11 +275,14 @@ public partial class AssistantView : UserControl
         }
         catch (OperationCanceledException)
         {
+            // Cevapsız kalan soru sohbet geçmişinde kalmasın (sonraki sorularda modele gitmesin)
+            _history.Remove(userTurn);
             LastError = "İptal edildi.";
             ShowError(LastError);
         }
         catch (Exception ex)
         {
+            _history.Remove(userTurn);
             LastError = ex.Message;
             ShowError(LastError);
         }

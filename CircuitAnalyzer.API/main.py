@@ -17,11 +17,12 @@ Endpoint'ler:
 """
 
 import json
+import threading
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException, Body, Request
+from fastapi.responses import JSONResponse
 
 from llm import devices, ollama, pull, system_info
 from llm.assistant import answer_question
@@ -87,14 +88,47 @@ app = FastAPI(
     openapi_tags=tags_metadata,
 )
 
-# CORS — C# WPF HttpClient'ten gelen istekleri kabul et
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ═══════════════════════════════════════════════════════
+#  YALNIZCA BU BİLGİSAYARDAKİ PROGRAM
+# ═══════════════════════════════════════════════════════
+# Çözücü yalnızca 127.0.0.1'de dinler, ama bilgisayarda açık bir web sayfası da
+# oraya istek gönderebilir (ör. Ollama'yı yeniden başlatma, model indirme). WPF
+# programı Origin başlığı göndermez; tarayıcılar başka siteden gelen her POST'ta
+# gönderir. Başka bir ada yönelen istekler (DNS rebinding) de reddedilir.
+# CORS izni bilerek verilmez: tarayıcı cevapları okuyamaz.
+
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]", "testserver"}   # testserver: pytest TestClient
+_FORBIDDEN_DETAIL = "Bu istek yalnızca Devre Analizi programından yapılabilir."
+
+
+def _host_name(host_header: str) -> str:
+    """'127.0.0.1:8123' → '127.0.0.1', '[::1]:80' → '[::1]'."""
+    host = host_header.strip().lower()
+    if host.startswith("["):
+        return host.split("]", 1)[0] + "]"
+    return host.rsplit(":", 1)[0] if ":" in host else host
+
+
+def is_local_request(headers) -> bool:
+    """İstek bu bilgisayardaki programdan mı (tarayıcıdaki bir siteden değil)?"""
+    host = headers.get("host") or ""
+    if _host_name(host) not in _LOCAL_HOSTS:
+        return False
+    origin = headers.get("origin")
+    # Aynı adresteki /docs sayfası (geliştirici) kendi Origin'ini gönderir; ona izin var
+    return origin is None or origin.lower() == f"http://{host.strip().lower()}"
+
+
+@app.middleware("http")
+async def _local_only(request: Request, call_next):
+    if not is_local_request(request.headers):
+        return JSONResponse(status_code=403, content={"detail": _FORBIDDEN_DETAIL})
+    return await call_next(request)
+
+
+# lcapy/SymPy çözümleri iş parçacığı havuzunda çalışır (sunucu donmaz, /health cevap
+# verir) ama aynı anda tek çözüm yapılır: önbellekleri iş parçacığı güvenli değil.
+_SOLVE_LOCK = threading.Lock()
 
 
 # ═══════════════════════════════════════════════════════
@@ -168,7 +202,7 @@ async def health_check():
         422: {"description": "Doğrulama hatası"},
     },
 )
-async def analyze_circuit(
+def analyze_circuit(
     request: AnalysisRequest = Body(
         ...,
         openapi_examples=ANALYSIS_REQUEST_EXAMPLES,
@@ -212,17 +246,20 @@ async def analyze_circuit(
                 )
 
     # ── 2. DEVRE ÇÖZÜMÜ (lcapy) ──
+    # Senkron uç nokta: FastAPI iş parçacığı havuzunda çalıştırır, uzun bir çözüm
+    # sürerken sunucu öbür isteklere (/health, yapay zekâ durumu) cevap verir.
     warnings: list = []
-    results, solution_steps, errors = solve_circuit(
-        parsed=parsed,
-        mode=request.mode,
-        frequency=request.frequency,
-        analysis_type=request.analysis_type,
-        thevenin_terminals=request.thevenin_terminals,
-        target_probes=probes if probes else None,
-        warnings=warnings,
-        power_factor_target=request.power_factor_target,
-    )
+    with _SOLVE_LOCK:
+        results, solution_steps, errors = solve_circuit(
+            parsed=parsed,
+            mode=request.mode,
+            frequency=request.frequency,
+            analysis_type=request.analysis_type,
+            thevenin_terminals=request.thevenin_terminals,
+            target_probes=probes if probes else None,
+            warnings=warnings,
+            power_factor_target=request.power_factor_target,
+        )
 
     # Tekil devre: sonuç yok, tek Türkçe açıklamayla "Devre çözülemedi"
     unsolvable = next((m for m in errors if m.startswith(UNSOLVABLE_PREFIX)), None)
@@ -277,7 +314,7 @@ async def analyze_circuit(
         422: {"description": "Doğrulama hatası"},
     },
 )
-async def parse_only(
+def parse_only(
     request: AnalysisRequest = Body(
         ...,
         openapi_examples=ANALYSIS_REQUEST_EXAMPLES,
@@ -345,7 +382,7 @@ async def parse_only(
     ),
     response_description="Her soru için durum ve Türkçe geri bildirim",
 )
-async def practice_check(request: AnswerCheckRequest):
+def practice_check(request: AnswerCheckRequest):
     verdicts = [check_answer(item.question, item.answer) for item in request.items]
     return AnswerCheckResponse(
         verdicts=verdicts,
@@ -559,12 +596,13 @@ def llm_ask(request: LlmAskRequest):
         raise HTTPException(status_code=400, detail=f"Netlist ayrıştırma hatası: {str(e)}")
     _raise_if_netlist_invalid(parsed)
 
-    results, _, _ = solve_circuit(
-        parsed=parsed, mode=request.mode, frequency=request.frequency,
-        analysis_type=request.analysis_type, thevenin_terminals=request.thevenin_terminals,
-        warnings=[],
-        power_factor_target=request.power_factor_target,
-    )
+    with _SOLVE_LOCK:
+        results, _, _ = solve_circuit(
+            parsed=parsed, mode=request.mode, frequency=request.frequency,
+            analysis_type=request.analysis_type, thevenin_terminals=request.thevenin_terminals,
+            warnings=[],
+            power_factor_target=request.power_factor_target,
+        )
     is_dc = request.mode == AnalysisMode.DC
     frequency = request.frequency
     if frequency is None and not is_dc:
