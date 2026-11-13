@@ -610,12 +610,16 @@ def llm_ask(request: LlmAskRequest):
     _raise_if_request_invalid(request)
 
     with _SOLVE_LOCK:
-        results, _, _ = solve_circuit(
+        results, _, solve_errors = solve_circuit(
             parsed=parsed, mode=request.mode, frequency=request.frequency,
             analysis_type=request.analysis_type, thevenin_terminals=request.thevenin_terminals,
             warnings=[],
             power_factor_target=request.power_factor_target,
         )
+    # Çözülemeyen devre: model sonuçsuz kalır ve sayı uydurur; /analyze ile aynı açıklama
+    unsolvable = next((m for m in solve_errors if m.startswith(UNSOLVABLE_PREFIX)), None)
+    if unsolvable:
+        raise HTTPException(status_code=422, detail=unsolvable[len(UNSOLVABLE_PREFIX):])
     is_dc = request.mode == AnalysisMode.DC
     frequency = request.frequency
     if frequency is None and not is_dc:
@@ -649,6 +653,11 @@ def llm_ask(request: LlmAskRequest):
             practice=request.practice, practice_questions=request.practice_questions,
             base=r.base_url, options=r.options,
         )
+    except ollama.OllamaTimeout:
+        raise HTTPException(
+            status_code=504,
+            detail="Yapay zekâ zamanında cevap veremedi; model bu bilgisayarda yavaş çalışıyor olabilir. "
+                   "Daha kısa bir soru deneyin ya da “Çalıştığı yer” ayarını değiştirin.")
     except ollama.OllamaUnavailable:
         if r.where == devices.NPU:
             raise HTTPException(status_code=503, detail="NPU programı (FastFlowLM) cevap vermiyor.")

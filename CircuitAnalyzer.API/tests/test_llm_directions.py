@@ -68,7 +68,8 @@ def test_current_directions_ac_rl(solve):
     text = current_directions_text(parsed, results, is_dc=False)
 
     assert "fazör" in text
-    assert "180°" in text
+    # P < 0: akımla gerilim arasındaki açı 90°'den büyük (≈180° değil; Fable denetimi)
+    assert "90°'den büyüktür" in text and "180° ters" not in text
     assert "VAC1 devreye güç VERİYOR" in text
 
 

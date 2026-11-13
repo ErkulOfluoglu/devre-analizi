@@ -39,6 +39,10 @@ class OllamaError(Exception):
     """Ollama isteği reddetti (ör. model kurulu değil)."""
 
 
+class OllamaTimeout(OllamaError):
+    """Model süresi içinde cevap vermedi (Ollama çalışıyor ama yavaş)."""
+
+
 def base_url() -> str:
     host = os.environ.get("OLLAMA_HOST", "").strip()
     if not host:
@@ -58,15 +62,29 @@ def _request(path: str, payload: Optional[dict], timeout: float, base: Optional[
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            body = resp.read()
     except urllib.error.HTTPError as e:
         try:
             detail = json.loads(e.read().decode("utf-8")).get("error", "")
         except Exception:
             detail = ""
         raise OllamaError(detail or f"HTTP {e.code}") from e
-    except (urllib.error.URLError, ConnectionError, TimeoutError, OSError) as e:
+    except TimeoutError as e:
+        # Bağlandı ama cevap gelmedi: Ollama kurulu ve açık, model yavaş
+        raise OllamaTimeout(f"{timeout:.0f} saniye içinde cevap gelmedi.") from e
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, TimeoutError):
+            raise OllamaTimeout(f"{timeout:.0f} saniye içinde cevap gelmedi.") from e
         raise OllamaUnavailable(str(e)) from e
+    except (ConnectionError, OSError) as e:
+        raise OllamaUnavailable(str(e)) from e
+    try:
+        data = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as e:
+        raise OllamaError("Yapay zekâ sunucusu anlaşılamayan bir cevap verdi.") from e
+    if not isinstance(data, dict):
+        raise OllamaError("Yapay zekâ sunucusu beklenmeyen biçimde bir cevap verdi.")
+    return data
 
 
 @dataclass
@@ -149,7 +167,8 @@ def chat(model: str, messages: List[Dict[str, str]], num_ctx: int = 8192,
             raise
         payload.pop("think")
         data = _request("/api/chat", payload, CHAT_TIMEOUT, base)
-    content = (data.get("message") or {}).get("content", "")
-    if not content.strip():
+    message = data.get("message")
+    content = message.get("content", "") if isinstance(message, dict) else ""
+    if not isinstance(content, str) or not content.strip():
         raise OllamaError("Model boş cevap döndürdü.")
     return content.strip()
