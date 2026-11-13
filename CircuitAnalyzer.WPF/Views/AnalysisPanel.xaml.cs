@@ -683,12 +683,6 @@ public partial class AnalysisPanel : UserControl
                 AddMessageCard(msg);
             }
 
-            // Yapay zekâ asistanı
-            if (CurrentAssistantView != null)
-            {
-                ResultsContainer.Children.Add(CurrentAssistantView);
-            }
-
             // 3. PracticeView oluştur
             var practiceView = new PracticeView
             {
@@ -700,6 +694,12 @@ public partial class AnalysisPanel : UserControl
             CurrentPracticeView = practiceView;
 
             ResultsContainer.Children.Add(practiceView);
+
+            // Yapay zekâ asistanı soruların altında (önce öğrenci kendisi denesin)
+            if (CurrentAssistantView != null)
+            {
+                ResultsContainer.Children.Add(CurrentAssistantView);
+            }
         }
         else
         {

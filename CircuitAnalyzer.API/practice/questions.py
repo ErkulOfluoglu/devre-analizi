@@ -150,8 +150,8 @@ def build_questions(
                     "(V₊ − V₋ = kazanç · kontrol büyüklüğü); iki ucu da bilinmeyen düğümse "
                     "iki düğümü süperdüğüm olarak ele alın." + dep_hint)
         return (f"{_node_name(n)} için KCL yazın: düğümden çıkan akımların toplamı sıfırdır "
-                "(her kol için (V_düğüm − V_komşu)/Z). Bilinen düğüm gerilimlerini yerine koyun."
-                + dep_hint)
+                f"(her kol için (V_düğüm − V_komşu)/{'R' if is_dc else 'Z'}). "
+                "Bilinen düğüm gerilimlerini yerine koyun." + dep_hint)
 
     def node_questions(group: str) -> List[PracticeQuestion]:
         return [q(
@@ -170,12 +170,13 @@ def build_questions(
             if is_dc and e.element_type == ElementType.CAPACITOR:
                 continue   # DC'de kondansatör akımı her zaman 0 — soru değil
             p, n = e.node_positive, e.node_negative
-            z_word = "R" if e.element_type == ElementType.RESISTOR and is_dc else "Z"
+            # DC'de direncin kendi adı (R1); AC'de elemanın empedansı (Z_R1, Z_L1)
+            z_term = e.id if e.element_type == ElementType.RESISTOR and is_dc else f"Z_{e.id}"
             out.append(q(
                 f"I_{e.id}", f"I_{e.id}",
                 f"{e.id} elemanından {_node_name(p)} → {_node_name(n)} yönünde geçen akım",
                 "A", group, currents[e.id], i_scale,
-                hint=(f"Ohm yasası: I_{e.id} = (V({p}) − V({n})) / {z_word}_{e.id}. "
+                hint=(f"Ohm yasası: I_{e.id} = (V({p}) − V({n})) / {z_term}. "
                       "Önce elemanın iki ucundaki düğüm gerilimlerini bulun." + dep_hint),
                 sign_hint=(f"İşaret ters: akım {_node_name(p)} → {_node_name(n)} yönünde pozitif "
                            "alınıyor; siz ters yönü hesaplamış olabilirsiniz."),
