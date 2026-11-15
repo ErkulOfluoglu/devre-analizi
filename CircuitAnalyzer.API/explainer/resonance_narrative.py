@@ -14,7 +14,7 @@ Gerilim sembolü V'dir; kitaplardaki U gösterimi bir notla belirtilir.
 import math
 from typing import List
 
-from explainer.formatting import MINUS, eng, num
+from explainer.formatting import MINUS, eng, num, ek
 from explainer.narrative import _Section, _intro
 
 U_NOTE = "Kitaplarda gerilim U ile de gösterilir (U = V)."
@@ -121,7 +121,7 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
         s.math("Kaynak akımı: I = 0   (R üzerindeki gerilim V_R = I · R = 0)")
         s.math(f"V_x = V {MINUS} V_R = V = {eng(a.v0, 'V')}")
         s.text(f"Yani rezonansta kaynaktan görülen empedans sonsuza gider (kaynak akımı 0); "
-               f"Düğüm {a.x_node}'deki V_x gerilimi kaynak gerilimine eşit olur. Aşağıdaki grafikte "
+               f"Düğüm {ek(a.x_node, 'de')}ki V_x gerilimi kaynak gerilimine eşit olur. Aşağıdaki grafikte "
                "ise dönüştürülmüş devrenin empedansı |R‖Z_L‖Z_C| gösterilir; tepe değeri R'dir.")
     elif series:
         s = _Section("Rezonansta Empedans ve Akım")

@@ -15,7 +15,7 @@ Thevenin anlatımındaki bölümle aynı koddan gelir (explainer.topology).
 import math
 from typing import List, Optional
 
-from explainer.formatting import MINUS, eng, num, paren
+from explainer.formatting import MINUS, eng, num, paren, ek
 from explainer.narrative import _Ctx, _Section, _port_reduction_section
 from models.request import AnalysisType, TheveninTerminals
 from models.response import AnalysisResults, ExplanationSection
@@ -210,7 +210,7 @@ def build_transient_explanation(a: TransientAnalysis) -> List[ExplanationSection
                 s.text(f"{sid} ile {r.id} aynı kolda (seri) bağlıdır; ikisinden de aynı büyüklükte "
                        f"akım geçer ({eng(abs(a.dc_before.i.get(r.id, 0.0)), 'A')}).")
             else:
-                s.text(f"Kısa devre olan {sid}'in akımı, bağlı olduğu düğümlerdeki KCL ile bulunur.")
+                s.text(f"Kısa devre olan {ek(sid, 'in')} akımı, bağlı olduğu düğümlerdeki KCL ile bulunur.")
         s.result(f"{x_lbl}(0⁻) = {_x(a, a.x_before)}")
     sections.append(s)
 
@@ -270,7 +270,7 @@ def build_transient_explanation(a: TransientAnalysis) -> List[ExplanationSection
     )
     s, _ok = _port_reduction_section(ctx, "Zaman Sabitesi τ", "R_th", complex(a.r_th))
     intro = _Section("")
-    intro.text(f"Zaman sabitesi, t > 0 devresinde {sid}'in uçlarından bakıldığında görülen R_th "
+    intro.text(f"Zaman sabitesi, t > 0 devresinde {ek(sid, 'in')} uçlarından bakıldığında görülen R_th "
                f"(Thevenin direnci) ile bulunur. Önce {sid} devreden çıkarılır:")
     s.blocks = intro.blocks + s.blocks
     if is_c:

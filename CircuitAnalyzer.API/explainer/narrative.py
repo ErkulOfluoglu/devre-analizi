@@ -936,7 +936,7 @@ def _integer_step(s: _Section, labels: List[str], names: List[str], A2, b2, mult
     ('Düğüm 3 denklemini 12 ile çarpalım:  −3·V₂ + 5·V₃ − 2·V₄ = 0').
     """
     fmt = exact_fmt(_cnum)
-    s.text("Kesirlerden Kurtulalım: katsayıları tam sayı yapmak için aşağıdaki denklemleri "
+    s.text("Kesirlerden kurtulalım: katsayıları tam sayı yapmak için aşağıdaki denklemleri "
            "uygun bir sayıyla çarpalım (iki taraf birden çarpıldığı için çözüm değişmez); "
            "böylece Δ değerlerini tam sayılarla hesaplayabiliriz:")
     for r, m in enumerate(mult):

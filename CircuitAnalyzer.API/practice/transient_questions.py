@@ -13,7 +13,7 @@ Doğru değerler çözücünün TransientAnalysis sonucundan alınır (anlatıml
 import math
 from typing import Callable, List
 
-from explainer.formatting import eng
+from explainer.formatting import eng, ek
 from models.response import ComplexNumber, PracticeAlternative, PracticeQuestion
 from solver.transient import TransientAnalysis
 
@@ -59,11 +59,11 @@ def build_transient_questions(
     # ── τ ──
     tau_alts = [(5 * tau, "Bu 5τ (değişimin pratikte bittiği süre); sorulan bir τ'dur.")]
     if is_c:
-        hint = (f"t > 0 konumunda {sid}'yi devreden çıkarın, bağımsız kaynakları sıfırlayın "
+        hint = (f"t > 0 konumunda {ek(sid, 'i')} devreden çıkarın, bağımsız kaynakları sıfırlayın "
                 f"(gerilim kaynağı → tel, akım kaynağı → açık devre) ve uçlarından bakıp R_th'yi "
                 f"bulun. Sonra τ = R_th · C.")
     else:
-        hint = (f"t > 0 konumunda {sid}'yi devreden çıkarın, bağımsız kaynakları sıfırlayın "
+        hint = (f"t > 0 konumunda {ek(sid, 'i')} devreden çıkarın, bağımsız kaynakları sıfırlayın "
                 f"(gerilim kaynağı → tel, akım kaynağı → açık devre) ve uçlarından bakıp R_th'yi "
                 f"bulun. Sonra τ = L / R_th.")
         tau_alts.append((a.value * a.r_th, "RL devresinde τ = L / R_th'dir (bölme); L ile R_th'yi "
@@ -78,7 +78,7 @@ def build_transient_questions(
         hint=(f"Süreklilik: {x_lbl}(0⁺) = {x_lbl}(0⁻). t < 0 devresini DC kararlı hâlde çözün "
               f"({'kondansatör açık devre' if is_c else 'bobin kısa devre'}); anahtar açıkken "
               f"{sid} kaynağa bağlı değilse boş kabul edilir."),
-        sign_hint=f"İşaret ters: {x_lbl}, {sid}'nin Düğüm {n1} ucu (+) alınarak "
+        sign_hint=f"İşaret ters: {x_lbl}, {ek(sid, 'in')} Düğüm {n1} ucu (+) alınarak "
                   f"{'V(' + n1 + ') − V(' + n2 + ')' if is_c else 'Düğüm ' + n1 + ' → Düğüm ' + n2 + ' yönünde'} hesaplanır.",
     ))
 
@@ -88,8 +88,8 @@ def build_transient_questions(
         unit, "main", xf, span,
         hint=(f"t > 0 devresini DC kararlı hâlde çözün: "
               f"{'kondansatör açık devre (akımı 0)' if is_c else 'bobin kısa devre (gerilimi 0)'}. "
-              f"{x_lbl}(∞) bu devrede {sid}'nin " + ("uçları arasındaki gerilimdir." if is_c else "içinden geçen akımdır.")),
-        sign_hint=f"İşaret ters: yönleri {sid}'nin Düğüm {n1} → Düğüm {n2} sırasına göre alın.",
+              f"{x_lbl}(∞) bu devrede {ek(sid, 'in')} " + ("uçları arasındaki gerilimdir." if is_c else "içinden geçen akımdır.")),
+        sign_hint=f"İşaret ters: yönleri {ek(sid, 'in')} Düğüm {n1} → Düğüm {n2} sırasına göre alın.",
     ))
 
     # ── x(τ) ──
@@ -158,7 +158,7 @@ def build_transient_questions(
               (f"t = 0⁺ anında {sid}, t = 0⁻'daki akımını koruyan bir akım kaynağı gibidir "
                f"(enerjisizse açık devre). Önce {x_lbl}(0⁺)'ı bulun, devreyi bu modelle çözün; ya da "
                f"{o_lbl}(0⁺) = ({x_lbl}(∞) − {x_lbl}(0⁺)) · R_th.")),
-        sign_hint=(f"İşaret ters: {o_lbl} için yön {sid}'nin Düğüm {n1} → Düğüm {n2} sırasıdır. "
+        sign_hint=(f"İşaret ters: {o_lbl} için yön {ek(sid, 'in')} Düğüm {n1} → Düğüm {n2} sırasıdır. "
                    + ("t = 0⁺ anında akım bu yönde akar, işareti artıdır."
                       if o0 >= 0 else
                       "t = 0⁺ anında akım bu yönün tersine akar, işareti eksidir.")

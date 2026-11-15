@@ -135,3 +135,60 @@ def node_v(node: str) -> str:
 def sub(text: str) -> str:
     """Rakamları alt simgeye çevirir: '12' → '₁₂'."""
     return text.translate(_SUBSCRIPTS)
+
+
+# ── Türkçe ek: "Düğüm 4'te", "Düğüm 3'e", "C2'nin" ──
+# Ek, adın SON OKUNAN sözcüğüne göre seçilir: 4 → "dört" → 'te; 6 → "altı" → 'da.
+_DIGIT_WORDS = ["sıfır", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz"]
+_TEN_WORDS = ["", "on", "yirmi", "otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan"]
+_LETTER_WORDS = {"a": "a", "e": "e", "ı": "ı", "i": "i", "o": "o", "ö": "ö", "u": "u", "ü": "ü",
+                 "x": "iks", "w": "dabılyu", "q": "kü"}
+_VOWELS = "aeıioöuü"
+_FRONT = "eiöü"
+_VOICELESS = "çfhkpsşt"
+_FOUR_WAY = {"a": "ı", "ı": "ı", "o": "u", "u": "u", "e": "i", "i": "i", "ö": "ü", "ü": "ü"}
+
+
+def _spoken_tail(name: str) -> str:
+    """Adın sesli okunuşundaki son sözcük: '40' → 'kırk', 'x12' → 'iki', 'b' → 'be'."""
+    s = str(name).strip()
+    digits = len(s) - len(s.rstrip("0123456789"))
+    if digits:
+        n = int(s[-digits:])
+        if n == 0:
+            return "sıfır"
+        if n % 10:
+            return _DIGIT_WORDS[n % 10]
+        if n % 100:
+            return _TEN_WORDS[(n // 10) % 10]
+        if n % 1000:
+            return "yüz"
+        return "bin" if n % 1_000_000 else "milyon"
+    ch = s[-1:].lower()
+    if ch in _LETTER_WORDS:
+        return _LETTER_WORDS[ch]
+    return ch + "e" if ch.isalpha() else "e"   # be, ce, de … (harf adları)
+
+
+def ek(name: str, kind: str) -> str:
+    """
+    Ada Türkçe hâl ekini kesme işaretiyle ekler.
+    kind: 'de' (bulunma: 4'te), 'e' (yönelme: 3'e, 2'ye), 'den' (ayrılma: 6'dan),
+          'in' (ilgi: C1'in, C2'nin), 'i' (belirtme: C1'i, C2'yi).
+    """
+    word = _spoken_tail(name)
+    last = word[-1]
+    vowel = next((c for c in reversed(word) if c in _VOWELS), "e")
+    front = vowel in _FRONT
+    after_vowel = last in _VOWELS
+    d = "t" if last in _VOICELESS else "d"
+    e_a = "e" if front else "a"
+    four = _FOUR_WAY[vowel]
+    suffix = {
+        "de": d + e_a,
+        "den": d + e_a + "n",
+        "e": ("y" if after_vowel else "") + e_a,
+        "in": ("n" if after_vowel else "") + four + "n",
+        "i": ("y" if after_vowel else "") + four,
+    }[kind]
+    return f"{name}'{suffix}"

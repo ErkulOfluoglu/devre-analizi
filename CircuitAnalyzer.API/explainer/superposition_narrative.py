@@ -136,8 +136,8 @@ def build_superposition_sections(ctx: _Ctx, contributions: List[Contribution]) -
         is_dc = ok[0][1].is_dc
         same_as_main = (is_dc == ctx.is_dc) and (
             is_dc or (ctx.frequency is not None and _close(freqs[0], ctx.frequency, 1e-9)))
-        tot.text("Tüm katkılar aynı " + ("DC" if is_dc else "frekansta") + " olduğundan doğrudan "
-                 + ("toplanır:" if is_dc else "fazör olarak toplanır:"))
+        tot.text("Tüm katkılar DC olduğundan doğrudan toplanır:" if is_dc else
+                 "Tüm katkılar aynı frekansta olduğundan fazör olarak doğrudan toplanır:")
 
         def total_line(sym: str, key: str, kind: str, unit: str):
             values = [(k, (c.node_voltages if kind == "v" else c.element_currents).get(key))
@@ -149,7 +149,11 @@ def build_superposition_sections(ctx: _Ctx, contributions: List[Contribution]) -
                 (_val(v, unit, is_dc) if not (is_dc and v.real < 0)
                  else f"({_val(v, unit, is_dc)})") if is_dc else f"({polar(v, unit)})"
                 for _, v in values])
-            tot.math(f"{sym} = {terms} = {nums} = {_val(total, unit, is_dc)}")
+            if len(values) == 1:
+                # Tek katkı: "V₂ = V₂′ = 8 V" (aynı sayıyı iki kez yazma)
+                tot.math(f"{sym} = {terms} = {_val(total, unit, is_dc)}")
+            else:
+                tot.math(f"{sym} = {terms} = {nums} = {_val(total, unit, is_dc)}")
             return total
 
         for n in nodes:

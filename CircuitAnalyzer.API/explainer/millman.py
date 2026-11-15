@@ -17,7 +17,7 @@ ve narrative.py düğüm gerilimi anlatımına döner.
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-from explainer.formatting import MINUS, eng, node_v, num, paren
+from explainer.formatting import MINUS, eng, node_v, num, paren, ek
 from parser.netlist_parser import ElementType, ParsedElement
 
 _ALLOWED = (ElementType.RESISTOR, ElementType.DC_SOURCE, ElementType.CURRENT_DC)
@@ -54,7 +54,7 @@ def _walk_branches(ctx) -> Tuple[Optional[Tuple[str, str, List[_Branch]]], str]:
     essential = [n for n, lst in adj.items() if len(lst) >= 3]
     dangling = [n for n, lst in adj.items() if len(lst) == 1]
     if dangling:
-        return None, (f"Düğüm {dangling[0]}'da bir eleman açıkta kalıyor (akım taşımaz); "
+        return None, (f"Düğüm {ek(dangling[0], 'de')} bir eleman açıkta kalıyor (akım taşımaz); "
                       "Millman formülü kapalı paralel kollar ister.")
     if len(essential) != 2:
         return None, (f"Seri elemanları birleştirdikten sonra {len(essential)} ana düğüm "

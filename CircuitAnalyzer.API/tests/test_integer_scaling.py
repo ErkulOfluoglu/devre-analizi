@@ -17,7 +17,7 @@ from explainer.formatting import MINUS
 from tests.conftest import as_complex
 
 GND = "\n* GND1 — Referans toprak (Node 0)"
-STEP_TITLE = "Kesirlerden Kurtulalım"
+STEP_TITLE = "Kesirlerden kurtulalım"
 
 
 # ═══════════════════════════════════════════════════════

@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from explainer.formatting import ek
 from parser.netlist_parser import (
     CURRENT_SOURCES, DEPENDENT_SOURCES, PHASOR_SOURCES, SINE_SOURCES,
     ElementType, ParsedCircuit, ParsedElement,
@@ -409,7 +410,7 @@ def analyze_transient(parsed: ParsedCircuit, is_dc: bool = True) -> TransientAna
     r_th = sol_r.vd(*pa)
     if r_th <= _TINY:
         raise TransientNotApplicable(
-            f"t > 0 konumunda {sa.id}'nin gördüğü direnç sıfır (R_th = 0); zaman sabiti "
+            f"t > 0 konumunda {ek(sa.id, 'in')} gördüğü direnç sıfır (R_th = 0); zaman sabiti "
             "sıfır olur ve değişim anında biter.")
     tau = r_th * sa.value if kind == "C" else sa.value / r_th
 

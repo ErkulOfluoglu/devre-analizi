@@ -18,6 +18,7 @@ import pytest
 
 from explainer.formatting import (
     MINUS,
+    ek,
     eng,
     is_real,
     node_v,
@@ -228,3 +229,29 @@ def test_value_ac():
     expected_polar = f"3,033∠{MINUS}72,34° V"
     expected_rect = f"0,92 {MINUS} j2,89 V"
     assert val_str == f"{expected_polar}  (= {expected_rect})"
+
+
+# ═══════════════════════════════════════════════════════
+#  TÜRKÇE EK (Düğüm 4'te, Düğüm 3'e, C2'nin)
+# ═══════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("name,kind,expected", [
+    # Bulunma: son okunan sözcüğe göre de/da/te/ta
+    ("0", "de", "0'da"), ("1", "de", "1'de"), ("2", "de", "2'de"), ("3", "de", "3'te"),
+    ("4", "de", "4'te"), ("5", "de", "5'te"), ("6", "de", "6'da"), ("7", "de", "7'de"),
+    ("8", "de", "8'de"), ("9", "de", "9'da"), ("10", "de", "10'da"), ("12", "de", "12'de"),
+    ("40", "de", "40'ta"), ("60", "de", "60'ta"), ("100", "de", "100'de"),
+    # Yönelme: ünlüden sonra y kaynaştırma
+    ("2", "e", "2'ye"), ("3", "e", "3'e"), ("6", "e", "6'ya"), ("9", "e", "9'a"),
+    ("0", "e", "0'a"),
+    # Ayrılma
+    ("4", "den", "4'ten"), ("6", "den", "6'dan"), ("1", "den", "1'den"),
+    # İlgi ve belirtme: dört yönlü uyum, ünlüden sonra n / y
+    ("C1", "in", "C1'in"), ("C2", "in", "C2'nin"), ("L3", "in", "L3'ün"),
+    ("C9", "in", "C9'un"), ("C6", "in", "C6'nın"),
+    ("C1", "i", "C1'i"), ("C2", "i", "C2'yi"), ("L6", "i", "L6'yı"),
+    # Harfle biten adlar (harf adı: a, be, ce …)
+    ("a", "de", "a'da"), ("b", "de", "b'de"), ("x", "de", "x'te"),
+])
+def test_turkish_suffix(name, kind, expected):
+    assert ek(name, kind) == expected

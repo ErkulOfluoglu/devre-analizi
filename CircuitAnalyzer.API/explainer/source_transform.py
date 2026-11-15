@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from typing import Dict, List, Optional, Tuple
 
-from explainer.formatting import MINUS, eng, node_v, num
+from explainer.formatting import MINUS, eng, node_v, num, ek
 from parser.netlist_parser import ElementType
 
 _ALLOWED = (ElementType.RESISTOR, ElementType.DC_SOURCE, ElementType.CURRENT_DC)
@@ -211,7 +211,7 @@ def _step_cleanup(net: _Net) -> bool:
         if e.kind == "I":
             raise _Fail(f"{e.name} akım kaynağının bir ucu açıkta (Düğüm {node}).")
         net.remove(e)
-        net.text(f"Düğüm {node}'ye yalnızca {e.name} bağlı; bir ucu boşta kalan eleman akım taşımaz, "
+        net.text(f"Düğüm {ek(node, 'e')} yalnızca {e.name} bağlı; bir ucu boşta kalan eleman akım taşımaz, "
                  "devreden çıkarılır.")
         net.recap()
         return True
@@ -457,7 +457,7 @@ def _step_vr(net: _Net) -> bool:
         net.remove(v, r)
         net.els.append(new)
         net.els.append(_El("R", r.name, x, y, r.val))
-        net.text(f"{v.name} gerilim kaynağı ile {r.name} direnci seri bağlı (Düğüm {m}'de başka eleman yok). "
+        net.text(f"{v.name} gerilim kaynağı ile {r.name} direnci seri bağlı (Düğüm {ek(m, 'de')} başka eleman yok). "
                  f"Kaynak dönüşümü: {v.name}, {r.name} direncine paralel bir akım kaynağına dönüşür; "
                  f"akım okunun yönü, {v.name} kaynağının + ucu tarafına bakar.")
         net.math(f"{i_name} = {v.name} / {r.name} = {eng(abs(emf_m), 'V')} / {eng(r.val, 'Ω')} = "
@@ -564,7 +564,7 @@ def _step_delta_y(net: _Net, with_sources: bool = False) -> bool:
             net.remove(*sources)
             net.text("Üçgen dönüşümü yalnızca dirençleri değiştirir; akım kaynakları aynı düğümlere aynı "
                      f"akımı vermeye devam etmelidir. Bu yüzden her kaynağı {y} üzerinden ikiye böleriz "
-                     f"(akım kaynağı kaydırma): {y}'ye giren ve çıkan akım eşit olduğundan KCL değişmez.")
+                     f"(akım kaynağı kaydırma): {ek(y, 'e')} giren ve çıkan akım eşit olduğundan KCL değişmez.")
             for src in sources:
                 first, second = net.new_name("I"), net.new_name("I")
                 net.els.append(_El("I", first, src.p, y, src.val))
@@ -772,7 +772,7 @@ def build_source_transform(ctx) -> Tuple[Optional[list], str]:
     s3 = _Section("Kaynak Dönüşümü — Sonuç")
     sign_note = ""
     if fin.e_th < 0:
-        sign_note = f" (eksi: Düğüm {b}, Düğüm {a}'dan daha yüksek potansiyelde)"
+        sign_note = f" (eksi: Düğüm {b}, Düğüm {ek(a, 'den')} daha yüksek potansiyelde)"
     s3.result(f"Vth = V_AB = {node_v(a)} {MINUS} {node_v(b)} = {eng(fin.e_th, 'V')}{sign_note}")
     s3.result(f"Rth = {eng(fin.r_th, 'Ω')}")
     if fin.r_th > 1e-12:
