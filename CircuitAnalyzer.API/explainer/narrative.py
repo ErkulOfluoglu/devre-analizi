@@ -1415,7 +1415,7 @@ def _dependent_rth(ctx: _Ctx, s: _Section, symbol: str, expected: complex,
             "bu yüzden eşdeğer direnç seri/paralel indirgemeyle bulunamaz. Bunun yerine "
             f"{symbol} = Vth / In kullanılır: Vth açık devre gerilimi, In terminaller kısa devre "
             "edildiğinde telden geçen akımdır.")
-        s.text("Bu yöntemde bağımsız kaynaklar da SIFIRLANMAZ: Vth'yi bulduğumuz devrenin aynısında "
+        s.text("Bu yöntemde bağımsız kaynaklar da sıfırlanmaz: Vth'yi bulduğumuz devrenin aynısında "
                f"yalnızca terminaller (Düğüm {a} ve Düğüm {b}) bir tel ile kısa devre edilir. "
                f"Devre böyle yeniden çözüldüğünde telden {_flow_text(a, b)} yönünde geçen akım:")
         s.math(f"In = Isc = {ctx.val(ex.isc, 'A')}")

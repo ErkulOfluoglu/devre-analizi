@@ -28,7 +28,7 @@ def test_isc_route_keeps_independent_sources():
                        "R3 2 3 1000\nR4 3 0 4000")
     assert not any("sıfırlanır → kısa devre" in t for t in sec)
     assert not any(t.startswith("Bağımsız kaynakları sıfırlayıp") for t in sec)
-    assert any("bağımsız kaynaklar da SIFIRLANMAZ" in t for t in sec)
+    assert any("bağımsız kaynaklar da sıfırlanmaz" in t for t in sec)
     assert "In = Isc = 12 mA" in sec
     assert "Rth = 20 kΩ" in sec
 
