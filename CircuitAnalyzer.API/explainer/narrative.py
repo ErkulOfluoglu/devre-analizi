@@ -1522,6 +1522,11 @@ def _thevenin(ctx: _Ctx) -> List[_Section]:
     sym_r = "Rth" if ctx.is_dc else "Zth"
 
     s1 = _Section("1. Adım — Vth (Açık Devre Gerilimi)")
+    caps = [e.id for e in ctx.elements if ctx.is_dc and e.element_type == ElementType.CAPACITOR]
+    if caps:
+        s1.text(f"DC'de kondansatör{'ler' if len(caps) > 1 else ''} ({', '.join(caps)}) açık "
+                "devredir: üzerinden akım geçmez, bu yüzden düğüm gerilimleri kondansatör "
+                "devreden çıkarılmış gibi bulunur.")
     s1.text(f"Terminaller arasına hiçbir yük bağlı değilken Düğüm {a} ile Düğüm {b} "
             "arasındaki gerilim Vth'dir. Bulduğumuz düğüm gerilimlerinden:")
     derived = ctx.node_value(a) - ctx.node_value(b)
@@ -1538,7 +1543,13 @@ def _thevenin(ctx: _Ctx) -> List[_Section]:
               f"{eng(zth.real, 'Ω') if ctx.is_dc else rect(zth, 'Ω')}")
     sections = [s1, s2, s3]
 
-    if zth.real > 1e-12:
+    v_scale = max((abs(x) for x in ctx.v.values()), default=0.0)
+    if zth.real > 1e-12 and abs(vth) <= 1e-9 * v_scale + 1e-12:
+        s4 = _Section("Maksimum Güç Transferi")
+        s4.text("Vth = 0 olduğu için bu terminallere hangi yük bağlanırsa bağlansın yüke güç "
+                "aktarılmaz (Pmax = 0 W); en uygun yük seçimi burada anlamsızdır.")
+        sections.append(s4)
+    elif zth.real > 1e-12:
         s4 = _Section("Maksimum Güç Transferi")
         if ctx.is_dc:
             pmax = abs(vth) ** 2 / (4 * zth.real)
