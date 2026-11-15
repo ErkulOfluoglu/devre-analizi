@@ -225,16 +225,19 @@ def _dep_term(ctx: _Ctx, d: MeshDependent, net_gain: float, numeric: bool) -> st
 
 
 def _solve_square(s: _Section, ctx: _Ctx, M: int, Zs, V, I, Is, unit_i: str,
-                  labels: Optional[List[str]] = None) -> None:
+                  labels: Optional[List[str]] = None,
+                  syms: Optional[List[str]] = None) -> None:
     """
     M ≥ 2 bilinmeyenli Zs·I = V sistemi: 2×2 Cramer, 3×3 Sarrus, daha büyük → Gauss.
     DC'de 2-3 bilinmeyende kesirli (görünen) satırlar önce tam sayıya çarpılır.
+    syms: bilinmeyen adları (varsayılan I₁…I_M).
     """
     labels = labels or [f"Çevre {k + 1}" for k in range(M)]
+    syms = syms or [mesh_symbol(k + 1) for k in range(M)]
     if ctx.is_dc and M in (2, 3):
         Z2, V2, mult = integer_rows(Zs, V)
         if any(m > 1 for m in mult):
-            _integer_step(s, labels, [mesh_symbol(c + 1) for c in range(M)], Z2, V2, mult)
+            _integer_step(s, labels, syms, Z2, V2, mult)
             Zs, V = Z2, V2
     cn = exact_fmt(_cnum)
 
@@ -256,10 +259,10 @@ def _solve_square(s: _Section, ctx: _Ctx, M: int, Zs, V, I, Is, unit_i: str,
             if ctx.is_dc:
                 scaled = f"{num(Is[k].real)} {unit_i}"
                 final = eng(I[k].real, "A")
-                s.result(f"{mesh_symbol(k + 1)} = Δ{sub(str(k + 1))}/Δ = {cn(d)} / {cn(det)} "
+                s.result(f"{syms[k]} = Δ{sub(str(k + 1))}/Δ = {cn(d)} / {cn(det)} "
                          f"= {scaled}" + ("" if scaled == final else f" = {final}"))
             else:
-                s.result(f"{mesh_symbol(k + 1)} = Δ{sub(str(k + 1))}/Δ = {polar(I[k], 'A')}")
+                s.result(f"{syms[k]} = Δ{sub(str(k + 1))}/Δ = {polar(I[k], 'A')}")
     elif M == 3:
         s.text("Üç bilinmeyenli sistemi Cramer kuralıyla çözelim. Determinantları Sarrus "
                "yöntemiyle hesaplayalım: ilk iki sütun sağa tekrar yazılır, soldan sağa inen "
@@ -274,14 +277,14 @@ def _solve_square(s: _Section, ctx: _Ctx, M: int, Zs, V, I, Is, unit_i: str,
             if ctx.is_dc:
                 scaled = f"{num(Is[k].real)} {unit_i}"
                 final = eng(I[k].real, "A")
-                s.result(f"{mesh_symbol(k + 1)} = {symbol}/Δ = {cn(d)} / {cn(det)} "
+                s.result(f"{syms[k]} = {symbol}/Δ = {cn(d)} / {cn(det)} "
                          f"= {scaled}" + ("" if scaled == final else f" = {final}"))
             else:
-                s.result(f"{mesh_symbol(k + 1)} = {symbol}/Δ = {polar(I[k], 'A')}")
+                s.result(f"{syms[k]} = {symbol}/Δ = {polar(I[k], 'A')}")
     else:
         s.text(f"{M} bilinmeyenli bu sistem Gauss eliminasyonu ile çözülünce:")
         for k in range(M):
-            s.result(f"{mesh_symbol(k + 1)} = {ctx.val(I[k], 'A')}")
+            s.result(f"{syms[k]} = {ctx.val(I[k], 'A')}")
 
 
 def _element_currents_section(ctx: _Ctx, ma: MeshAnalysis, signs, elements) -> _Section:
@@ -547,6 +550,127 @@ def _dependent_sections(ctx: _Ctx, ma: MeshAnalysis, signs, elements, groups,
     return out
 
 
+def _row_label(r: _Row) -> str:
+    if r.kind == "cs":
+        return f"Kısıt ({r.cid})"
+    if len(r.members) == 1:
+        return f"Çevre {r.members[0]}"
+    return "Süperçevre {" + ", ".join(str(k) for k in r.members) + "}"
+
+
+def _mesh_substitution(s: _Section, ctx: _Ctx, ma: MeshAnalysis, signs, groups,
+                       cs_ids: List[str]) -> bool:
+    """
+    Akım kaynağı kısıtlarıyla yerine koyma (süperçevre ya da dış koldaki kaynaklar):
+    I_k = Is  /  I_a − I_b = Is  ⇒  KVL'de yerine konur, kalan sistem çözülür, geri konur.
+    Denklemler çözücünün çevre akımlarını vermezse False (eski anlatım kalır).
+    """
+    from explainer.elimination import affine_text, plan_substitution, substituted_row_text
+    M = len(ma.meshes)
+    I = np.array(ma.mesh_currents, dtype=complex)
+    rows = _reduced_rows(ma, signs, groups, cs_ids)
+    if len(rows) != M:
+        return False
+    A = np.array([r.coeff for r in rows], dtype=complex)
+    b = np.array([r.rhs for r in rows], dtype=complex)
+    try:
+        x = np.linalg.solve(A, b)
+    except np.linalg.LinAlgError:
+        return False
+    if not all(_close(x[k], I[k], 1e-6) for k in range(M)):
+        return False
+    plan = plan_substitution(A, b, I, [r.kind == "cs" for r in rows])
+    if plan is None or not plan.keep or any(rows[r].kind != "kvl" for r in plan.rows):
+        return False
+
+    names = [mesh_symbol(k + 1) for k in range(M)]
+    labels = [_row_label(r) for r in rows]
+    scale, prefix = _scale_for(list(plan.A.flatten()))
+    unit_r = {"k": "kΩ", "": "Ω", "m": "mΩ"}.get(prefix, f"{prefix}Ω")
+    unit_i = {"k": "mA", "": "A", "m": "kA"}.get(prefix, "A")
+
+    def scaled(aff):
+        ce, k = aff
+        return dict(ce), k / scale
+
+    s.text("Akım kaynağı denklemlerinden çevre akımlarını yazalım"
+           + (f" (akımlar {unit_i} cinsinden):" if unit_i != "A" else ":"))
+    for sb in plan.subs:
+        direct = ({sb.other: 1} if sb.other is not None else {}, sb.const / scale)
+        d_txt = affine_text(*direct, names, _linear_term, _cnum)
+        line = f"{labels[sb.row]}  ⇒  {names[sb.var]} = {d_txt}"
+        f_txt = affine_text(*scaled(sb.final), names, _linear_term, _cnum)
+        if f_txt != d_txt:
+            line += f" = {f_txt}"
+        s.math(line)
+    finals = {sb.var: scaled(sb.final) for sb in plan.subs}
+    s.text(("Bunu" if len(plan.subs) == 1 else "Bunları")
+           + f" KVL denklemlerinde yerine koyalım (empedans {unit_r}, gerilim V, akım {unit_i} "
+             "cinsinden):")
+    for r in plan.rows:
+        s.math(f"{labels[r]}: " + substituted_row_text(A[r] * scale, b[r], names, finals, num,
+                                                        _linear_term, _cnum))
+    n = len(plan.keep)
+    Zs = plan.A * scale
+    Ired = plan.x
+    Is = [v / scale for v in Ired]
+    syms = [names[j] for j in plan.keep]
+    s.text("Düzenleyip bilinmeyenlerin katsayılarını toplayalım:")
+    for a in range(n):
+        terms = [_linear_term(Zs[a, c], syms[c], first=(k == 0))
+                 for k, c in enumerate(c for c in range(n) if abs(Zs[a, c]) > 1e-15)]
+        s.math(f"{' '.join(terms) or '0'} = {_cnum(plan.b[a])}")
+    nz_cols = [[c for c in range(n) if abs(Zs[a, c]) > 1e-15] for a in range(n)]
+    if all(len(cols) == 1 for cols in nz_cols):
+        if n > 1:
+            s.text("Her denklemde tek bilinmeyen kaldı; Cramer kuralına gerek yok, her birini "
+                   "doğrudan bölerek buluruz:")
+        for a in range(n):
+            c = nz_cols[a][0]
+            if ctx.is_dc:
+                sc = f"{num(Is[c].real)} {unit_i}"
+                fin = eng(Ired[c].real, "A")
+                s.result(f"{syms[c]} = {_cnum(plan.b[a])} / {_pnum(Zs[a, c])} = {sc}"
+                         + ("" if sc == fin else f" = {fin}"))
+            else:
+                s.result(f"{syms[c]} = {_cnum(plan.b[a])} / {_pnum(Zs[a, c])} = "
+                         f"{polar(Ired[c], 'A')}")
+    else:
+        _solve_square(s, ctx, n, Zs, plan.b, Ired, Is, unit_i,
+                      [labels[r] for r in plan.rows], syms)
+
+    back = [sb for sb in plan.subs if sb.final[0]]     # sabit olanlar baştan biliniyor
+    if back:
+        s.text("Bulduğumuz " + ("değeri" if n == 1 else "değerleri")
+               + " kısıt denklemlerinde yerine koyarak diğer çevre akımlarını bulalım:")
+    for sb in back:
+        ce, kc = scaled(sb.final)
+        expr = affine_text(ce, kc, names, _linear_term, _cnum)
+        if ce and ctx.is_dc:
+            vals = {j: complex(I[j] / scale).real for j in ce}
+            parts = []
+            for j in sorted(ce):
+                v = num(abs(vals[j]))
+                v = f"({MINUS}{v})" if vals[j] < 0 else v
+                c = ce[j].real
+                coef = "" if abs(abs(c) - 1) < 1e-12 else f"{num(abs(c))}·"
+                sign = (MINUS if c < 0 else "") if not parts else (f"{MINUS} " if c < 0 else "+ ")
+                parts.append(f"{sign}{coef}{v}")
+            if abs(kc) > 1e-15:
+                c = _cnum(kc)
+                parts.append(f"{MINUS} {c[len(MINUS):]}" if c.startswith(MINUS) else f"+ {c}")
+            plugged = " ".join(parts)
+            sc = f"{num((I[sb.var] / scale).real)} {unit_i}"
+            fin = eng(I[sb.var].real, "A")
+            s.result(f"{names[sb.var]} = {expr} = {plugged} = {sc}"
+                     + ("" if sc == fin else f" = {fin}"))
+        elif ce:
+            s.result(f"{names[sb.var]} = {expr} = {polar(I[sb.var], 'A')}")
+        else:
+            s.result(f"{names[sb.var]} = {ctx.val(I[sb.var], 'A')}  (kaynaktan doğrudan)")
+    return True
+
+
 def build_mesh_sections(ctx: _Ctx, ma: MeshAnalysis) -> List[_Section]:
     signs = _sign_map(ma)
     elements = {e.id: e for m in ma.meshes for e, _ in m.elements}
@@ -673,7 +797,9 @@ def build_mesh_sections(ctx: _Ctx, ma: MeshAnalysis) -> List[_Section]:
                      for k, c in enumerate(c for c in range(M) if abs(Zs[a, c]) > 1e-15)]
             s.math(f"{' '.join(terms)} = {_cnum(V[a])}")
         _solve_square(s, ctx, M, Zs, V, I, Is, unit_i)
-    elif all(len(signs.get(cid, {})) == 1 for cid in ma.currents_cs):
+    elif (all(len(signs.get(cid, {})) == 1 for cid in ma.currents_cs)
+          and sum(1 for k in range(1, M + 1)
+                  if not any(k in signs.get(cid, {}) for cid in ma.currents_cs)) <= 1):
         # Akım kaynakları yalnız dış kollarda: o çevrelerin akımı bilinir,
         # diğer KVL denklemlerinde yerine konur
         Z, V = _mesh_matrices(signs, ma, M)
@@ -700,7 +826,7 @@ def build_mesh_sections(ctx: _Ctx, ma: MeshAnalysis) -> List[_Section]:
                 s.text("Bilinen akımlar yerine konduktan sonra kalan denklemler birlikte çözülünce:")
             for k in unknown:
                 s.result(f"{mesh_symbol(k)} = {ctx.val(I[k - 1], 'A')}")
-    else:
+    elif not _mesh_substitution(s, ctx, ma, signs, groups, cs_ids):
         s.text("Denklemler (KVL ve akım kaynağı kısıtları) birlikte çözülünce:")
         for k in range(M):
             s.result(f"{mesh_symbol(k + 1)} = {ctx.val(I[k], 'A')}")

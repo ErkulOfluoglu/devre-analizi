@@ -315,8 +315,9 @@ def test_mesh_narrative_supermesh(solve):
     El hesabı:
       I1 kaynağı Çevre 2 ve Çevre 3 arasında ortaktır.
       Kaynak gerilimi bilinmediğinden iki çevrenin KVL'si toplanır (süperçevre).
-      Kısıt denklemi: I₂ − I₃ = 0.002 A.
-      Denklemler birlikte çözülünce çevre akımları bulunur.
+      Kısıt denklemi: I₂ − I₃ = 0.002 A  ⇒  I₂ = I₃ + 2 (mA).
+      Yerine koyunca (kΩ, mA): 3·I₁ − 3·I₃ = 14 ve −3·I₁ + 10·I₃ = −10
+      Cramer: Δ = 21, I₁ = 110/21 = 5,238 mA, I₃ = 12/21 = 0,5714 mA, I₂ = 2,571 mA.
       Bulunan dal akımları tam çözücü sonucuyla eşleşir.
     """
     net = (
@@ -338,7 +339,12 @@ def test_mesh_narrative_supermesh(solve):
     texts = all_texts(res.explanation)
     assert any("süperçevre" in t.lower() for t in texts)
     assert any("= 0,002 A" in t for t in texts)
-    assert any("birlikte çözülünce" in t for t in texts)
+    assert not any("birlikte çözülünce" in t for t in texts)
+    assert any("I₂ = I₃ + 2" in t for t in texts)
+    assert any("3·I₁ − 3·I₃ = 14" in t for t in texts)
+    assert any("−3·I₁ + 10·I₃ = −10" in t for t in texts)
+    assert any("I₁ = Δ₁/Δ = 110 / 21 = 5,238 mA" in t for t in texts)
+    assert any("I₂ = I₃ + 2 = 0,5714 + 2 = 2,571 mA" in t for t in texts)
 
     # Dal akımları çözücüyle eşleşmeli
     res_nodal, _, _ = solve(net, "DC", None, "NODAL")

@@ -288,6 +288,14 @@ def build_explanation(
                                dn.solve_section, _dependent_check, _currents)
     else:
         method_builders = (_known_nodes, _kcl, _solve, _currents)
+        if any(len(g) > 1 for g in ctx.groups):
+            # Süperdüğüm: KCL + kaynak kısıtı birlikte kurulur, çözücüyle doğrulanır ve
+            # yerine koyma ile çözülür. Kurulamazsa (ör. kaynak döngüsü) eski anlatım.
+            from explainer import dependent_nodal as dn
+            built = dn.build_system(ctx)
+            if not isinstance(built, str):
+                ctx.dep_system = built
+                method_builders = (_known_nodes, dn.kcl_section, dn.solve_section, _currents)
 
     if analysis_type == AnalysisType.POWER:
         if results.power_summary is not None:
@@ -937,21 +945,13 @@ def _integer_step(s: _Section, labels: List[str], names: List[str], A2, b2, mult
                    f"{_equation_text(A2[r], b2[r], names, fmt)}")
 
 
-def _system_blocks(ctx: _Ctx, s: _Section, unknown: List[str], A, b, x,
-                   kcl_mask: Optional[List[bool]] = None,
-                   row_labels: Optional[List[str]] = None) -> None:
+def _display_scale(ctx: _Ctx, A, b, mask: List[bool]):
     """
-    A·x = b sistemini düzenlenmiş denklemler olarak yazar ve çözer:
-    1 bilinmeyen → bölme, 2 → Cramer, 3 → Cramer (Sarrus), >3 → Gauss.
-
-    kcl_mask[r] = r. denklem KCL mi (katsayılar S, sağ taraf A cinsinden; mS/mA ölçeği
-    yalnız bunlara uygulanır) yoksa gerilim kısıtı mı (volt cinsinden, ölçeksiz).
+    Görünen birimler: (ölçek, önek, tam sayı planı). KCL satırları mS/mA gibi
+    ölçeklenir; kısıt satırları volt cinsinden kalır.
     """
-    size = len(unknown)
-    mask = kcl_mask if kcl_mask is not None else [True] * size
-    all_kcl = all(mask)
+    size = len(mask)
     kcl_rows = [r for r in range(size) if mask[r]]
-    labels = row_labels or [f"{r + 1}. denklem" for r in range(size)]
     int_plan = None     # (A2, b2, çarpanlar): kesirlerden kurtulmuş sistem
     if ctx.is_dc and size in (2, 3):
         # Önce ham birimlerde (S, A) dene: 5/12 S → ×12 ders kitabındaki gibi olur.
@@ -959,20 +959,120 @@ def _system_blocks(ctx: _Ctx, s: _Section, unknown: List[str], A, b, x,
         A2, b2, mult = integer_rows(A, b)
         if (any(mult[r] > 1 for r in kcl_rows)
                 and all(mult[r] > 1 or is_integral_row(A[r], b[r]) for r in kcl_rows)):
+            return 1.0, "", (A2, b2, mult)
+    scale, prefix = _scale_for([A[r, j] for r in kcl_rows for j in range(size)]
+                               + [b[r] for r in kcl_rows])
+    if ctx.is_dc and size in (2, 3):
+        # Görünen (ölçeklenmiş) sayılarla dene: ör. 2.5 mS · V₂ gibi satırlar
+        As, bs = A.copy(), b.copy()
+        for r in kcl_rows:
+            As[r, :] = A[r, :] * scale
+            bs[r] = b[r] * scale
+        A2, b2, mult = integer_rows(As, bs)
+        if any(m > 1 for m in mult):
             int_plan = (A2, b2, mult)
-            scale, prefix = 1.0, ""
-    if int_plan is None:
-        scale, prefix = _scale_for([A[r, j] for r in kcl_rows for j in range(size)]
-                                   + [b[r] for r in kcl_rows])
+    return scale, prefix, int_plan
+
+
+def _substitution_blocks(ctx: _Ctx, s: _Section, unknown: List[str], A, b, x,
+                         mask: List[bool], labels: List[str]) -> bool:
+    """
+    Süperdüğüm kısıtı (V_p − V_n = c) ile yerine koyma: bilinmeyen sayısını azaltıp
+    kalan sistemi çözer, sonra geri yerine koyar. Sonuç tam çözümü vermezse False.
+    """
+    from explainer.elimination import affine_text, plan_substitution, substituted_row_text
+    plan = plan_substitution(A, b, x, [not m for m in mask])
+    if plan is None or not plan.keep:
+        return False
+    names = [node_v(n) for n in unknown]
+    red_mask = [mask[r] for r in plan.rows]
+    scale, prefix, _ = _display_scale(ctx, plan.A, plan.b, red_mask)
+    finals = {sub.var: sub.final for sub in plan.subs}
+
+    if len(plan.subs) == 1:
+        s.text("Kısıt denklemi iki düğüm gerilimi arasındaki farkı verir; bu denklemden bir "
+               "bilinmeyeni diğerinin cinsinden yazıp KCL denkleminde yerine koyarak bilinmeyen "
+               "sayısını azaltalım:")
+    else:
+        s.text("Kısıt denklemleri düğüm gerilimleri arasındaki farkları verir; bu denklemlerden "
+               "bazı bilinmeyenleri diğerlerinin cinsinden yazıp KCL denklemlerinde yerine koyarak "
+               "bilinmeyen sayısını azaltalım:")
+    for sub in plan.subs:
+        direct = ({sub.other: 1} if sub.other is not None else {}, sub.const)
+        line = f"{labels[sub.row]}  ⇒  {names[sub.var]} = {affine_text(*direct, names, _linear_term, _cnum)}"
+        final = affine_text(*sub.final, names, _linear_term, _cnum)
+        if final != affine_text(*direct, names, _linear_term, _cnum):
+            line += f" = {final}"
+        s.math(line)
+    s.text(("Bunu" if len(plan.subs) == 1 else "Bunları") + " kalan denklemlerde yerine koyalım"
+           + (f" (KCL denklemlerinde katsayılar {prefix}S, sağ taraf {prefix}A cinsinden):"
+              if any(red_mask) else ":"))
+    for r in plan.rows:
+        k = scale if mask[r] else 1.0
+        s.math(f"{labels[r]}: "
+               + substituted_row_text(A[r] * k, b[r] * k, names, finals, num, _linear_term, _cnum))
+    _system_blocks(ctx, s, [unknown[j] for j in plan.keep], plan.A, plan.b, plan.x,
+                   red_mask, [labels[r] for r in plan.rows])
+
+    back = [sb for sb in plan.subs if sb.final[0]]     # sabit olanlar baştan biliniyor
+    if back:
+        s.text("Bulduğumuz değeri kısıt denklemlerinde yerine koyarak diğer düğüm gerilimlerini bulalım:"
+               if len(plan.keep) == 1 else
+               "Bulduğumuz değerleri kısıt denklemlerinde yerine koyarak diğer düğüm gerilimlerini bulalım:")
+    full = {j: plan.x[k] for k, j in enumerate(plan.keep)}
+    for sub in back:
+        ce, kc = sub.final
+        expr = affine_text(ce, kc, names, _linear_term, _cnum)
+        if ctx.is_dc:
+            vals = {j: complex(full[j]) for j in ce}
+            terms = []
+            for j in sorted(ce):
+                t = num(abs(vals[j].real))
+                t = f"({MINUS}{t})" if vals[j].real < 0 else t
+                coef = "" if abs(abs(ce[j].real) - 1) < 1e-12 else f"{num(abs(ce[j].real))}·"
+                sign = (MINUS if ce[j].real < 0 else "") if not terms else (
+                    f"{MINUS} " if ce[j].real < 0 else "+ ")
+                terms.append(f"{sign}{coef}{t}")
+            if abs(kc) > 1e-15:
+                c = _cnum(kc)
+                terms.append(c if not terms else (f"{MINUS} {c[len(MINUS):]}" if c.startswith(MINUS)
+                                                  else f"+ {c}"))
+            plugged = " ".join(terms)
+            line = f"{names[sub.var]} = {expr}"
+            trivial = len(ce) == 1 and abs(kc) < 1e-15 and all(
+                abs(c - 1) < 1e-12 for c in ce.values())     # V₂ = V₃: sayı tekrar yazılmaz
+            if plugged and plugged != expr and ce and not trivial:
+                line += f" = {plugged}"
+            s.result(f"{line} = {ctx.val(x[sub.var], 'V')}")
+        else:
+            s.result(f"{names[sub.var]} = {expr} = {ctx.val(x[sub.var], 'V')}")
+    return True
+
+
+def _system_blocks(ctx: _Ctx, s: _Section, unknown: List[str], A, b, x,
+                   kcl_mask: Optional[List[bool]] = None,
+                   row_labels: Optional[List[str]] = None,
+                   substitute: bool = False) -> None:
+    """
+    A·x = b sistemini düzenlenmiş denklemler olarak yazar ve çözer:
+    1 bilinmeyen → bölme, 2 → Cramer, 3 → Cramer (Sarrus), >3 → Gauss.
+
+    kcl_mask[r] = r. denklem KCL mi (katsayılar S, sağ taraf A cinsinden; mS/mA ölçeği
+    yalnız bunlara uygulanır) yoksa gerilim kısıtı mı (volt cinsinden, ölçeksiz).
+    substitute: V_p − V_n = c biçimindeki kısıtlar önce yerine konur (süperdüğüm).
+    """
+    size = len(unknown)
+    mask = kcl_mask if kcl_mask is not None else [True] * size
+    labels = row_labels or [f"{r + 1}. denklem" for r in range(size)]
+    if substitute and not all(mask) and _substitution_blocks(ctx, s, unknown, A, b, x, mask, labels):
+        return
+    all_kcl = all(mask)
+    kcl_rows = [r for r in range(size) if mask[r]]
+    scale, prefix, int_plan = _display_scale(ctx, A, b, mask)
     As, bs = A.copy(), b.copy()
     for r in kcl_rows:
         As[r, :] = A[r, :] * scale
         bs[r] = b[r] * scale
-    if int_plan is None and ctx.is_dc and size in (2, 3):
-        # Görünen (ölçeklenmiş) sayılarla dene: ör. 2.5 mS · V₂ gibi satırlar
-        A2, b2, mult = integer_rows(As, bs)
-        if any(m > 1 for m in mult):
-            int_plan = (A2, b2, mult)
     Vs = [node_v(n) for n in unknown]
     if all_kcl:
         s.text(
@@ -1002,8 +1102,16 @@ def _system_blocks(ctx: _Ctx, s: _Section, unknown: List[str], A, b, x,
         t = cn(z)
         return f"({t})" if t.startswith(MINUS) else t
 
+    nz_cols = [[c for c in range(size) if abs(As[r, c]) > 1e-15] for r in range(size)]
+    single = size >= 2 and all(len(cols) == 1 for cols in nz_cols)
     if size == 1:
         s.result(f"{Vs[0]} = {_cnum(bs[0])} / {_pnum(As[0, 0])} = {ctx.val(x[0], 'V')}")
+    elif single:
+        s.text("Her denklemde tek bilinmeyen kaldı; Cramer kuralına gerek yok, her birini "
+               "doğrudan bölerek buluruz:")
+        for r in range(size):
+            c = nz_cols[r][0]
+            s.result(f"{Vs[c]} = {cn(bs[r])} / {P(As[r, c])} = {ctx.val(x[c], 'V')}")
     elif size == 2:
         a11, a12, a21, a22 = As[0, 0], As[0, 1], As[1, 0], As[1, 1]
         b1, b2 = bs
