@@ -1198,13 +1198,23 @@ def _solve(ctx: _Ctx) -> List[_Section]:
 #  6. ELEMAN AKIMLARI
 # ═══════════════════════════════════════════════════════
 
+_node_v = node_v
+
+
 def _flow_text(p: str, n: str) -> str:
     return f"Düğüm {p} → Düğüm {n}"
 
 
-def _currents(ctx: _Ctx) -> List[_Section]:
+def _currents(ctx: _Ctx, mark: str = "", passive_only: bool = False) -> List[_Section]:
+    """
+    Eleman akımları (Ohm yasası). mark: süperpozisyon adımının işareti (′, ″…) —
+    akım ve düğüm gerilimi adlarına eklenir; passive_only: kaynak satırları yazılmaz.
+    """
     s = _Section("Eleman Akımları (Ohm Yasası)")
     s.text("Her elemanın akımı, uçlarındaki gerilim farkının empedansına bölümüdür: I = (V₊ − V₋)/Z.")
+
+    def node_v(n: str) -> str:          # işaretli düğüm adı: V₂′
+        return _node_v(n) + mark
 
     for e in ctx.passive():
         if e.id not in ctx.i:
@@ -1213,7 +1223,7 @@ def _currents(ctx: _Ctx) -> List[_Section]:
         cur = ctx.i[e.id]
         t = e.element_type
         lbl = ctx.label(e)
-        name = f"I_{e.id}"
+        name = f"I_{e.id}{mark}"
 
         if ctx.is_dc and t == ElementType.CAPACITOR:
             s.math(f"{name} = 0 (DC'de kondansatör açık devredir)")
@@ -1246,6 +1256,8 @@ def _currents(ctx: _Ctx) -> List[_Section]:
             vd = vp - vn
             s.math(f"{name} = {diff_sym}/{lbl} = {polar(vd, 'V')} / {polar(z, 'Ω')} = {polar(cur, 'A')}")
 
+    if passive_only:
+        return [s]
     for e in ctx.sources():
         if e.id not in ctx.i:
             continue
@@ -1300,6 +1312,17 @@ def _currents(ctx: _Ctx) -> List[_Section]:
 # ═══════════════════════════════════════════════════════
 #  6b. BAĞIMLI KAYNAKLI DEVRE: ÇÖZÜCÜ SONUCU VE KONTROL
 # ═══════════════════════════════════════════════════════
+
+def contribution_currents(parsed: ParsedCircuit, is_dc: bool, frequency: Optional[float],
+                          v: Dict[str, complex], i: Dict[str, complex], mark: str):
+    """Süperpozisyon adımının pasif eleman akımları (I_R1′ = (V₁′ − V₂′)/R1 = …) blokları."""
+    omega = None if is_dc or not frequency else 2 * math.pi * frequency
+    ctx = _Ctx(parsed=parsed, is_dc=is_dc, frequency=frequency, omega=omega,
+               analysis_type=AnalysisType.NODAL, terminals=None,
+               v={str(k): complex(x) for k, x in v.items()},
+               i={k: complex(x) for k, x in i.items()}, results=AnalysisResults())
+    return _currents(ctx, mark, passive_only=True)[0].blocks[1:]
+
 
 def _dependent_solution(ctx: _Ctx) -> List[_Section]:
     """
