@@ -1386,7 +1386,8 @@ def _imp_text(ctx: _Ctx, z: complex) -> str:
     return eng(z.real, 'Ω') if ctx.is_dc else rect(z, 'Ω')
 
 
-def _dependent_rth(ctx: _Ctx, s: _Section, symbol: str, expected: complex) -> bool:
+def _dependent_rth(ctx: _Ctx, s: _Section, symbol: str, expected: complex,
+                   zeroing_intro=None) -> bool:
     """
     Bağımlı kaynaklı devrede eşdeğer direnç (ders kitabı yöntemi): bağımlı kaynak
     SIFIRLANMAZ; Rth = Vth / In (In gerçekten kısa devre edilerek bulunmuş), bağımsız
@@ -1408,11 +1409,12 @@ def _dependent_rth(ctx: _Ctx, s: _Section, symbol: str, expected: complex) -> bo
         s.text(
             "Devrede bağımlı kaynak var. Bağımlı kaynak SIFIRLANMAZ: kontrol büyüklüğüne bağlı "
             "olarak devrede aktif kalır ve çıkışı terminallerden uygulanan kaynağa tepki verir; "
-            "bu yüzden eşdeğer direnç seri/paralel indirgemeyle bulunamaz (yalnızca bağımsız "
-            "kaynaklar sıfırlanır). Bunun yerine Rth = Vth / In kullanılır: Vth açık devre "
-            "gerilimi, In terminaller kısa devre edildiğinde telden geçen akımdır.")
-        s.text(f"Terminaller (Düğüm {a} ve Düğüm {b}) bir tel ile kısa devre edilip devre bağımlı "
-               f"kaynak aktifken yeniden çözüldüğünde telden {_flow_text(a, b)} yönünde geçen akım:")
+            "bu yüzden eşdeğer direnç seri/paralel indirgemeyle bulunamaz. Bunun yerine "
+            f"{symbol} = Vth / In kullanılır: Vth açık devre gerilimi, In terminaller kısa devre "
+            "edildiğinde telden geçen akımdır.")
+        s.text("Bu yöntemde bağımsız kaynaklar da SIFIRLANMAZ: Vth'yi bulduğumuz devrenin aynısında "
+               f"yalnızca terminaller (Düğüm {a} ve Düğüm {b}) bir tel ile kısa devre edilir. "
+               f"Devre böyle yeniden çözüldüğünde telden {_flow_text(a, b)} yönünde geçen akım:")
         s.math(f"In = Isc = {ctx.val(ex.isc, 'A')}")
         s.math(f"{symbol} = Vth / In = {ctx.val(vth, 'V')} / {paren(ctx.val(ex.isc, 'A'))}")
         s.result(f"{symbol} = {_imp_text(ctx, expected)}")
@@ -1422,6 +1424,8 @@ def _dependent_rth(ctx: _Ctx, s: _Section, symbol: str, expected: complex) -> bo
         return False
     if not _close(ex.v_test / ex.i_test, expected, 1e-4):
         return False
+    if zeroing_intro is not None:
+        zeroing_intro()
     s.text(
         "Devrede bağımlı kaynak var ve bağımsız kaynak sıfırlandığında (ya da hiç yokken) "
         "Vth = 0 ve In = 0 olur; Rth = Vth / In = 0/0 belirsizdir. Bu durumda test kaynağı "
@@ -1442,15 +1446,21 @@ def _port_reduction_section(ctx: _Ctx, title: str, symbol: str,
                             expected: Optional[complex]) -> Tuple[_Section, bool]:
     a, b = _port(ctx)
     s = _Section(title)
-    s.text(
-        "Bağımsız kaynakları sıfırlayıp terminallerden devreye bakarız "
-        "(gerilim kaynağı → kısa devre, akım kaynağı → açık devre):")
     red = reduce_port_impedance(ctx.parsed, a, b, ctx.is_dc, ctx.frequency)
-    for note_text in red.zeroing_notes:
-        s.math(f"• {note_text}")
+
+    def zeroing_intro() -> None:
+        s.text(
+            "Bağımsız kaynakları sıfırlayıp terminallerden devreye bakarız "
+            "(gerilim kaynağı → kısa devre, akım kaynağı → açık devre):")
+        for note_text in red.zeroing_notes:
+            s.math(f"• {note_text}")
 
     ok = (red.complete and red.impedance is not None and expected is not None
           and _close(red.impedance, expected, 1e-4))
+    # Bağımlı kaynaklıda Vth/Isc yönteminde bağımsız kaynaklar SIFIRLANMAZ: giriş
+    # cümlesini kullanılan yöntem yazar (_dependent_rth)
+    if ok or not (expected is not None and ctx.has_dependent):
+        zeroing_intro()
     if ok:
         for step in red.steps:
             if step.kind == "series":
@@ -1480,7 +1490,8 @@ def _port_reduction_section(ctx: _Ctx, title: str, symbol: str,
                 s.math(f"• {step.formula}")
         s.result(f"{symbol} = {rect(expected, 'Ω') if not ctx.is_dc else eng(expected.real, 'Ω')}")
     elif expected is not None and ctx.has_dependent:
-        if not _dependent_rth(ctx, s, symbol, expected):
+        if not _dependent_rth(ctx, s, symbol, expected, zeroing_intro):
+            zeroing_intro()
             s.text(
                 "Devrede bağımlı kaynak var. Bağımlı kaynak sıfırlanmaz (devrede aktif kalır) ve "
                 "çıkışı terminallerden uygulanan kaynağa tepki verir; bu yüzden eşdeğer "
