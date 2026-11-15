@@ -116,7 +116,9 @@ def test_dc_capacitor_is_open(solve):
     results, steps, _ = solve(net, "DC")
     assert_close(as_complex(final_reduction(results).impedance), 6000)
     step = next(s for s in steps if s.title.startswith("Seri/Paralel"))
-    assert "kapasitörler (C1) açık" in step.description
+    assert "kondansatörler (C1) açık" in step.description
+    # DC'de kondansatörün seri/paralel kuralı anlatılmaz (zaten açık devre)
+    assert "Kondansatörlerde kurallar terstir" not in step.description
 
 
 def test_dc_inductor_not_reduced():

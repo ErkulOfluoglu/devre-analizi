@@ -754,13 +754,14 @@ def generate_topology_step(
         "Seri bağlı elemanlar aynı akımı taşır (aralarındaki düğüme başka "
         "eleman bağlı değildir); paralel bağlı elemanlar aynı iki düğüm "
         "arasındadır ve aynı gerilimi görür.\n"
-        "Seri: Req = R1 + R2,  Paralel: Req = R1·R2/(R1+R2).\n"
-        "Kapasitörlerde kurallar terstir: seri Ceq = C1·C2/(C1+C2), "
-        "paralel Ceq = C1 + C2."
+        "Seri: Req = R1 + R2,  Paralel: Req = R1·R2/(R1+R2)."
     )
+    if not is_dc and any(e.element_type == ElementType.CAPACITOR for e in parsed.elements):
+        description += ("\nKondansatörlerde kurallar terstir: seri Ceq = C1·C2/(C1+C2), "
+                        "paralel Ceq = C1 + C2.")
     if open_caps:
         description += (
-            f"\n\nDC analizde kapasitörler ({', '.join(open_caps)}) açık "
+            f"\n\nDC analizde kondansatörler ({', '.join(open_caps)}) açık "
             "devredir — indirgemeye katılmaz."
         )
     if blockers:

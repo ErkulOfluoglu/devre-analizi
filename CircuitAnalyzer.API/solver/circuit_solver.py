@@ -471,6 +471,12 @@ def _evaluate_impedance(
 #  ANA ÇÖZÜCÜ
 # ═══════════════════════════════════════════════════════
 
+# Sonuçlar sekmesindeki KVL/KCL "düğüm tarifi" adımlarının doğru olduğu yöntemler:
+# düğüm gerilimiyle çözülenler (Thevenin/Norton Vth'yi düğüm gerilimlerinden bulur)
+_NODAL_RECIPE_METHODS = (AnalysisType.NODAL, AnalysisType.POWER,
+                         AnalysisType.THEVENIN, AnalysisType.NORTON)
+
+
 def solve_circuit(
     parsed: ParsedCircuit,
     mode: AnalysisMode,
@@ -776,7 +782,7 @@ def _solve_core(
             f"Devrede {len(parsed.elements)} eleman ve "
             f"{parsed.node_count} düğüm tespit edildi.\n"
             f"Elemanlar: {elem_summary}\n"
-            f"Referans: {'Node 0 (GND) ✓' if parsed.has_ground else 'GND YOK ✕'}"
+            f"Referans: {'Düğüm 0 (GND) ✓' if parsed.has_ground else 'GND YOK ✕'}"
         ),
         equations=[],
         result_snapshot={"element_count": len(parsed.elements),
@@ -828,31 +834,29 @@ def _solve_core(
         model_note = ""
         if lcapy_sense_map(parsed):
             model_note = (
-                "\nBağımlı kaynaklar için 0 V'luk iç ölçüm kaynakları (Vsense_…) ve "
-                "gizli düğümler (_s_…) eklendi; bunlar yalnızca çözücünün iç modelidir "
-                "ve sonuçlarda görünmez."
+                "\nBağımlı kaynakların kontrol akımlarını ölçmek için çözücünün içinde 0 V'luk "
+                "yardımcı ölçüm kaynakları kullanıldı; bunlar sonuçlarda görünmez."
             )
         if trafo:
             model_note += (
-                "\nTransformatör için her uca 0 V'luk iç ölçüm kaynağı (Vsense_…) ve gizli düğümler "
-                "(_tp_…, _ts_…) eklendi; ideal transformatör lcapy'nin TF elemanıyla, kuplajlı "
-                "transformatör iki bobin ve bir K (kuplaj) satırıyla modellendi."
+                "\nTransformatör çözücüde ideal transformatör ya da kuplajlı iki bobin olarak "
+                "modellendi; uçlarına sonuçlarda görünmeyen 0 V'luk ölçüm kaynakları eklendi."
             )
             if transformer_floating_ties(parsed):
                 model_note += (
-                    "\nSekonder (ya da primer) toprağa bağlı değil: lcapy ayrık devre grafını "
-                    "çözemediği için o tarafın alt ucu YALNIZCA bu çözüm netlistinde 0 düğümüne "
-                    "bağlandı; sonuçları etkilemez, gerilimler o tarafın alt ucuna göre verilir."
+                    "\nSekonder (ya da primer) toprağa bağlı değil: yalnızca çözüm için o tarafın "
+                    "alt ucu GND'ye bağlandı; sonuçları etkilemez, gerilimler o tarafın alt ucuna "
+                    "göre verilir."
                 )
 
         steps.append(SolutionStep(
             step_number=2,
             title="Devre Modeli Oluşturma",
             description=(
-                "Devre, çözücünün okuyacağı satırlara çevrildi ve "
-                "sembolik devre modeli oluşturuldu." + model_note
+                "Devre, çözücünün okuyacağı biçime çevrildi ve sembolik devre modeli "
+                "oluşturuldu." + model_note
             ),
-            equations=lcapy_text.split("\n"),
+            equations=[],
             result_snapshot={"lcapy_netlist": lcapy_text}
         ))
 
@@ -926,6 +930,10 @@ def _solve_core(
                 frequency=frequency,
                 is_dc=is_dc
             )
+            if analysis_type not in _NODAL_RECIPE_METHODS:
+                # Çevre, süperpozisyon, Millman, kaynak dönüşümü… kendi adımlarını
+                # “Anlatım” sekmesinde verir; burada düğüm tarifi yanıltıcı olur
+                edu_steps = [s for s in edu_steps if s.title == "Empedans Hesaplama"]
             if edu_steps:
                 # Adım numaralarını mevcut adımların devamı olarak ata
                 base_num = len(steps)
@@ -941,6 +949,11 @@ def _solve_core(
         cct, parsed, is_dc, frequency, steps, errors, raw_nodes
     )
     results.node_voltages = node_voltages
+    if analysis_type not in _NODAL_RECIPE_METHODS:
+        for st in steps:
+            if st.title == "Düğüm Gerilimleri (Çözüm)":
+                st.description = ("Düğüm gerilimleri bulundu. Seçtiğiniz yöntemin adımları "
+                                  "“Anlatım” sekmesindedir.")
 
     # ── Adım 4: Eleman akımları ──
     raw_currents = {}
@@ -1554,7 +1567,7 @@ def _solve_thevenin(
 
     steps.append(SolutionStep(
         step_number=len(steps) + 1,
-        title=f"Thevenin Eşdeğeri (Node {node_pos} – Node {node_neg})",
+        title=f"Thevenin Eşdeğeri (Düğüm {node_pos} – Düğüm {node_neg})",
         description=(
             f"Düğüm {node_pos} ve Düğüm {node_neg} arasındaki "
             "Thevenin eşdeğer devresi hesaplanıyor.\n\n"
@@ -1597,6 +1610,8 @@ def _solve_thevenin(
             step_number=len(steps) + 1,
             title="Thevenin Sonuçları",
             description=(
+                f"Vth = {vth_complex.rectangular_str} V\nRth = {zth_complex.rectangular_str} Ω"
+                if is_dc else
                 f"Vth = {vth_complex.rectangular_str} V "
                 f"({vth_complex.polar_str} V)\n"
                 f"Zth = {zth_complex.rectangular_str} Ω "
@@ -1681,7 +1696,7 @@ def _solve_norton(
 
     steps.append(SolutionStep(
         step_number=len(steps) + 1,
-        title=f"Norton Eşdeğeri (Node {node_pos} – Node {node_neg})",
+        title=f"Norton Eşdeğeri (Düğüm {node_pos} – Düğüm {node_neg})",
         description=(
             f"Düğüm {node_pos} ve Düğüm {node_neg} arasındaki "
             "Norton eşdeğer devresi hesaplanıyor.\n\n"
@@ -1755,6 +1770,8 @@ def _solve_norton(
             step_number=len(steps) + 1,
             title="Norton Sonuçları",
             description=(
+                f"In = {in_c.rectangular_str} A\nRn = {zn_str}"
+                if is_dc else
                 f"In = {in_c.rectangular_str} A ({in_c.polar_str} A)\n"
                 f"Zn = {zn_str} ({zn_polar})"
             ),
@@ -1961,9 +1978,12 @@ def _compute_power(
         )
 
         if is_dc:
+            def _q(x: float, unit: str) -> str:
+                t = eng(x, unit)
+                return f"({t})" if x < 0 else t
             equations.append(
-                f"P_{elem.id} = V·I = ({num(v.real)})·({num(i.real)}) "
-                f"= {num(p)} W"
+                f"P_{elem.id} = V·I = {_q(v.real, 'V')} · {_q(i.real, 'A')} "
+                f"= {eng(p, 'W')}"
                 + ("  (güç verir)" if is_source and p < 0 else "")
             )
         else:
@@ -1995,8 +2015,8 @@ def _compute_power(
     if is_dc:
         convention = "DC: P = V·I (pasif işaret kuralı, emilen güç)"
         equations.append(
-            f"Denge: ΣP_kaynak = {num(supplied.real)} W = "
-            f"ΣP_yük = {num(absorbed.real)} W"
+            f"Denge: ΣP_kaynak = {eng(supplied.real, 'W')} = "
+            f"ΣP_yük = {eng(absorbed.real, 'W')}"
         )
         latex_parts.append(
             "P = V \\cdot I \\quad , \\quad "
