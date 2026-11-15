@@ -200,20 +200,24 @@ def build_millman(ctx) -> Tuple[Optional[list], str]:
 
     # ── 1. Kolları çıkaralım ──
     s1 = _Section("Millman Teoremi — Kolları Belirleyelim")
-    s1.text(f"Devre, iki ana düğüm arasına paralel bağlı {len(branches)} koldan oluşuyor. "
-            "Bir koldaki seri elemanlar tek elemanmış gibi birleştirilir: seri dirençler toplanır, "
-            "seri gerilim kaynakları işaretlerine göre toplanır.")
-    s1.text(f"Ana düğümler: A = Düğüm {a}, B = {b_txt}. Bir koldaki gerilim kaynağının + ucu A düğümüne "
-            "bakıyorsa E pozitif, B düğümüne bakıyorsa negatif yazılır.")
     adj: Dict[str, List[ParsedElement]] = {}
     for e in ctx.elements:
         adj.setdefault(e.node_positive, []).append(e)
         adj.setdefault(e.node_negative, []).append(e)
+    merge = ("Bir koldaki seri elemanlar tek elemanmış gibi birleştirilir: seri dirençler toplanır, "
+             "seri gerilim kaynakları işaretlerine göre toplanır.")
+    sign_rule = ("Bir koldaki gerilim kaynağının + ucu A düğümüne bakıyorsa E pozitif, B düğümüne "
+                 "bakıyorsa negatif yazılır.")
     if _is_single_loop(adj):
-        s1.note(f"Devre tek bir çevreden oluşuyor (üç ya da daha fazla elemanın birleştiği düğüm "
-                f"yok). Bu durumda Düğüm {a} ile Düğüm {b} arasındaki iki yol, paralel bağlı iki "
-                "kol gibi ele alınır; A düğümü, iki kolda da direnç (ya da akım kaynağı) "
-                "kalacak şekilde seçildi.")
+        s1.text("Devre tek bir çevreden oluşuyor: üç ya da daha fazla elemanın birleştiği bir ana "
+                f"düğüm yok. Çevre üzerinde iki düğüm seçip (A = Düğüm {a}, B = {b_txt}) bu iki "
+                "düğüm arasındaki iki yolu, paralel bağlı iki kol gibi ele alacağız. " + merge)
+        s1.text(f"A düğümü, iki kolda da direnç (ya da akım kaynağı) kalacak şekilde seçildi; "
+                f"aksi hâlde o kolun 1/R değeri tanımsız olurdu. {sign_rule}")
+    else:
+        s1.text(f"Devre, iki ana düğüm arasına paralel bağlı {len(branches)} koldan oluşuyor. "
+                + merge)
+        s1.text(f"Ana düğümler: A = Düğüm {a}, B = {b_txt}. {sign_rule}")
     for br in branches:
         names = ", ".join(e.id for e in br.elements)
         if br.is_current:

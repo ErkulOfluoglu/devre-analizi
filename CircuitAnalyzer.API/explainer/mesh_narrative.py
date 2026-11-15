@@ -16,7 +16,7 @@ from explainer.formatting import (
     MINUS, eng, node_v, num, paren, polar, rect, shown_digits, sub,
 )
 from explainer.narrative import (
-    _Ctx, _Section, _close, _cnum, _flow_text, _integer_step, _is_real, _join_terms,
+    EXTRA_DIGITS_NOTE, _Ctx, _Section, _close, _cnum, _flow_text, _integer_step, _is_real, _join_terms,
     _linear_term, _pnum, _scale_for,
 )
 from parser.netlist_parser import (
@@ -289,10 +289,15 @@ def _solve_square(s: _Section, ctx: _Ctx, M: int, Zs, V, I, Is, unit_i: str,
             s.result(f"{syms[k]} = {ctx.val(I[k], 'A')}")
 
 
-def _single_mesh_source(s: _Section, ctx: _Ctx, e, k: int, sg: int, i_s: complex) -> None:
-    """Yalnız bir çevrede olan akım kaynağı: çevre akımı = ±kaynak akımı, işaretin sebebiyle."""
+def _single_mesh_source(s: _Section, ctx: _Ctx, e, k: int, sg: int, i_s: complex,
+                        in_amps: bool = False) -> None:
+    """
+    Yalnız bir çevrede olan akım kaynağı: çevre akımı = ±kaynak akımı, işaretin sebebiyle.
+    in_amps: denklemler amper cinsinden çözülüyorsa (bağımlı kaynaklı yol) değer A ile yazılır.
+    """
     p, n = e.node_positive, e.node_negative
     value = sg * i_s
+    shown = (lambda v: f"{_cnum(v)} A") if in_amps else (lambda v: ctx.val(v, "A"))
     s.text(f"{e.id} akım kaynağı yalnızca Çevre {k} üzerinde: bu çevrenin akımı "
            "doğrudan kaynağın akımıdır (KVL yazmaya gerek yok).")
     if sg > 0:
@@ -302,10 +307,10 @@ def _single_mesh_source(s: _Section, ctx: _Ctx, e, k: int, sg: int, i_s: complex
         s.text(f"Kaynağın akımı kaynak içinde {_flow_text(p, n)} yönündedir, Çevre {k} ise "
                f"kaynaktan {_flow_text(n, p)} yönünde geçiyor. Yönler ters olduğu için çevre "
                "akımı kaynağın akımının eksisidir:")
-    s.math(f"{mesh_symbol(k)} = {ctx.val(value, 'A')}")
+    s.math(f"{mesh_symbol(k)} = {shown(value)}")
     if ctx.is_dc and complex(value).real < 0:
         s.note(f"Eksi işaret, Çevre {k} akımının gerçekte seçtiğimiz dönüş yönünün tersine "
-               f"döndüğünü gösterir: büyüklüğü {eng(-complex(value).real, 'A')}, yönü ters. "
+               f"döndüğünü gösterir: büyüklüğü {shown(-complex(value).real)}, yönü ters. "
                "Denklemlerde bu değer işaretiyle birlikte kullanılır.")
 
 
@@ -320,6 +325,7 @@ def _element_currents_section(ctx: _Ctx, ma: MeshAnalysis, signs, elements) -> _
     cs_types = CURRENT_SOURCES + DEPENDENT_CURRENT_OUTPUT
     vs_types = VOLTAGE_SOURCES + DEPENDENT_VOLTAGE_OUTPUT
     order.sort(key=lambda eid: elements[eid].element_type in vs_types + cs_types)
+    extra_digits = False
     for eid in order:
         sg_map = signs[eid]
         e = elements[eid]
@@ -344,6 +350,7 @@ def _element_currents_section(ctx: _Ctx, ma: MeshAnalysis, signs, elements) -> _
                                lambda a: sum(sg * x for (_, sg), x in zip(ordered, a)),
                                ib.real)
                   if ctx.is_dc and len(sg_map) > 1 else 4)
+        extra_digits = extra_digits or digits > 4
 
         def value_term(v: complex, sg: int) -> str:
             # DC: '6 mA', negatifse '(−3 mA)'; AC: her zaman parantezli kutupsal
@@ -368,6 +375,8 @@ def _element_currents_section(ctx: _Ctx, ma: MeshAnalysis, signs, elements) -> _
                 s.note(f"Eksi işaret: {eid} akımı ters yönde, {eng(-ib.real, 'A')}, {_flow_text(n, p)}.")
         else:
             s.math(f"{line} = {polar(ib, 'A')}  ({_flow_text(p, n)} referans)")
+    if extra_digits:
+        s.note(EXTRA_DIGITS_NOTE)
     if ma.dependents:
         for d in ma.dependents.values():
             unit_c = "V" if d.control_kind == "V" else "A"
@@ -502,12 +511,13 @@ def _dependent_sections(ctx: _Ctx, ma: MeshAnalysis, signs, elements, groups,
             s.math(f"{lhs} = {rhs}")
             continue
         i_s = ma.currents_cs[cid]
+        # Bu yolda denklemler amper cinsinden çözülür (aşağıdaki "yerine koyalım" satırları)
         if len(sg_map) == 1:
             (k, sg), = sg_map.items()
-            _single_mesh_source(s, ctx, elements[cid], k, sg, i_s)
+            _single_mesh_source(s, ctx, elements[cid], k, sg, i_s, in_amps=True)
         else:
             s.text(f"{cid} akım kaynağının akımı, ondan geçen çevre akımlarının farkına eşittir (kısıt):")
-            s.math(f"{lhs} = {ctx.val(i_s, 'A')}")
+            s.math(f"{lhs} = {_cnum(i_s)} A")
     out.append(s)
 
     # ── (b) Kontrol büyüklükleri ──
@@ -858,7 +868,14 @@ def build_mesh_sections(ctx: _Ctx, ma: MeshAnalysis) -> List[_Section]:
             if used:
                 s.math(f"{_pnum(zs[u])}·{mesh_symbol(u)} = {_cnum(V[u - 1])} {MINUS} "
                        f"{_pnum(moved)} = {_cnum(vred)}")
-            s.result(f"{mesh_symbol(u)} = {_cnum(vred)} / {_pnum(zs[u])} = {ctx.val(I[u - 1], 'A')}")
+            if ctx.is_dc:
+                scaled = f"{num((I[u - 1] / scale).real)} {unit_i}"
+                final = eng(I[u - 1].real, "A")
+                s.result(f"{mesh_symbol(u)} = {_cnum(vred)} / {_pnum(zs[u])} = {scaled}"
+                         + ("" if scaled == final else f" = {final}"))
+            else:
+                s.result(f"{mesh_symbol(u)} = {_cnum(vred)} / {_pnum(zs[u])} = "
+                         f"{polar(I[u - 1], 'A')}")
         else:
             if unknown:
                 s.text("Bilinen akımlar yerine konduktan sonra kalan denklemler birlikte çözülünce:")

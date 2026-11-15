@@ -559,8 +559,8 @@ def _intro(ctx: _Ctx) -> List[_Section]:
         )
     elif ctx.analysis_type == AnalysisType.MILLMAN:
         s.text(
-            "Millman teoremiyle çözeceğiz: devre iki ana düğüm arasına paralel bağlı kollardan "
-            "oluşuyor. Önce bu iki düğüm arasındaki gerilimi tek bir formülle bulacağız, sonra her "
+            "Millman teoremiyle çözeceğiz: devre, iki düğüm arasına paralel bağlı kollar olarak "
+            "ele alınır. Önce bu iki düğüm arasındaki gerilimi tek bir formülle bulacağız, sonra her "
             "kolun akımını Ohm yasasıyla hesaplayacağız."
         )
     elif ctx.analysis_type == AnalysisType.SOURCE_TRANSFORM and ctx.terminals:
@@ -1201,6 +1201,11 @@ def _solve(ctx: _Ctx) -> List[_Section]:
 _node_v = node_v
 
 
+EXTRA_DIGITS_NOTE = ("Bazı satırlarda birbirine yakın iki değerin farkı alındığı için değerler "
+                     "4'ten fazla basamakla yazıldı: 4 basamağa yuvarlanmış değerlerin farkı, "
+                     "sonucu son basamaklarda kaydırırdı.")
+
+
 def _flow_text(p: str, n: str) -> str:
     return f"Düğüm {p} → Düğüm {n}"
 
@@ -1216,6 +1221,7 @@ def _currents(ctx: _Ctx, mark: str = "", passive_only: bool = False) -> List[_Se
     def node_v(n: str) -> str:          # işaretli düğüm adı: V₂′
         return _node_v(n) + mark
 
+    extra_digits = False                # bir satırda 4'ten fazla basamak gerekti mi?
     for e in ctx.passive():
         if e.id not in ctx.i:
             continue
@@ -1246,6 +1252,7 @@ def _currents(ctx: _Ctx, mark: str = "", passive_only: bool = False) -> List[_Se
             # Yakın iki gerilimin farkında 4 basamak yetmeyebilir: (9,065 − 8,633)/600
             # elle 720 µA verir, sonuç 719,4 µA'dir → işlenenler gerektiği kadar basamakla
             d = shown_digits([vp.real, vn.real], lambda a: (a[0] - a[1]) / z.real, cur.real)
+            extra_digits = extra_digits or d > 4
             diff_num = (eng(vp.real, 'V', d) if n == "0"
                         else f"({eng(vp.real, 'V', d)} {MINUS} {paren(eng(vn.real, 'V', d))})")
             line = f"{name} = {diff_sym}/{lbl} = {diff_num} / {eng(z.real, 'Ω')} = {eng(cur.real, 'A')}"
@@ -1259,6 +1266,8 @@ def _currents(ctx: _Ctx, mark: str = "", passive_only: bool = False) -> List[_Se
             vd = vp - vn
             s.math(f"{name} = {diff_sym}/{lbl} = {polar(vd, 'V')} / {polar(z, 'Ω')} = {polar(cur, 'A')}")
 
+    if extra_digits:
+        s.note(EXTRA_DIGITS_NOTE)
     if passive_only:
         return [s]
     for e in ctx.sources():
