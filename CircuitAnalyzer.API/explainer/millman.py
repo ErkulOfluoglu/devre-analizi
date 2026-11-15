@@ -42,6 +42,36 @@ class _Branch:
         return self.cur_source is not None
 
 
+def _is_single_loop(adj: Dict[str, List[ParsedElement]]) -> bool:
+    """Her düğümde tam iki eleman ve toprak çevrenin üzerinde: devre tek bir çevre."""
+    return "0" in adj and all(len(lst) == 2 for lst in adj.values())
+
+
+def _single_loop_top(adj: Dict[str, List[ParsedElement]], n_elements: int) -> Optional[str]:
+    """
+    Tek çevrede A düğümü: B = 0'dan A'ya giden iki yolun (kolun) ikisinde de direnç ya da
+    akım kaynağı bulunmalı (1/R tanımlı olsun). Uygun birden çok düğüm varsa en büyük numaralı.
+    """
+    seq: List[Tuple[ParsedElement, str]] = []      # (eleman, ulaşılan düğüm), 0'dan başlayarak
+    prev, e = "0", adj["0"][0]
+    for _ in range(n_elements + 1):
+        nxt = e.node_negative if e.node_positive == prev else e.node_positive
+        seq.append((e, nxt))
+        if nxt == "0":
+            break
+        e = next(x for x in adj[nxt] if x is not e)
+        prev = nxt
+    else:
+        return None
+
+    def usable(elems: List[ParsedElement]) -> bool:
+        return any(x.element_type != ElementType.DC_SOURCE for x in elems)
+
+    tops = [node for i, (_, node) in enumerate(seq[:-1])
+            if usable([x for x, _ in seq[:i + 1]]) and usable([x for x, _ in seq[i + 1:]])]
+    return max(tops, key=lambda n: (len(n), n)) if tops else None
+
+
 def _walk_branches(ctx) -> Tuple[Optional[Tuple[str, str, List[_Branch]]], str]:
     """(A, B, kollar) ya da (None, sebep)."""
     adj: Dict[str, List[ParsedElement]] = {}
@@ -56,6 +86,15 @@ def _walk_branches(ctx) -> Tuple[Optional[Tuple[str, str, List[_Branch]]], str]:
     if dangling:
         return None, (f"Düğüm {ek(dangling[0], 'de')} bir eleman açıkta kalıyor (akım taşımaz); "
                       "Millman formülü kapalı paralel kollar ister.")
+    if not essential and _is_single_loop(adj):
+        # Tek çevre (ör. paralel bağlı iki akü): bir düğüm A seçilip devre B = 0 ile
+        # A arasında iki paralel kol olarak ele alınır.
+        top = _single_loop_top(adj, len(ctx.elements))
+        if top is None:
+            return None, ("Devre tek bir çevreden oluşuyor ama hiçbir düğüm onu, iki kolunda da "
+                          "direnç (ya da akım kaynağı) kalacak şekilde ikiye ayırmıyor; Millman "
+                          "formülü uygulanamaz.")
+        essential = ["0", top]
     if len(essential) != 2:
         return None, (f"Seri elemanları birleştirdikten sonra {len(essential)} ana düğüm "
                       "(üç veya daha fazla elemanın birleştiği düğüm) kalıyor; Millman teoremi "
@@ -166,6 +205,15 @@ def build_millman(ctx) -> Tuple[Optional[list], str]:
             "seri gerilim kaynakları işaretlerine göre toplanır.")
     s1.text(f"Ana düğümler: A = Düğüm {a}, B = {b_txt}. Bir koldaki gerilim kaynağının + ucu A düğümüne "
             "bakıyorsa E pozitif, B düğümüne bakıyorsa negatif yazılır.")
+    adj: Dict[str, List[ParsedElement]] = {}
+    for e in ctx.elements:
+        adj.setdefault(e.node_positive, []).append(e)
+        adj.setdefault(e.node_negative, []).append(e)
+    if _is_single_loop(adj):
+        s1.note(f"Devre tek bir çevreden oluşuyor (üç ya da daha fazla elemanın birleştiği düğüm "
+                f"yok). Bu durumda Düğüm {a} ile Düğüm {b} arasındaki iki yol, paralel bağlı iki "
+                "kol gibi ele alınır; A düğümü, iki kolda da direnç (ya da akım kaynağı) "
+                "kalacak şekilde seçildi.")
     for br in branches:
         names = ", ".join(e.id for e in br.elements)
         if br.is_current:

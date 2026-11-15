@@ -57,6 +57,35 @@ def test_millman_current_source_branch(solve):
     assert any("I₃ = I1 akım kaynağının akımı = 3 mA" in x for x in t)
 
 
+def test_millman_single_loop_two_batteries(solve):
+    # Paralel iki akü: V1 = 12 V + R1 = 2k, V2 = 6 V + R2 = 4k, ortak düğüm 3.
+    # Her düğümde iki eleman (tek çevre) → A = Düğüm 3, B = GND.
+    # V_AB = (12/2000 + 6/4000) / (1/2000 + 1/4000) = 7,5 mA / 0,75 mS = 10 V
+    # I1 = (12 − 10)/2k = 1 mA, I2 = (6 − 10)/4k = −1 mA → toplam 0
+    net = f"V1 1 0 DC 12\nR1 1 3 2k\nV2 2 0 DC 6\nR2 2 3 4k\n{GND}"
+    results, _, errors = solve(net, "DC", analysis_type="MILLMAN")
+    assert not errors
+    t = texts(results)
+    assert "Millman Formülü — V_AB" in titles(results)
+    assert not any("uygulanamadı" in x for x in t)
+    assert any("Devre tek bir çevreden oluşuyor" in x for x in t)
+    assert any("V_AB = (12/2000 + 6/4000) / (1/2000 + 1/4000)" in x for x in t)
+    assert any("V_AB = V₃ " + MINUS + " V₀ = 10 V" in x for x in t)
+    assert any("= 1 mA" in x for x in t)
+    assert any("= " + MINUS + "1 mA" in x for x in t)
+
+
+def test_millman_single_loop_divider_picks_node_between_resistors(solve):
+    # V1 = 12 V, R1 = 1k (1 → 2), R2 = 2k (2 → 0). A = 1 olursa kollardan biri yalnız V1
+    # (direnç yok, 1/R tanımsız) → A = Düğüm 2: V_AB = (0/2000 + 12/1000)/(1/2000 + 1/1000) = 8 V
+    net = f"V1 1 0 DC 12\nR1 1 2 1k\nR2 2 0 2k\n{GND}"
+    results, _, errors = solve(net, "DC", analysis_type="MILLMAN")
+    assert not errors
+    t = texts(results)
+    assert not any("uygulanamadı" in x for x in t)
+    assert any("V_AB = V₂ " + MINUS + " V₀ = 8 V" in x for x in t)
+
+
 def test_millman_fallback_three_essential_nodes(solve):
     # 1, 2, 3 ve 0 düğümlerinin üçü ya da fazlası ≥3 eleman birleştiriyor → ikiden fazla ana düğüm
     net = f"V1 1 0 DC 12\nR1 1 2 1k\nR2 2 0 2k\nR3 2 3 1k\nR4 3 0 1k\nR5 1 3 3k\n{GND}"
