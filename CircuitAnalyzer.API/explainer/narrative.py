@@ -29,7 +29,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from explainer.formatting import (
-    MINUS, eng, node_v, num, paren, polar, rect,
+    MINUS, eng, node_v, num, paren, polar, rect, shown_digits,
 )
 from explainer.cramer import cramer3, exact_fmt, integer_rows, is_integral_row
 from explainer.step_generator import _node_groups, _source_value
@@ -1243,8 +1243,11 @@ def _currents(ctx: _Ctx, mark: str = "", passive_only: bool = False) -> List[_Se
 
         diff_sym = node_v(p) if n == "0" else f"({node_v(p)} {MINUS} {node_v(n)})"
         if ctx.is_dc:
-            diff_num = (eng(vp.real, 'V') if n == "0"
-                        else f"({eng(vp.real, 'V')} {MINUS} {paren(eng(vn.real, 'V'))})")
+            # Yakın iki gerilimin farkında 4 basamak yetmeyebilir: (9,065 − 8,633)/600
+            # elle 720 µA verir, sonuç 719,4 µA'dir → işlenenler gerektiği kadar basamakla
+            d = shown_digits([vp.real, vn.real], lambda a: (a[0] - a[1]) / z.real, cur.real)
+            diff_num = (eng(vp.real, 'V', d) if n == "0"
+                        else f"({eng(vp.real, 'V', d)} {MINUS} {paren(eng(vn.real, 'V', d))})")
             line = f"{name} = {diff_sym}/{lbl} = {diff_num} / {eng(z.real, 'Ω')} = {eng(cur.real, 'A')}"
             if cur.real >= 0:
                 s.math(f"{line}  ({_flow_text(p, n)})")

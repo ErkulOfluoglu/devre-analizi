@@ -74,6 +74,26 @@ def eng(value: float, unit: str, digits: int = 4) -> str:
     return f"{num(value / scale, digits)} {prefix}{unit}".strip()
 
 
+def shown_digits(operands, combine, exact: float, max_digits: int = 8) -> int:
+    """
+    İşlenenler kaç anlamlı basamakla yazılırsa, öğrencinin elle yaptığı hesap
+    gösterilen 4 basamaklı sonuca (exact) son basamakta en fazla ~1 birim farkla ulaşır?
+    4'ten başlar, gerekirse artırır. Yakın iki sayının farkında gerekir:
+    (9,065 − 8,633)/600 = 720 µA ama sonuç 719,4 µA → 5 basamak: 9,0648 − 8,6331.
+    """
+    if abs(exact) < 1e-15:
+        return 4
+    ulp = 10.0 ** (math.floor(math.log10(abs(exact))) - 3)   # 4. anlamlı basamağın birimi
+    for d in range(4, max_digits + 1):
+        rounded = [float(f"{x:.{d}g}") for x in operands]
+        try:
+            if abs(combine(rounded) - exact) <= 1.5 * ulp:
+                return d
+        except ZeroDivisionError:
+            return 4
+    return max_digits
+
+
 def is_real(z: Number, rel: float = 1e-9) -> bool:
     z = complex(z)
     return abs(z.imag) <= rel * max(abs(z.real), 1e-15) or abs(z.imag) < 1e-15

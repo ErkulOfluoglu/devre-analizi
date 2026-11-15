@@ -26,6 +26,7 @@ from explainer.formatting import (
     paren,
     polar,
     rect,
+    shown_digits,
     sub,
     value,
 )
@@ -255,3 +256,23 @@ def test_value_ac():
 ])
 def test_turkish_suffix(name, kind, expected):
     assert ek(name, kind) == expected
+
+
+# ═══════════════════════════════════════════════════════
+#  SHOWN_DIGITS (elle hesap gösterilen sonucu vermeli)
+# ═══════════════════════════════════════════════════════
+
+def test_shown_digits_keeps_four_when_enough():
+    # 13,09 / 4 = 3,2725 ≈ 3,273 (son basamakta yarım birim): 4 basamak yeter
+    v = 13.090909
+    assert shown_digits([v, 0.0], lambda a: (a[0] - a[1]) / 4, v / 4) == 4
+
+
+def test_shown_digits_adds_digits_for_close_voltages():
+    # Örnek 7: (9,065 − 8,633)/600 = 720 µA ama sonuç 719,4 µA
+    v3, v4 = 9.064748, 8.633094
+    exact = (v3 - v4) / 600
+    d = shown_digits([v3, v4], lambda a: (a[0] - a[1]) / 600, exact)
+    assert d == 5
+    hand = (float(f"{v3:.{d}g}") - float(f"{v4:.{d}g}")) / 600
+    assert abs(hand - exact) <= 1.5e-7

@@ -12,7 +12,9 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from explainer.cramer import cramer3, exact_fmt, integer_rows
-from explainer.formatting import MINUS, eng, node_v, num, paren, polar, rect, sub
+from explainer.formatting import (
+    MINUS, eng, node_v, num, paren, polar, rect, shown_digits, sub,
+)
 from explainer.narrative import (
     _Ctx, _Section, _close, _cnum, _flow_text, _integer_step, _is_real, _join_terms,
     _linear_term, _pnum, _scale_for,
@@ -336,17 +338,22 @@ def _element_currents_section(ctx: _Ctx, ma: MeshAnalysis, signs, elements) -> _
                    f"{', + ucundan dışarı' if ctx.is_dc and (-ib).real >= 0 else ''})")
             continue
         expr = _combo(sg_map, paren_multi=False)
+        ordered = sorted(sg_map.items(), key=lambda kv: (kv[1] < 0, kv[0]))
+        # Yakın iki akımın farkında, elle hesap sonucu verecek kadar basamak
+        digits = (shown_digits([I[k - 1].real for k, _ in ordered],
+                               lambda a: sum(sg * x for (_, sg), x in zip(ordered, a)),
+                               ib.real)
+                  if ctx.is_dc and len(sg_map) > 1 else 4)
 
         def value_term(v: complex, sg: int) -> str:
             # DC: '6 mA', negatifse '(−3 mA)'; AC: her zaman parantezli kutupsal
             if ctx.is_dc:
-                t = eng(v.real, "A")
+                t = eng(v.real, "A", digits)
                 t = f"({t})" if v.real < 0 else t
             else:
                 t = f"({polar(v, 'A')})"
             return f"{MINUS}{t}" if sg < 0 else t
 
-        ordered = sorted(sg_map.items(), key=lambda kv: (kv[1] < 0, kv[0]))
         values = (_join_terms([value_term(I[k - 1], sg) for k, sg in ordered])
                   if len(sg_map) > 1 else None)
         line = f"I_{eid} = {expr}"
