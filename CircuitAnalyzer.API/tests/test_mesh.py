@@ -273,8 +273,9 @@ def test_mesh_narrative_current_source_outer_branch(solve):
       Düğüm 3'e giren 2 mA, R3 üzerinden düğüm 2'ye geçer.
       Düğüm 2 KCL: (10 - V2)/1k + 2 mA = V2/2k => 20 - 2·V2 + 4 = V2 => 3·V2 = 24 => V2 = 8 V.
       Düğüm 3 gerilimi: V3 = V2 + 2 mA · 1k = 8 + 2 = 10 V.
-      Çevre 2 akımı doğrudan bilinen akım kaynağıdır: I₂ = -2 mA.
-      Çevre 1: 3000·I₁ + (-2000)·(-0.002) = 10 => 3000·I₁ = 6 => I₁ = 6 / 3000 = 2 mA.
+      Çevre 2 akımı doğrudan bilinen akım kaynağıdır; çevre kaynaktan 3 → 0 geçer,
+      kaynağın akımı 0 → 3 olduğundan I₂ = -2 mA.
+      Çevre 1 (kΩ, mA): 3·I₁ − 2·(−2) = 10 => 3·I₁ = 10 − 4 = 6 => I₁ = 6 / 3 = 2 mA.
     """
     net = (
         f"{GND}\n"
@@ -297,10 +298,19 @@ def test_mesh_narrative_current_source_outer_branch(solve):
     assert kvl_sec is not None
     kvl_texts = [b.text for b in kvl_sec.blocks]
     assert any("bu çevrenin akımı doğrudan kaynağın akımıdır" in t for t in kvl_texts)
+    # Eksi işaretin sebebi: kaynak 0 → 3, çevre kaynaktan 3 → 0 geçiyor
+    assert any("Düğüm 0 → Düğüm 3 yönündedir" in t and "Düğüm 3 → Düğüm 0 yönünde" in t
+               and "Yönler ters" in t for t in kvl_texts)
+    assert "I₂ = −2 mA" in kvl_texts
+    assert any("Eksi işaret, Çevre 2 akımının" in t for t in kvl_texts)
+    assert not any("0,002 A" in t for t in texts)
 
-    # Çözüm bölümünde bilinen akımın yerine konduğu yer alır
-    assert any("Çevre 1 denkleminde bilinen akımları yerine koyalım:" in t for t in texts)
-    assert any("I₁ = 6 / 3000 = 2 mA" in t for t in texts)
+    # Çözüm bölümünde bilinen akımın yerine konduğu yer alır (kΩ, mA)
+    assert any(t.startswith("Çevre 1 denkleminde bilinen akımları yerine koyalım (empedans kΩ")
+               for t in texts)
+    assert "3·I₁ − 2·(−2) = 10" in texts
+    assert "3·I₁ = 10 − 4 = 6" in texts
+    assert any("I₁ = 6 / 3 = 2 mA" in t for t in texts)
 
     # Düğüm gerilimleri kontrolü: V2 = 8 V, V3 = 10 V
     assert res.node_voltages["2"].value == pytest.approx(8.0, abs=1e-4)
@@ -338,7 +348,7 @@ def test_mesh_narrative_supermesh(solve):
 
     texts = all_texts(res.explanation)
     assert any("süperçevre" in t.lower() for t in texts)
-    assert any("= 0,002 A" in t for t in texts)
+    assert "I₂ − I₃ = 2 mA" in texts
     assert not any("birlikte çözülünce" in t for t in texts)
     assert any("I₂ = I₃ + 2" in t for t in texts)
     assert any("3·I₁ − 3·I₃ = 14" in t for t in texts)

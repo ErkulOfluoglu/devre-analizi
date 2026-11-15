@@ -14,8 +14,8 @@ import numpy as np
 from explainer.cramer import cramer3, exact_fmt, integer_rows
 from explainer.formatting import MINUS, eng, node_v, num, paren, polar, rect, sub
 from explainer.narrative import (
-    _Ctx, _Section, _close, _cnum, _flow_text, _integer_step, _join_terms, _linear_term,
-    _pnum, _scale_for,
+    _Ctx, _Section, _close, _cnum, _flow_text, _integer_step, _is_real, _join_terms,
+    _linear_term, _pnum, _scale_for,
 )
 from parser.netlist_parser import (
     CURRENT_SOURCES, DEPENDENT_CURRENT_OUTPUT, DEPENDENT_VOLTAGE_OUTPUT, VOLTAGE_SOURCES,
@@ -287,6 +287,26 @@ def _solve_square(s: _Section, ctx: _Ctx, M: int, Zs, V, I, Is, unit_i: str,
             s.result(f"{syms[k]} = {ctx.val(I[k], 'A')}")
 
 
+def _single_mesh_source(s: _Section, ctx: _Ctx, e, k: int, sg: int, i_s: complex) -> None:
+    """Yalnız bir çevrede olan akım kaynağı: çevre akımı = ±kaynak akımı, işaretin sebebiyle."""
+    p, n = e.node_positive, e.node_negative
+    value = sg * i_s
+    s.text(f"{e.id} akım kaynağı yalnızca Çevre {k} üzerinde: bu çevrenin akımı "
+           "doğrudan kaynağın akımıdır (KVL yazmaya gerek yok).")
+    if sg > 0:
+        s.text(f"Çevre {k}, kaynaktan {_flow_text(p, n)} yönünde geçiyor; bu, kaynağın "
+               "akım yönüyle aynı olduğu için çevre akımı kaynağın akımına eşittir:")
+    else:
+        s.text(f"Kaynağın akımı kaynak içinde {_flow_text(p, n)} yönündedir, Çevre {k} ise "
+               f"kaynaktan {_flow_text(n, p)} yönünde geçiyor. Yönler ters olduğu için çevre "
+               "akımı kaynağın akımının eksisidir:")
+    s.math(f"{mesh_symbol(k)} = {ctx.val(value, 'A')}")
+    if ctx.is_dc and complex(value).real < 0:
+        s.note(f"Eksi işaret, Çevre {k} akımının gerçekte seçtiğimiz dönüş yönünün tersine "
+               f"döndüğünü gösterir: büyüklüğü {eng(-complex(value).real, 'A')}, yönü ters. "
+               "Denklemlerde bu değer işaretiyle birlikte kullanılır.")
+
+
 def _element_currents_section(ctx: _Ctx, ma: MeshAnalysis, signs, elements) -> _Section:
     """Eleman akımları (çevre akımlarından); bağımlı kaynaklarda değer kontrolü de verilir."""
     I = ma.mesh_currents
@@ -477,12 +497,10 @@ def _dependent_sections(ctx: _Ctx, ma: MeshAnalysis, signs, elements, groups,
         i_s = ma.currents_cs[cid]
         if len(sg_map) == 1:
             (k, sg), = sg_map.items()
-            s.text(f"{cid} akım kaynağı yalnızca Çevre {k} üzerinde: bu çevrenin akımı "
-                   "doğrudan kaynağın akımıdır (KVL yazmaya gerek yok).")
-            s.math(f"{mesh_symbol(k)} = {_cnum(sg * i_s)} A")
+            _single_mesh_source(s, ctx, elements[cid], k, sg, i_s)
         else:
             s.text(f"{cid} akım kaynağının akımı, ondan geçen çevre akımlarının farkına eşittir (kısıt):")
-            s.math(f"{lhs} = {_cnum(i_s)} A")
+            s.math(f"{lhs} = {ctx.val(i_s, 'A')}")
     out.append(s)
 
     # ── (b) Kontrol büyüklükleri ──
@@ -749,12 +767,10 @@ def build_mesh_sections(ctx: _Ctx, ma: MeshAnalysis) -> List[_Section]:
         sg_map = signs.get(cid, {})
         if len(sg_map) == 1:
             (k, sg), = sg_map.items()
-            s.text(f"{cid} akım kaynağı yalnızca Çevre {k} üzerinde: bu çevrenin akımı "
-                   "doğrudan kaynağın akımıdır (KVL yazmaya gerek yok).")
-            s.math(f"{mesh_symbol(k)} = {_cnum(sg * i_s)} A")
+            _single_mesh_source(s, ctx, elements[cid], k, sg, i_s)
         else:
             s.text(f"{cid} akım kaynağının akımı, ondan geçen çevre akımlarının farkına eşittir (kısıt):")
-            s.math(f"{_combo(sg_map, paren_multi=False)} = {_cnum(i_s)} A")
+            s.math(f"{_combo(sg_map, paren_multi=False)} = {ctx.val(i_s, 'A')}")
     sections.append(s)
 
     # ── 4. Çözüm ──
@@ -812,15 +828,30 @@ def build_mesh_sections(ctx: _Ctx, ma: MeshAnalysis) -> List[_Section]:
                + ", ".join(f"{mesh_symbol(k)} = {ctx.val(v, 'A')}" for k, v in sorted(known.items())))
         if len(unknown) == 1:
             u = unknown[0]
-            zuu = Z[u - 1, u - 1]
-            vred = V[u - 1] - sum(Z[u - 1, k - 1] * known[k] for k in known)
-            terms = [_linear_term(zuu, mesh_symbol(u), first=True)]
-            terms += [f"+ {_pnum(Z[u - 1, k - 1])}·({_cnum(known[k])})"
-                      for k in sorted(known) if abs(Z[u - 1, k - 1]) > 1e-15]
-            s.text(f"Çevre {u} denkleminde bilinen akımları yerine koyalım:")
+            # kΩ ↔ mA ölçeği (diğer çevre çözümleriyle aynı birimler)
+            scale, prefix = _scale_for([Z[u - 1, c] for c in range(M)])
+            unit_r = {"k": "kΩ", "": "Ω", "m": "mΩ"}.get(prefix, f"{prefix}Ω")
+            unit_i = {"k": "mA", "": "A", "m": "kA"}.get(prefix, "A")
+            zs = {k: Z[u - 1, k - 1] * scale for k in range(1, M + 1)}
+            ks = {k: v / scale for k, v in known.items()}
+            used = [k for k in sorted(known) if abs(zs[k]) > 1e-15]
+            moved = sum(zs[k] * ks[k] for k in used)
+            vred = V[u - 1] - moved
+            terms = [_linear_term(zs[u], mesh_symbol(u), first=True)]
+            for k in used:
+                c = complex(zs[k])
+                if _is_real(c):
+                    sign = MINUS if c.real < 0 else "+"
+                    terms.append(f"{sign} {_pnum(abs(c.real))}·{_pnum(ks[k])}")
+                else:
+                    terms.append(f"+ {_pnum(c)}·{paren(_cnum(ks[k]))}")
+            s.text(f"Çevre {u} denkleminde bilinen akımları yerine koyalım "
+                   f"(empedans {unit_r}, gerilim V, akım {unit_i} cinsinden):")
             s.math(f"{' '.join(terms)} = {_cnum(V[u - 1])}")
-            s.math(f"{_pnum(zuu)}·{mesh_symbol(u)} = {_cnum(vred)}")
-            s.result(f"{mesh_symbol(u)} = {_cnum(vred)} / {_pnum(zuu)} = {ctx.val(I[u - 1], 'A')}")
+            if used:
+                s.math(f"{_pnum(zs[u])}·{mesh_symbol(u)} = {_cnum(V[u - 1])} {MINUS} "
+                       f"{_pnum(moved)} = {_cnum(vred)}")
+            s.result(f"{mesh_symbol(u)} = {_cnum(vred)} / {_pnum(zs[u])} = {ctx.val(I[u - 1], 'A')}")
         else:
             if unknown:
                 s.text("Bilinen akımlar yerine konduktan sonra kalan denklemler birlikte çözülünce:")
