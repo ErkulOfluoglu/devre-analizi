@@ -25,7 +25,7 @@ import numpy as np
 from explainer.formatting import MINUS, node_v, num, paren
 from explainer.narrative import (
     _Ctx, _Section, _close, _cnum, _control_text, _group_terms, _join_terms,
-    _linear_term, _pnum, _system_blocks, _flow_text,
+    _linear_term, _pnum, _system_blocks, _flow_text, elem_name,
 )
 from explainer.step_generator import _source_value
 from parser.netlist_parser import (
@@ -228,6 +228,11 @@ def _and_join(items: List[str]) -> str:
 
 def _short_reason(ctx: _Ctx, el: ParsedElement) -> str:
     """Kısıt elemanı kısa devre gibi davranıyorsa nedeni, değilse ''."""
+    role = el.params.get("port_role")
+    if role == "short":
+        return "terminalleri birleştirir"
+    if role == "zeroed":
+        return "sıfırlandı (kısa devre)"
     if el.params.get("superposition_zeroed"):
         return "bu adımda sıfırlandı (kısa devre)"
     if ctx.is_dc and el.element_type == ElementType.INDUCTOR:
@@ -262,10 +267,12 @@ def _kcl_row(ctx: _Ctx, members: List[str], controls: Dict[str, Control],
     else:
         title = "Süperdüğüm {" + ", ".join(members) + "}"
         nodes_txt = _and_join(members)
-        ids = ", ".join(el.id for el, *_ in inner)
+        ids = ", ".join(elem_name(el) for el, *_ in inner)
         shorts = [el for el, *_ in inner if _short_reason(ctx, el)]
         if inner and len(shorts) == len(inner):
-            reasons = "; ".join(f"{el.id} {_short_reason(ctx, el)}" for el in shorts)
+            reasons = "; ".join(f"{elem_name(el)} {_short_reason(ctx, el)}" for el in shorts)
+            if reasons.startswith("kısa devre teli"):      # cümle başı
+                reasons = "K" + reasons[1:]
             lead = (f"{reasons}. Bu yüzden Düğüm {nodes_txt} aynı gerilimdedir ve birlikte ele "
                     "alınır (kısa devreden geçen akım bilinmediği için tek tek KCL yazılamaz).")
         elif len(inner) > 1:
@@ -290,7 +297,7 @@ def _constraint_row(ctx: _Ctx, edge, controls: Dict[str, Control], lead: str = "
         return Row("constraint", f"Kısıt ({elem.id})", sym, numeric,
                    lhs - ctrl.expr.scale(g), lead)
     numeric = f"{node_v(p)} {MINUS} {node_v(n)} = {ctx.v_num(value)}"
-    return Row("constraint", f"Kısıt ({elem.id})", "", numeric,
+    return Row("constraint", f"Kısıt ({elem_name(elem)})", "", numeric,
                lhs - LinExpr(k=value), lead)
 
 

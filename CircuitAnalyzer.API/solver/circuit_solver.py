@@ -51,7 +51,7 @@ from parser.netlist_parser import (
 )
 from explainer.step_generator import generate_solution_steps
 from explainer.topology import generate_topology_step
-from explainer.narrative import PortExtras, build_explanation, port_is_dead
+from explainer.narrative import PortCircuit, PortExtras, build_explanation, port_is_dead
 from solver.frequency_check import check_source_frequencies
 from solver.mesh import analyze_meshes
 from solver.resonance import ResonanceNotApplicable, analyze_resonance, verify_with_lcapy
@@ -1846,18 +1846,37 @@ def _solve_port_extras(
     a, b = terminals.node_positive, terminals.node_negative
     extras = PortExtras()
 
-    def solve_with(base: ParsedCircuit, src: ParsedElement) -> complex:
+    def solve_with(base: ParsedCircuit, src: ParsedElement, keep):
         sub = copy.deepcopy(base)
         sub.probes = []
         sub.elements.append(src)
         cct = make_circuit(sub, is_dc, frequency, to_lcapy_netlist(sub, frequency))
-        return complex(lcapy_element_current(
-            cct, src, lcapy_sense_map(sub), is_dc, frequency))
+        sense = lcapy_sense_map(sub)
+        current = complex(lcapy_element_current(cct, src, sense, is_dc, frequency))
+        # Anlatım için değiştirilmiş devrenin düğüm gerilimleri ve eleman akımları
+        # (süperpozisyon alt devreleriyle aynı yol); alınamazsa anlatım eski metne döner
+        try:
+            nodes = {n for e in sub.elements for n in (e.node_positive, e.node_negative)}
+            v = {"0": 0j}
+            for n in nodes - {"0"}:
+                v[n] = complex(_extract_numeric(cct[n].V, is_dc, frequency))
+            i = {e.id: complex(lcapy_element_current(cct, e, sense, is_dc, frequency))
+                 for e in sub.elements}
+            keep(PortCircuit(parsed=sub, source_id=src.id, node_voltages=v, element_currents=i))
+        except Exception:
+            pass
+        return current
+
+    def keep_sc(pc):
+        extras.sc_circuit = pc
+
+    def keep_test(pc):
+        extras.test_circuit = pc
 
     short = ParsedElement(id=_fresh_id(parsed, "Vsc_port"), element_type=ElementType.DC_SOURCE,
                           node_positive=a, node_negative=b, value=0.0)
     try:
-        extras.isc = solve_with(parsed, short)
+        extras.isc = solve_with(parsed, short, keep_sc)
     except Exception:
         extras.isc = None
 
@@ -1881,7 +1900,7 @@ def _solve_port_extras(
                              node_positive=a, node_negative=b, value=1.0,
                              params={"amplitude": 1.0, "phase": 0.0})
     try:
-        extras.i_test = -solve_with(zeroed, test)
+        extras.i_test = -solve_with(zeroed, test, keep_test)
     except Exception:
         extras.i_test = None
     return extras
