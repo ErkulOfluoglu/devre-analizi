@@ -1170,9 +1170,67 @@ public partial class AnalysisPanel : UserControl
         return grid;
     }
 
+    /// <summary>
+    /// Düğüm kutucuğunun başlığı: "V4", üç fazlı elemanın ucundaysa API'nin verdiği adla
+    /// "V4 · R fazı (Y1)"; düğüm 0 her zaman "0 (GND)".
+    /// </summary>
+    internal static string NodeTileTitle(string key, string? label)
+    {
+        if (key == "0")
+            return "0 (GND)";
+        return string.IsNullOrWhiteSpace(label) || label == "GND" ? $"V{key}" : $"V{key} · {label}";
+    }
+
+    /// <summary>
+    /// Üç faz sonuçları, anlatımdaki adlarla (V_RN, V_RS, I_R, I_N, V_N′N, I_RS) bölüm bölüm.
+    /// Değerler kutupsal (büyüklük∠açı), önekli birimle.
+    /// </summary>
+    internal static List<(string Header, List<(string Title, string Value)> Items)> ThreePhaseSections(ThreePhaseResultDto tp)
+    {
+        static string V(ComplexNumberDto c, string unit) => EngFormat.Format(ResultValue.FromComplex(c), unit);
+        static List<(string, string)> Tiles(Dictionary<string, ComplexNumberDto> d, Func<string, string> title, string unit) =>
+            d.Select(kv => (title(kv.Key), V(kv.Value, unit))).ToList();
+
+        var sections = new List<(string, List<(string, string)>)>();
+        if (tp.PhaseVoltages is { Count: > 0 } pv)
+            sections.Add(("Kaynağın faz gerilimleri", Tiles(pv, k => $"V_{k}N", "V")));
+        if (tp.LineVoltages is { Count: > 0 } lv)
+            sections.Add(("Hat gerilimleri", Tiles(lv, k => $"V_{k}", "V")));
+        if (tp.LineCurrents is { Count: > 0 } lc)
+        {
+            var tiles = Tiles(lc, k => $"I_{k}", "A");
+            if (tp.NeutralCurrent != null)
+                tiles.Add(("I_N", V(tp.NeutralCurrent, "A")));
+            sections.Add(("Hat akımları", tiles));
+        }
+        if (tp.LoadVoltages is { Count: > 0 } ldv)
+        {
+            bool delta = string.Equals(tp.Load, "D", StringComparison.OrdinalIgnoreCase);
+            var tiles = Tiles(ldv, k => delta ? $"V_{k}" : $"V_{k}N′", "V");
+            if (tp.LoadNeutralVoltage != null)
+                tiles.Add(("V_N′N", V(tp.LoadNeutralVoltage, "V")));
+            sections.Add((delta ? "Üçgen yükün kol gerilimleri" : "Yıldız yükün kol gerilimleri", tiles));
+        }
+        if (tp.LoadPhaseCurrents is { Count: > 0 } phc)
+            sections.Add(("Üçgen yükün faz akımları", Tiles(phc, k => $"I_{k}", "A")));
+        return sections;
+    }
+
     private StackPanel BuildResultsPanel(AnalysisResponseDto response)
     {
         var panel = new StackPanel();
+
+        // Üç faz: kaynak ve yükün faz/hat gerilimleri ve akımları (anlatımdaki adlarla) en başta
+        if (response.ThreePhaseResult is { } threePhase)
+        {
+            foreach (var (header, items) in ThreePhaseSections(threePhase))
+            {
+                AddSectionHeader(panel, header);
+                panel.Children.Add(CreateTwoColumnGrid(items
+                    .Select(t => CreateValueTile(t.Title, t.Value))
+                    .ToList<UIElement>()));
+            }
+        }
 
         // 3. Düğüm Gerilimleri
         if (response.Results?.NodeVoltages != null && response.Results.NodeVoltages.Count > 0)
@@ -1186,7 +1244,7 @@ public partial class AnalysisPanel : UserControl
             var tiles = new List<UIElement>();
             foreach (var kvp in sortedNodes)
             {
-                string nodeName = kvp.Key == "0" ? "0 (GND)" : $"V{kvp.Key}";
+                string nodeName = NodeTileTitle(kvp.Key, kvp.Value.Label);
                 string formattedVal = EngFormat.Format(kvp.Value.Value, kvp.Value.Unit ?? "V");
                 string? secVal = null;
                 if (kvp.Value.Value.IsComplex && !string.IsNullOrWhiteSpace(kvp.Value.Value.RectangularStr))
@@ -1198,27 +1256,6 @@ public partial class AnalysisPanel : UserControl
             panel.Children.Add(CreateTwoColumnGrid(tiles));
         }
 
-        // Üç faz: hat ve faz akımları, wattmetre okumaları
-        if (response.ThreePhaseResult is { } threePhase)
-        {
-            if (threePhase.LineCurrents is { Count: > 0 } lineCurrents)
-            {
-                AddSectionHeader(panel, "Hat akımları");
-                var tiles = lineCurrents
-                    .Select(kv => CreateValueTile($"I_{kv.Key}", EngFormat.Format(ResultValue.FromComplex(kv.Value), "A")))
-                    .ToList<UIElement>();
-                if (threePhase.NeutralCurrent != null)
-                    tiles.Add(CreateValueTile("I_N", EngFormat.Format(ResultValue.FromComplex(threePhase.NeutralCurrent), "A")));
-                panel.Children.Add(CreateTwoColumnGrid(tiles));
-            }
-            if (threePhase.LoadPhaseCurrents is { Count: > 0 } phaseCurrents)
-            {
-                AddSectionHeader(panel, "Üçgen yükün faz akımları");
-                panel.Children.Add(CreateTwoColumnGrid(phaseCurrents
-                    .Select(kv => CreateValueTile($"I_{kv.Key}", EngFormat.Format(ResultValue.FromComplex(kv.Value), "A")))
-                    .ToList<UIElement>()));
-            }
-        }
         if (response.WattmeterResults is { Count: > 0 } wattmeters)
         {
             AddSectionHeader(panel, "Wattmetre okumaları");

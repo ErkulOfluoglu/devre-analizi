@@ -112,14 +112,16 @@ namespace CircuitAnalyzer.WPF.Views
                 hspan.LineColor = ScottPlot.Colors.Transparent;
             }
 
-            // Dikey kesikli çizgiler ve etiketler: f0, f1, f2
+            // Dikey kesikli çizgiler: f0, f1, f2. Adları eksen sayılarının üstüne binmesin diye eğrinin
+            // üstündeki rozet bandına yazılır (yakın çıkarlarsa alt alta satırlara).
+            var markers = new List<(double X, string Text)>();
             if (_data.F0 > 0)
             {
                 var vl0 = plot.Add.VerticalLine(_data.F0 * _freqScale);
                 vl0.LinePattern = ScottPlot.LinePattern.Dashed;
                 vl0.Color = markerCol;
                 vl0.LineWidth = 1.2f;
-                vl0.Text = "f₀";
+                markers.Add((_data.F0 * _freqScale, "f₀"));
             }
             if (f1 > 0)
             {
@@ -127,7 +129,7 @@ namespace CircuitAnalyzer.WPF.Views
                 vl1.LinePattern = ScottPlot.LinePattern.Dashed;
                 vl1.Color = markerCol;
                 vl1.LineWidth = 1.0f;
-                vl1.Text = "f₁";
+                markers.Add((f1 * _freqScale, "f₁"));
             }
             if (f2 > 0)
             {
@@ -135,8 +137,10 @@ namespace CircuitAnalyzer.WPF.Views
                 vl2.LinePattern = ScottPlot.LinePattern.Dashed;
                 vl2.Color = markerCol;
                 vl2.LineWidth = 1.0f;
-                vl2.Text = "f₂";
+                markers.Add((f2 * _freqScale, "f₂"));
             }
+            var textCol = GetThemeColor("Brush.Text.Primary");
+            double dataWidth = PlotMarkers.DataWidthPx(PlotResonance.ActualWidth);
 
             // Yatay kesikli çizgi: seride I_max * 0.707 (i0 * 0.707), paralelde Z0 * 0.707 (z0 * 0.707), etiket "0,707"
             double peak = isParallel ? _data.Z0 : _data.I0;
@@ -186,18 +190,22 @@ namespace CircuitAnalyzer.WPF.Views
 
                 double xSpan = Math.Max(1e-6, xMax - xMin);
                 double ySpan = Math.Max(1e-6, yMax - yMin);
-                plot.Axes.SetLimits(
-                    xMin - xSpan * 0.05,
-                    xMax + xSpan * 0.05,
-                    Math.Max(0, yMin - ySpan * 0.1),
-                    yMax + ySpan * 0.15);
+                double left = xMin - xSpan * 0.05, right = xMax + xSpan * 0.05;
+                double bottom = Math.Max(0, yMin - ySpan * 0.1);
+                double yTop = PlotMarkers.AddBadges(plot, markers, left, right, bottom, yMax + ySpan * 0.05,
+                    dataWidth, 14f, textCol, bgCol, gridCol);
+                plot.Axes.SetLimits(left, right, bottom, yTop);
+                PlotMarkers.ApplyBottomTicks(plot, left, right, dataWidth);
             }
             else
             {
                 double xCenter = _data.F0 > 0 ? _data.F0 * _freqScale : 1000 * _freqScale;
                 double span = _data.Bw > 0 ? _data.Bw * _freqScale * 3 : Math.Max(100 * _freqScale, xCenter * 0.5);
-                double yTop = Math.Max(1.0, peak > 0 ? peak * 1.2 : 1.0);
-                plot.Axes.SetLimits(Math.Max(0, xCenter - span), xCenter + span, 0, yTop);
+                double yData = Math.Max(1.0, peak > 0 ? peak * 1.05 : 1.0);
+                double left = Math.Max(0, xCenter - span), right = xCenter + span;
+                double yTop = PlotMarkers.AddBadges(plot, markers, left, right, 0, yData, dataWidth, 14f, textCol, bgCol, gridCol);
+                plot.Axes.SetLimits(left, right, 0, yTop);
+                PlotMarkers.ApplyBottomTicks(plot, left, right, dataWidth);
             }
 
             // Eksen ve başlık
@@ -205,13 +213,7 @@ namespace CircuitAnalyzer.WPF.Views
             plot.XLabel($"Frekans ({_freqUnit})");
             plot.YLabel(isParallel ? "Empedans (Ω)" : "Akım (A)");
 
-            // Sayı biçimlendirici (Türkçe ondalık virgülü)
-            var autoBottom = new ScottPlot.TickGenerators.NumericAutomatic
-            {
-                LabelFormatter = pos => TurkishNumber.Format(pos, "G4")
-            };
-            plot.Axes.Bottom.TickGenerator = autoBottom;
-
+            // Sayı biçimlendirici (Türkçe ondalık virgülü); alt eksen yukarıda (ApplyBottomTicks)
             var autoLeft = new ScottPlot.TickGenerators.NumericAutomatic
             {
                 LabelFormatter = pos => TurkishNumber.Format(pos, "G4")

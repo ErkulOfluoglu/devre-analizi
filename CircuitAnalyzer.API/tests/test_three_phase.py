@@ -16,6 +16,7 @@ import cmath
 import functools
 import json
 import math
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -106,6 +107,75 @@ def test_internal_names_hidden_single_phase_wattmeter():
     d = _ok("V1 1 0 AC_PHASOR(100, 0)\nW1 1 2 1 0 WATTMETER\nR1 2 0 10\n" + GND, analysis_type="NODAL")
     assert set(d["results"]["element_currents"]) == {"V1", "R1"}
     assert d["wattmeters"][0]["p"] == pytest.approx(500.0, rel=1e-4)   # 100 V tepe: P = 100² / (2·10)
+    # Wattmetrenin 0 V'luk ölçüm kaynağı (V_W1) güç tablosunda görünmez
+    assert set(d["results"]["power"]["elements"]) == {"V1", "R1"}
+
+
+# ── Sonuçlar sekmesi: iç adlar yerine öğrencinin çizdiği elemanlar ve faz adları (ekran düzeltmesi) ──
+
+INTERNAL = re.compile(r"\b(?:[VRLCZ]_(?:U1|Y1|W1)\w*|U1_n\w*|Y1_\w+_m)\b")
+LINE_Z = ("U1 1 2 3 0 3PH_SOURCE Y LINE 380 50 0 RST RMS\nR1 1 4 1\nR2 2 5 1\nR3 3 6 1\n"
+          "Y1 4 5 6 7 3PH_LOAD Y Z(8,6) Z(8,6) Z(8,6)\n" + GND)
+
+
+def test_line_impedance_results_show_drawn_elements_only():
+    # Hat empedanslı 3 iletkenli Y–Y: her faz Z_top = 1 + 8 + j6 = 9 + j6, I = U_f/|Z_top|
+    d = _ok(LINE_Z)
+    assert INTERNAL.findall(json.dumps(d, ensure_ascii=False)) == []
+    pw = d["results"]["power"]["elements"]
+    assert set(pw) == {"U1", "Y1", "R1", "R2", "R3"}
+    i2 = UF ** 2 / (9 ** 2 + 6 ** 2)
+    assert pw["U1"]["role"] == "source" and pw["Y1"]["role"] == "load"
+    assert pw["Y1"]["active_power"] == pytest.approx(3 * i2 * 8, rel=1e-6)
+    assert pw["Y1"]["reactive_power"] == pytest.approx(3 * i2 * 6, rel=1e-6)
+    assert pw["U1"]["active_power"] == pytest.approx(-3 * i2 * 9, rel=1e-6)
+    assert pw["R1"]["active_power"] == pytest.approx(i2 * 1, rel=1e-6)
+    assert d["results"]["reductions"] == []          # "R1 + R_Y1_R" gibi iç adlı indirgeme yok
+
+
+def test_line_impedance_node_labels_and_zero_star_point():
+    nv = _ok(LINE_Z)["results"]["node_voltages"]
+    assert {k: v["label"] for k, v in nv.items()} == {
+        "0": "GND", "1": "R fazı (U1)", "2": "S fazı (U1)", "3": "T fazı (U1)",
+        "4": "R fazı (Y1)", "5": "S fazı (Y1)", "6": "T fazı (Y1)", "7": "N′ (Y1 yıldız noktası)"}
+    # Dengeli yükte yıldız noktası kaynak nötrüyle aynı potansiyelde: "0,02436 pV" değil, tam 0
+    assert nv["7"]["value"] == 0.0
+
+
+def test_three_phase_voltages_in_summary():
+    tp = _tp(_ok(LINE_Z))
+    assert set(tp["phase_voltages"]) == {"R", "S", "T"}
+    assert tp["phase_voltages"]["R"]["magnitude"] == pytest.approx(UF, rel=1e-6)
+    assert set(tp["line_voltages"]) == {"RS", "ST", "TR"}
+    assert tp["line_voltages"]["RS"]["magnitude"] == pytest.approx(UH, rel=1e-6)
+    # Yükün kol gerilimi: I · |Z_yük| = U_f/|9 + j6| · 10
+    assert tp["load_voltages"]["R"]["magnitude"] == pytest.approx(UF / math.sqrt(117) * 10, rel=1e-6)
+    assert tp["load_neutral_voltage"]["magnitude"] == 0.0
+
+
+def test_unbalanced_three_wire_star_shift_matches_millman():
+    z = {"R": 10 + 0j, "S": 20 + 0j, "T": 40 + 0j}
+    tp = _tp(_ok(SRC + load("Y", z["R"], z["S"], z["T"], n="4") + GND))
+    v = {"R": cmath.rect(UF, 0), "S": cmath.rect(UF, math.radians(-120)), "T": cmath.rect(UF, math.radians(120))}
+    vnn = sum(v[k] / z[k] for k in z) / sum(1 / z[k] for k in z)
+    assert _close(_z(tp["load_neutral_voltage"]), vnn)
+    assert _close(_z(tp["load_voltages"]["S"]), v["S"] - vnn)
+
+
+def test_four_wire_and_delta_have_no_star_shift():
+    assert _tp(_ok(SRC + load("Y", 8 + 6j) + GND))["load_neutral_voltage"] is None
+    tp = _tp(_ok(SRC + load("D", 10 + 0j, n="4") + GND))
+    assert tp["load_neutral_voltage"] is None
+    assert set(tp["load_voltages"]) == {"RS", "ST", "TR"}
+
+
+def test_delta_source_virtual_star_is_not_named_by_internal_id():
+    d = _ok("U1 1 2 3 0 3PH_SOURCE D LINE 380 50 0 RST RMS\n" + load("Y", 8 + 6j, n="4") + GND)
+    text = json.dumps(d, ensure_ascii=False)
+    assert "U1_n" not in text
+    assert "U1 kaynağının eşdeğer yıldız noktası" in _text(d)
+    assert d["three_phase"]["phase_voltages"] is None
+    assert set(d["results"]["power"]["elements"]) == {"U1", "Y1"}
 
 
 # ═══════════════════════════════════════════════════════
@@ -443,7 +513,9 @@ def test_response_json_fields():
     tp = _tp(_ok(SRC + load("D", 10 + 0j, n="4") + GND, power_factor_target=0.95))
     assert set(tp) == {"source", "load", "wires", "balanced", "u_line", "u_phase", "line_currents",
                        "neutral_current", "load_phase_currents", "p", "q", "s", "pf", "pf_type",
-                       "aron", "compensation"}
+                       "aron", "compensation",
+                       # ekran düzeltmesi: öğrencinin dilinde gerilimler (eklenen alanlar, eskiler değişmedi)
+                       "phase_voltages", "line_voltages", "load_voltages", "load_neutral_voltage"}
     assert set(tp["line_currents"]) == {"R", "S", "T"}
     assert set(tp["line_currents"]["R"]) >= {"real", "imaginary", "magnitude", "phase_degrees"}
     assert set(tp["aron"]) == {"p_a", "p_b"}

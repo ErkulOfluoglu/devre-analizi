@@ -683,6 +683,15 @@ class ThreePhaseSummary(BaseModel):
     aron: Optional[ThreePhaseAron] = Field(default=None, description="3 iletkenli devrede Aron okumaları, değilse null")
     compensation: Optional[ThreePhaseCompensation] = Field(
         default=None, description="Hedef cos φ verildiyse kompanzasyon, verilmediyse null")
+    phase_voltages: Optional[Dict[str, ComplexNumber]] = Field(
+        default=None, description="Yıldız kaynağın faz gerilimleri V_RN, V_SN, V_TN (anahtarlar R, S, T); üçgen kaynakta null")
+    line_voltages: Optional[Dict[str, ComplexNumber]] = Field(
+        default=None, description="Kaynak uçlarındaki hat gerilimleri V_RS, V_ST, V_TR (anahtarlar RS, ST, TR)")
+    load_voltages: Optional[Dict[str, ComplexNumber]] = Field(
+        default=None, description=("Yükün kol gerilimleri: yıldız yükte V_RN′, V_SN′, V_TN′ (anahtarlar R, S, T), "
+                                   "üçgen yükte V_RS, V_ST, V_TR (anahtarlar RS, ST, TR); tek üç fazlı yük yoksa null"))
+    load_neutral_voltage: Optional[ComplexNumber] = Field(
+        default=None, description="Yıldız yükün yıldız noktası ile kaynak nötrü arası V_N′N (Y kaynak + Y yük), değilse null")
 
 
 class WattmeterReading(BaseModel):

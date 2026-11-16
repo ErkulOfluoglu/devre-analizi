@@ -614,6 +614,14 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("pf_type")] public string PfType { get; set; } = "unity";
         [JsonPropertyName("aron")] public ThreePhaseAronDto? Aron { get; set; }
         [JsonPropertyName("compensation")] public ThreePhaseCompensationDto? Compensation { get; set; }
+        /// <summary>Yıldız kaynağın faz gerilimleri V_RN, V_SN, V_TN (R, S, T); üçgen kaynakta null.</summary>
+        [JsonPropertyName("phase_voltages")] public Dictionary<string, ComplexNumberDto>? PhaseVoltages { get; set; }
+        /// <summary>Hat gerilimleri V_RS, V_ST, V_TR (RS, ST, TR).</summary>
+        [JsonPropertyName("line_voltages")] public Dictionary<string, ComplexNumberDto>? LineVoltages { get; set; }
+        /// <summary>Yükün kol gerilimleri: yıldızda R, S, T (→ N′), üçgende RS, ST, TR.</summary>
+        [JsonPropertyName("load_voltages")] public Dictionary<string, ComplexNumberDto>? LoadVoltages { get; set; }
+        /// <summary>3 iletkenli Y–Y'de yük yıldız noktası ile kaynak nötrü arası V_N′N; değilse null.</summary>
+        [JsonPropertyName("load_neutral_voltage")] public ComplexNumberDto? LoadNeutralVoltage { get; set; }
     }
 
     public sealed class WattmeterResultDto

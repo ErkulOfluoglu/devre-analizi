@@ -215,7 +215,9 @@ namespace CircuitAnalyzer.WPF.Views
             hFinal.Color = markerCol;
             hFinal.LineWidth = 1.2f;
 
-            // Dikey kesikli çizgiler: τ, 2τ, 3τ, 4τ, 5τ
+            // Dikey kesikli çizgiler: τ, 2τ, 3τ, 4τ, 5τ. Adları eksen sayılarının üstüne binmesin diye
+            // çizginin kendisine değil, eğrinin üstündeki rozet bandına yazılır.
+            var markers = new List<(double X, string Text)>();
             for (int k = 1; k <= 5; k++)
             {
                 double tMarker = k * tau * _timeScale;
@@ -223,7 +225,7 @@ namespace CircuitAnalyzer.WPF.Views
                 vl.LinePattern = ScottPlot.LinePattern.Dashed;
                 vl.Color = markerCol;
                 vl.LineWidth = 1.0f;
-                vl.Text = k == 1 ? "τ" : $"{k}τ";
+                markers.Add((tMarker, k == 1 ? "τ" : $"{k}τ"));
             }
 
             // Eksen etiketleri
@@ -238,14 +240,13 @@ namespace CircuitAnalyzer.WPF.Views
             double yMin = Math.Min(q.Before, Math.Min(q.Start, q.Final)) * ys;
             double yMax = Math.Max(q.Before, Math.Max(q.Start, q.Final)) * ys;
             double ySpan = Math.Max(1e-6, yMax - yMin);
-            plot.Axes.SetLimits(xMin, xMax, yMin - ySpan * 0.15, yMax + ySpan * 0.15);
+            double dataWidth = PlotMarkers.DataWidthPx(wpfPlot.ActualWidth);
+            double yTop = PlotMarkers.AddBadges(plot, markers, xMin, xMax, yMin, yMax + ySpan * 0.05, dataWidth,
+                12f, textCol, bgCol, gridCol);
+            plot.Axes.SetLimits(xMin, xMax, yMin - ySpan * 0.15, yTop);
 
-            // Eksen sayı formatlayıcıları (Türkçe ondalık virgülü)
-            var autoBottom = new ScottPlot.TickGenerators.NumericAutomatic
-            {
-                LabelFormatter = pos => TurkishNumber.Format(pos, "G4")
-            };
-            plot.Axes.Bottom.TickGenerator = autoBottom;
+            // Alt eksen: okunur sayıda yuvarlak işaret (Türkçe ondalık virgülü)
+            PlotMarkers.ApplyBottomTicks(plot, xMin, xMax, dataWidth);
 
             var autoLeft = new ScottPlot.TickGenerators.NumericAutomatic
             {

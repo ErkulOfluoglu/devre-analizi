@@ -47,7 +47,8 @@ namespace CircuitAnalyzer.WPF.Views
             else if (data.Compensation.Applied)
             {
                 TxtCompensation.Visibility = Visibility.Visible;
-                TxtCompensation.Text = $"Q_C = {EngFormat.Format(data.Compensation.Qc ?? 0, "VAR")}, C = {EngFormat.Format(data.Compensation.C ?? 0, "F")}, akım {EngFormat.Format(data.Compensation.IBefore ?? 0, "A")} → {EngFormat.Format(data.Compensation.IAfter ?? 0, "A")}";
+                TxtCompensation.Text = $"Q_C = {EngFormat.Format(data.Compensation.Qc ?? 0, "VAR")}, C = {EngFormat.Format(data.Compensation.C ?? 0, "F")}, akım {EngFormat.Format(data.Compensation.IBefore ?? 0, "A")} → {EngFormat.Format(data.Compensation.IAfter ?? 0, "A")}"
+                    + "\n" + PowerTriangleLayout.CompensationCaption(data.P, data.Compensation.TargetPf);
                 SubscriptText.Apply(TxtCompensation);
             }
             else
@@ -104,7 +105,8 @@ namespace CircuitAnalyzer.WPF.Views
                 string qcStr = EngFormat.Format(data.Compensation.Qc ?? 0, "VAR");
                 string cyStr = EngFormat.Format(data.Compensation.CY ?? 0, "F");
                 string cDeltaStr = EngFormat.Format(data.Compensation.CDelta ?? 0, "F");
-                TxtCompensation.Text = $"Q_C = {qcStr}, C_Y = {cyStr}, C_Δ = {cDeltaStr}";
+                TxtCompensation.Text = $"Q_C = {qcStr}, C_Y = {cyStr}, C_Δ = {cDeltaStr}"
+                    + "\n" + PowerTriangleLayout.CompensationCaption(data.P, data.Compensation.TargetPf);
                 SubscriptText.Apply(TxtCompensation);
             }
             else
@@ -132,81 +134,16 @@ namespace CircuitAnalyzer.WPF.Views
             double w = TriangleCanvas.ActualWidth > 0 ? TriangleCanvas.ActualWidth : 340;
             double h = TriangleCanvas.ActualHeight > 0 ? TriangleCanvas.ActualHeight : 180;
 
-            const double padLeft = 35;
-            const double padRight = 45;
-            const double padTop = 25;
-            const double padBottom = 30;
-
-            double availW = Math.Max(20, w - padLeft - padRight);
-            double availH = Math.Max(20, h - padTop - padBottom);
-
-            double pVal = Math.Abs(_data.P);
-            double qVal = Math.Abs(_data.Q);
-
+            // Geometri ve yazı yerleri saf hesapta (PowerTriangleLayout): yazılar çakışmaz, tuvalde kalır
             bool hasComp = _data.Compensation != null && _data.Compensation.Applied;
-            double qPrimeVal = 0;
-            if (hasComp)
-            {
-                double targetPf = Math.Clamp(_data.Compensation!.TargetPf, 1e-6, 1.0);
-                double phiTarget = Math.Acos(targetPf);
-                qPrimeVal = Math.Max(0.0, pVal * Math.Tan(phiTarget));
-            }
-
-            double maxQ = Math.Max(qVal, hasComp ? qPrimeVal : 0.0);
-
-            double scale;
-            if (pVal < 1e-12 && maxQ < 1e-12)
-            {
-                scale = 1.0;
-            }
-            else if (pVal < 1e-12)
-            {
-                scale = availH / maxQ;
-            }
-            else if (maxQ < 1e-12)
-            {
-                scale = availW / pVal;
-            }
-            else
-            {
-                scale = Math.Min(availW / pVal, availH / maxQ);
-            }
-
-            double wP = pVal * scale;
-            double hQ = qVal * scale;
-            double hQPrime = hasComp ? qPrimeVal * scale : 0.0;
-
-            bool isLeading = string.Equals(_data.PfType, "leading", StringComparison.OrdinalIgnoreCase) ||
-                             (_data.Q < -1e-9 && !string.Equals(_data.PfType, "lagging", StringComparison.OrdinalIgnoreCase));
-            bool isLagging = !isLeading && (string.Equals(_data.PfType, "lagging", StringComparison.OrdinalIgnoreCase) ||
-                             _data.Q > 1e-9 || string.IsNullOrEmpty(_data.PfType));
-            bool isUnity = Math.Abs(qVal) < 1e-9 || string.Equals(_data.PfType, "unity", StringComparison.OrdinalIgnoreCase);
-
-            Point p0, p1, p2, p2Comp;
-            if (isUnity)
-            {
-                double baseY = h / 2.0;
-                p0 = new Point(padLeft, baseY);
-                p1 = new Point(padLeft + wP, baseY);
-                p2 = p1;
-                p2Comp = p1;
-            }
-            else if (isLagging)
-            {
-                double baseY = h - padBottom;
-                p0 = new Point(padLeft, baseY);
-                p1 = new Point(padLeft + wP, baseY);
-                p2 = new Point(padLeft + wP, baseY - hQ);
-                p2Comp = new Point(padLeft + wP, baseY - hQPrime);
-            }
-            else // leading
-            {
-                double baseY = padTop;
-                p0 = new Point(padLeft, baseY);
-                p1 = new Point(padLeft + wP, baseY);
-                p2 = new Point(padLeft + wP, baseY + hQ);
-                p2Comp = new Point(padLeft + wP, baseY + hQPrime);
-            }
+            var layout = PowerTriangleLayout.Layout(w, h, _data.P, _data.Q, _data.PfType,
+                hasComp ? _data.Compensation!.TargetPf : null);
+            hasComp = layout.HasComp;
+            double wP = layout.WidthP;
+            double hQ = layout.HeightQ;
+            double hQPrime = layout.HeightQComp;
+            bool isLagging = layout.IsLagging;
+            Point p0 = layout.P0, p1 = layout.P1, p2 = layout.P2, p2Comp = layout.P2Comp;
 
             // 1. Ana Üçgen Alanı (hafif dolgu)
             if (wP > 2 && hQ > 2)
@@ -320,45 +257,32 @@ namespace CircuitAnalyzer.WPF.Views
                 };
                 arcPath.SetResourceReference(Shape.StrokeProperty, "Brush.Text.Secondary");
                 TriangleCanvas.Children.Add(arcPath);
-
-                var lblPhi = CreateLabel("φ");
-                Canvas.SetLeft(lblPhi, p0.X + rArc + 4);
-                Canvas.SetTop(lblPhi, isLagging ? p0.Y - 14 : p0.Y + 2);
-                TriangleCanvas.Children.Add(lblPhi);
             }
 
-            // 6. Kenar Etiketleri (P, Q, S)
-            var lblP = CreateLabel("P");
-            Canvas.SetLeft(lblP, p0.X + Math.Max(0, wP / 2.0 - 6));
-            Canvas.SetTop(lblP, isLagging ? p0.Y + 4 : p0.Y - 18);
-            TriangleCanvas.Children.Add(lblP);
-
-            if (hQ > 5 || maxQ > 5)
+            // 6. Kenar yazıları: değerleriyle P, Q, S, φ; kompanzasyonda Q_C, Q′, S′, φ₂ (yerleri layout'tan)
+            foreach (var lbl in layout.Labels)
             {
-                var lblQ = CreateLabel("Q");
-                Canvas.SetLeft(lblQ, p1.X + 6);
-                Canvas.SetTop(lblQ, isLagging ? (p1.Y - hQ / 2.0 - 8) : (p1.Y + hQ / 2.0 - 8));
-                TriangleCanvas.Children.Add(lblQ);
-            }
-
-            if (wP > 10 || hQ > 10)
-            {
-                var lblS = CreateLabel("S");
-                Canvas.SetLeft(lblS, Math.Max(0, p0.X + wP / 2.0 - 16));
-                Canvas.SetTop(lblS, isLagging ? (p0.Y - hQ / 2.0 - 12) : (p0.Y + hQ / 2.0 + 2));
-                TriangleCanvas.Children.Add(lblS);
+                var tb = CreateLabel(lbl.Text, lbl.IsCompensation);
+                Canvas.SetLeft(tb, lbl.Box.X);
+                Canvas.SetTop(tb, lbl.Box.Y);
+                TriangleCanvas.Children.Add(tb);
             }
         }
 
-        private static TextBlock CreateLabel(string text)
+        /// <summary>
+        /// Kenar yazısı. Renkler temadan (açık/koyu): asıl üçgen birincil yazı rengi, kompanzasyon
+        /// yazıları ikincil yazı rengi; mavi kullanılmaz (DESIGN.md: mavi yalnız eylem/seçim/akım).
+        /// </summary>
+        private static TextBlock CreateLabel(string text, bool compensation = false)
         {
             var tb = new TextBlock
             {
                 Text = text,
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold
+                FontSize = compensation ? PowerTriangleLayout.CompFontSize : PowerTriangleLayout.FontSize,
+                FontWeight = compensation ? FontWeights.Normal : FontWeights.SemiBold
             };
-            tb.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+            tb.SetResourceReference(TextBlock.ForegroundProperty, compensation ? "Brush.Text.Secondary" : "Brush.Text.Primary");
+            SubscriptText.Apply(tb);
             return tb;
         }
     }

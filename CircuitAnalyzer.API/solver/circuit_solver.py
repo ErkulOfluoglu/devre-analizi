@@ -572,10 +572,12 @@ def _solve_three_phase(
         an = analyze_three_phase(parsed, exp, results, freq, power_factor_target, verify)
     except Exception as e:      # beklenmeyen hata: yanlış sonuç yerine dürüst yedek
         errors.append(f"ℹ Üç faz büyüklükleri hesaplanamadı: {type(e).__name__}: {e}")
-        return results, steps, errors
+        _hide_expansion_ids(results, parsed, exp)
+        return results, [], errors
     if an is None:
         errors.append("ℹ Üç fazlı kaynağın hat akımları okunamadı; üç faz özeti verilemedi.")
-        return results, steps, errors
+        _hide_expansion_ids(results, parsed, exp)
+        return results, [], errors
     results.three_phase = _three_phase_summary(an)
     from explainer.three_phase_narrative import build_three_phase_sections
     try:
@@ -594,7 +596,19 @@ def _solve_three_phase(
 
 
 def _hide_expansion_ids(results, parsed: ParsedCircuit, exp) -> None:
-    """Açılımın iç elemanlarını ve düğümlerini sonuçlardan çıkarır: öğrencinin devresinde yoklar."""
+    """
+    Açılımın iç elemanlarını ve düğümlerini sonuçlardan çıkarır: öğrencinin devresinde yoklar.
+
+    • Eleman akımları ve düğüm gerilimleri: iç kimlikler/düğümler (V_U1_R, Y1_R_m, U1_n) silinir.
+    • Güç tablosu: iç elemanların güçleri çizilen elemanda (U1, Y1) toplanır; wattmetrenin 0 V'luk
+      ölçüm kaynağı (güç 0) tablodan çıkar.
+    • Seri/paralel indirgemeler: iç eleman ya da düğüm geçen adımlar gösterilmez (öğrencinin
+      çizdiği devrede böyle bir bağlantı yok).
+    • Üç fazlı elemanların uçlarındaki düğümlere faz adı verilir (label: "R fazı (U1)"), sayısal
+      gürültü (dengeli yükte yıldız noktası ≈ 2·10⁻¹⁴ V) sıfır gösterilir.
+    """
+    from solver.three_phase import node_display_labels, snap_zero
+
     real_ids = {e.id for e in parsed.elements}
     hidden_ids = {e.id for e in exp.flat.elements} - real_ids
     results.element_currents = {k: v for k, v in results.element_currents.items() if k not in hidden_ids}
@@ -602,6 +616,55 @@ def _hide_expansion_ids(results, parsed: ParsedCircuit, exp) -> None:
     real_nodes = {n for e in parsed.elements for n in element_nodes(e)}
     hidden_nodes = {n for e in exp.flat.elements for n in element_nodes(e)} - real_nodes - {"0"}
     results.node_voltages = {k: v for k, v in results.node_voltages.items() if k not in hidden_nodes}
+
+    if exp.sources or exp.loads:
+        def mag(nv) -> float:
+            v = nv.value
+            return abs(v) if isinstance(v, (int, float)) else float(v.magnitude)
+
+        ref = max((mag(nv) for nv in results.node_voltages.values()), default=0.0)
+        labels = node_display_labels(parsed, exp)
+        for k, nv in results.node_voltages.items():
+            if k != "0" and ref > 0 and snap_zero(mag(nv), ref) == 0:
+                nv.value = 0.0
+            if k in labels:
+                nv.label = labels[k]
+
+    if results.power is not None:
+        results.power.elements = _group_powers_by_owner(results.power.elements, exp.owner, exp.meter_ids)
+
+    hidden_all = hidden_ids | hidden_nodes
+    results.reductions = [r for r in results.reductions
+                          if not (set(r.elements) | set(r.original_elements) | set(r.nodes)) & hidden_all]
+
+
+def _group_powers_by_owner(elements: Dict[str, ElementPower], owner: Dict[str, str],
+                           meter_ids: Dict[str, str]) -> Dict[str, ElementPower]:
+    """İç elemanların (V_U1_R, R_Y1_R, L_Y1_R …) güçlerini çizilen elemanda (U1, Y1) toplar."""
+    meter_internal = set(meter_ids.values())
+    grouped: Dict[str, Tuple[str, complex]] = {}
+    out: Dict[str, ElementPower] = {}
+    for eid, ep in elements.items():
+        if eid in meter_internal:
+            continue                                    # ölçü aleti: güç çekmez, tabloda yer almaz
+        if eid not in owner:
+            out[eid] = ep
+            continue
+        oid = owner[eid]
+        s = complex(ep.complex_power.real, ep.complex_power.imaginary)
+        role, acc = grouped.get(oid, (ep.role, 0j))
+        grouped[oid] = (role, acc + s)
+        out.setdefault(oid, ep)                         # sıra korunur; değer aşağıda yazılır
+    for oid, (role, s) in grouped.items():
+        tiny = 1e-12 * abs(s)
+        s = complex(0.0 if abs(s.real) < tiny else s.real, 0.0 if abs(s.imag) < tiny else s.imag)
+        p, q, s_mag = s.real, s.imag, abs(s)
+        pf, pf_type = _power_factor(p, q, s_mag, -q if role == "source" else q)
+        out[oid] = ElementPower(
+            element_id=oid, role=role, complex_power=make_complex_number(s),
+            active_power=sig_round(p), reactive_power=sig_round(q), apparent_power=sig_round(s_mag),
+            power_factor=pf, power_factor_type=pf_type)
+    return out
 
 
 def _add_wattmeter_section(results, exp, readings, is_rms: bool, is_dc: bool) -> None:
@@ -632,7 +695,15 @@ def _three_phase_summary(an) -> ThreePhaseSummary:
         pf_type=an.pf_type,
         aron=(ThreePhaseAron(p_a=sig_round(an.aron[0]), p_b=sig_round(an.aron[1]))
               if an.aron is not None else None),
-        compensation=comp)
+        compensation=comp,
+        phase_voltages=({k: make_complex_number(v) for k, v in an.v_ph.items()}
+                        if an.conn_s == "Y" else None),
+        line_voltages={k: make_complex_number(v) for k, v in an.v_line.items()},
+        load_voltages=({k: make_complex_number(v) for k, v in an.v_load.items()}
+                       if an.v_load else None),
+        # 4 iletkenli devrede N′ ile N aynı düğümdür (V_N′N = 0 kendiliğinden); yalnız 3 iletkende anlamlı
+        load_neutral_voltage=(make_complex_number(an.v_star_shift)
+                              if an.v_star_shift is not None and an.wires == 3 else None))
 
 
 def _solve_transient(
