@@ -33,6 +33,7 @@ namespace CircuitAnalyzer.WPF
             {
                 ("Ctrl+Z", "Geri al"),
                 ("Ctrl+Y", "Yinele"),
+                ("Ctrl+Shift+Z", "Yinele"),
                 ("Ctrl+C", "Kopyala"),
                 ("Ctrl+X", "Kes"),
                 ("Ctrl+V", "Yapıştır"),

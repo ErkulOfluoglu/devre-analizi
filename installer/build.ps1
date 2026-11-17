@@ -1,7 +1,7 @@
 ﻿# ════════════════════════════════════════════════════════════════
 #  Devre Analizi — kurulum paketini baştan üretir.
 #
-#    powershell -ExecutionPolicy Bypass -File installer\build.ps1 [-Version 1.3.0]
+#    powershell -ExecutionPolicy Bypass -File installer\build.ps1 [-Version 2.1.0]
 #  -Version verilmezse sürüm CircuitAnalyzer.WPF.csproj içindeki <Version> değerinden okunur.
 #
 #  Gerekenler (yalnızca paketi HAZIRLAYAN bilgisayarda; kullanıcıda değil):

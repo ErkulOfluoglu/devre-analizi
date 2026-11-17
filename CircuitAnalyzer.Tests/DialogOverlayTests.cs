@@ -263,8 +263,8 @@ public class DialogOverlayTests
             var actualGroups = MainWindow.ShortcutGroups.Select(g => g.Group).ToArray();
             Assert.Equal(expectedGroups, actualGroups);
 
-            // 2. F5, Ctrl+S, Ctrl+Z, Ctrl+Y, Ctrl+P, Delete öğelerini içermeli
-            string[] requiredKeys = { "F5", "Ctrl+S", "Ctrl+Z", "Ctrl+Y", "Ctrl+P", "Delete" };
+            // 2. F5, Ctrl+S, Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Ctrl+P, Delete öğelerini içermeli
+            string[] requiredKeys = { "F5", "Ctrl+S", "Ctrl+Z", "Ctrl+Y", "Ctrl+Shift+Z", "Ctrl+P", "Delete" };
             var allShortcutKeys = MainWindow.ShortcutGroups.SelectMany(g => g.Items).Select(i => i.Key).ToList();
             foreach (string reqKey in requiredKeys)
             {
@@ -320,6 +320,14 @@ public class DialogOverlayTests
             {
                 // Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+P, Ctrl+Z, Ctrl+Y
                 expectedKeyEnum = key[5].ToString().ToUpperInvariant();
+            }
+            else if (key.StartsWith("Ctrl+Shift+", StringComparison.Ordinal) && key.Length == 12 && char.IsLetter(key[11]))
+            {
+                // Ctrl+Shift+S, Ctrl+Shift+Z: tuş ve Ctrl+Shift birleşimi işlenmeli
+                expectedKeyEnum = key[11].ToString().ToUpperInvariant();
+                Assert.True(
+                    previewKeyDownBody.Contains($"e.Key == Key.{expectedKeyEnum} && mods == (ModifierKeys.Control | ModifierKeys.Shift)"),
+                    $"Shortcut '{key}' is listed in ShortcutGroups but Ctrl+Shift+{expectedKeyEnum} is not handled in Window_PreviewKeyDown");
             }
             else if (key == "F5")
             {
