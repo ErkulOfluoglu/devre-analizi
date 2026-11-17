@@ -390,20 +390,12 @@ namespace CircuitAnalyzer.WPF
                 : (_problemCode.HasValue ? $"Soru #{_problemCode.Value}" : "Devre Analizi");
 
             var settings = AnalysisPanel.GetAnalysisSettings();
-            string methodDisplay = settings.Type switch
-            {
-                AnalysisTypes.Nodal => "Düğüm gerilimleri yöntemi",
-                AnalysisTypes.Mesh => "Çevre akımları yöntemi",
-                AnalysisTypes.Thevenin => "Thevenin eşdeğeri",
-                AnalysisTypes.Norton => "Norton eşdeğeri",
-                AnalysisTypes.Superposition => "Süperpozisyon yöntemi",
-                AnalysisTypes.Millman => "Millman teoremi",
-                AnalysisTypes.SourceTransform => "Kaynak dönüşümü",
-                _ => settings.Type ?? "Düğüm gerilimleri yöntemi"
-            };
+            // Çözülen yöntem (seçici o andan sonra değişmiş olabilir); adı yöntem seçicisindeki gibi
+            string? solvedType = AnalysisPanel.CurrentRequest?.AnalysisType ?? settings.Type;
+            string methodDisplay = AnalysisPanel.MethodDisplayName(solvedType);
 
             string? terminals = null;
-            if (settings.Type != null && AnalysisPanel.UsesTerminals(settings.Type))
+            if (solvedType != null && AnalysisPanel.UsesTerminals(solvedType))
             {
                 terminals = $"{settings.TerminalPositive ?? "?"} - {settings.TerminalNegative ?? "?"}";
             }

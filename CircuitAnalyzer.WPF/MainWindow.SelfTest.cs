@@ -335,20 +335,11 @@ namespace CircuitAnalyzer.WPF
                         : (!string.IsNullOrEmpty(_currentFilePath) ? Path.GetFileName(_currentFilePath) : "Örnek");
 
                     var settings = AnalysisPanel.GetAnalysisSettings();
-                    string methodDisplay = settings.Type switch
-                    {
-                        AnalysisTypes.Nodal => "Düğüm gerilimleri yöntemi",
-                        AnalysisTypes.Mesh => "Çevre akımları yöntemi",
-                        AnalysisTypes.Thevenin => "Thevenin eşdeğeri",
-                        AnalysisTypes.Norton => "Norton eşdeğeri",
-                        AnalysisTypes.Superposition => "Süperpozisyon yöntemi",
-                        AnalysisTypes.Millman => "Millman teoremi",
-                        AnalysisTypes.SourceTransform => "Kaynak dönüşümü",
-                        _ => settings.Type ?? "Düğüm gerilimleri yöntemi"
-                    };
+                    string? solvedType = AnalysisPanel.CurrentRequest?.AnalysisType ?? settings.Type;
+                    string methodDisplay = AnalysisPanel.MethodDisplayName(solvedType);
 
                     string? terminals = null;
-                    if (settings.Type != null && AnalysisPanel.UsesTerminals(settings.Type))
+                    if (solvedType != null && AnalysisPanel.UsesTerminals(solvedType))
                     {
                         terminals = $"{settings.TerminalPositive ?? "?"} - {settings.TerminalNegative ?? "?"}";
                     }

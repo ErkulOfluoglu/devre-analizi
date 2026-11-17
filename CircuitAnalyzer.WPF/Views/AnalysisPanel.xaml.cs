@@ -460,6 +460,37 @@ public partial class AnalysisPanel : UserControl
         return AnalysisTypes.Nodal;
     }
 
+    /// <summary>
+    /// Yöntem listesindeki yazılardan, verilen analiz türüne karşılık gelen ilkini bulur
+    /// (eşleme <see cref="AnalysisTypeFromText"/> ile; ayrı bir ad listesi tutulmaz). Yoksa null.
+    /// </summary>
+    internal static string? MethodLabelFor(IEnumerable<string> selectorLabels, string? analysisType)
+    {
+        if (string.IsNullOrWhiteSpace(analysisType))
+            return null;
+        return selectorLabels.FirstOrDefault(label =>
+            string.Equals(AnalysisTypeFromText(label), analysisType, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Yöntem seçicisinin gösterdiği yazılar (sırasıyla).</summary>
+    public IReadOnlyList<string> MethodLabels => CmbAnalysisType.Items
+        .Cast<object>()
+        .Select(i => (i as ComboBoxItem)?.Content as string ?? i as string ?? "")
+        .Where(s => s.Length > 0)
+        .ToList();
+
+    /// <summary>
+    /// Analiz türünün öğrenciye gösterilen adı, yöntem seçicisinde yazdığı gibi
+    /// ("THREE_PHASE" → "Üç Faz"). Bilinmeyen türde listedeki ilk yöntemin adı (iç ad asla).
+    /// </summary>
+    public string MethodDisplayName(string? analysisType)
+    {
+        var labels = MethodLabels;
+        return MethodLabelFor(labels, analysisType)
+            ?? MethodLabelFor(labels, AnalysisTypes.Nodal)
+            ?? "";
+    }
+
     /// <summary>Bu yöntem terminal çifti (+ ve −) ister mi?</summary>
     internal static bool UsesTerminals(string analysisType) =>
         analysisType == AnalysisTypes.Thevenin

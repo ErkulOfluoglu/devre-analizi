@@ -147,21 +147,41 @@ namespace CircuitAnalyzer.WPF.Views
             bool isTop,
             out ScottPlot.Plottables.Crosshair crosshair)
         {
-            var plot = wpfPlot.Plot;
+            crosshair = BuildPlot(wpfPlot.Plot, _data!, q, isTop,
+                PlotMarkers.DataWidthPx(wpfPlot.ActualWidth), GetThemeColor);
+            wpfPlot.Refresh();
+        }
+
+        /// <summary>
+        /// Bir büyüklüğün zaman grafiğini verilen <paramref name="plot"/>'a kurar. Ekrandaki kontrol
+        /// uygulama temasının renkleriyle, yazdırma ise açık temanın renkleriyle (ekran dışı) çağırır.
+        /// Dönüş: fare ile gezinme için (gizli) artı imleci.
+        /// </summary>
+        internal static ScottPlot.Plottables.Crosshair BuildPlot(
+            Plot plot,
+            TransientAnalysisDto data,
+            TransientQuantityDto q,
+            bool isTop,
+            double dataWidth,
+            Func<string, ScottPlot.Color> color)
+        {
             plot.Clear();
 
-            double tau = _data!.Tau;
+            double tau = data.Tau;
             if (tau <= 0) tau = 1e-3;
+            var (timeScale, timeUnit) = TimeUnitFor(5.0 * tau);
+            double tMinSeconds = -0.5 * tau;
+            double tMaxSeconds = 5.0 * tau;
 
-            // Renkler (Temadan)
-            var bgCol = GetThemeColor("Brush.Bg.Surface");
-            var textCol = GetThemeColor("Brush.Text.Primary");
-            var subTextCol = GetThemeColor("Brush.Text.Secondary");
-            var gridCol = GetThemeColor("Brush.Border.Default");
-            var markerCol = GetThemeColor("Brush.Text.Tertiary");
+            // Renkler (temadan)
+            var bgCol = color("Brush.Bg.Surface");
+            var textCol = color("Brush.Text.Primary");
+            var subTextCol = color("Brush.Text.Secondary");
+            var gridCol = color("Brush.Border.Default");
+            var markerCol = color("Brush.Text.Tertiary");
             var curveCol = isTop
-                ? GetThemeColor("Brush.Accent")
-                : GetThemeColor("Brush.Overlay.Current");
+                ? color("Brush.Accent")
+                : color("Brush.Overlay.Current");
 
             plot.FigureBackground.Color = bgCol;
             plot.DataBackground.Color = bgCol;
@@ -176,11 +196,11 @@ namespace CircuitAnalyzer.WPF.Views
 
             // t < 0 kısmı
             int preSteps = 30;
-            double dtPre = (0 - _tMinSeconds) / preSteps;
+            double dtPre = (0 - tMinSeconds) / preSteps;
             for (int i = 0; i < preSteps; i++)
             {
-                double t = _tMinSeconds + i * dtPre;
-                xList.Add(t * _timeScale);
+                double t = tMinSeconds + i * dtPre;
+                xList.Add(t * timeScale);
                 yList.Add(q.Before * ys);
             }
 
@@ -195,12 +215,12 @@ namespace CircuitAnalyzer.WPF.Views
 
             // t > 0 kısmı (0'dan 5τ'ya)
             int postSteps = 170;
-            double dtPost = _tMaxSeconds / postSteps;
+            double dtPost = tMaxSeconds / postSteps;
             for (int i = 1; i <= postSteps; i++)
             {
                 double t = i * dtPost;
                 double val = TransientCurveCalculator.Evaluate(q.Before, q.Start, q.Final, tau, t);
-                xList.Add(t * _timeScale);
+                xList.Add(t * timeScale);
                 yList.Add(val * ys);
             }
 
@@ -220,7 +240,7 @@ namespace CircuitAnalyzer.WPF.Views
             var markers = new List<(double X, string Text)>();
             for (int k = 1; k <= 5; k++)
             {
-                double tMarker = k * tau * _timeScale;
+                double tMarker = k * tau * timeScale;
                 var vl = plot.Add.VerticalLine(tMarker);
                 vl.LinePattern = ScottPlot.LinePattern.Dashed;
                 vl.Color = markerCol;
@@ -230,17 +250,16 @@ namespace CircuitAnalyzer.WPF.Views
 
             // Eksen etiketleri
             plot.Title($"{SubscriptText.Plain(q.Label)} ({yUnit})");
-            plot.XLabel($"Zaman ({_timeUnit})");
+            plot.XLabel($"Zaman ({timeUnit})");
             plot.YLabel(yUnit);
 
             // Eksen sınırları
-            double xMin = _tMinSeconds * _timeScale;
-            double xMax = _tMaxSeconds * _timeScale;
+            double xMin = tMinSeconds * timeScale;
+            double xMax = tMaxSeconds * timeScale;
 
             double yMin = Math.Min(q.Before, Math.Min(q.Start, q.Final)) * ys;
             double yMax = Math.Max(q.Before, Math.Max(q.Start, q.Final)) * ys;
             double ySpan = Math.Max(1e-6, yMax - yMin);
-            double dataWidth = PlotMarkers.DataWidthPx(wpfPlot.ActualWidth);
             double yTop = PlotMarkers.AddBadges(plot, markers, xMin, xMax, yMin, yMax + ySpan * 0.05, dataWidth,
                 12f, textCol, bgCol, gridCol);
             plot.Axes.SetLimits(xMin, xMax, yMin - ySpan * 0.15, yTop);
@@ -255,12 +274,11 @@ namespace CircuitAnalyzer.WPF.Views
             plot.Axes.Left.TickGenerator = autoLeft;
 
             // Crosshair (fare ile gezinme)
-            crosshair = plot.Add.Crosshair(0, 0);
+            var crosshair = plot.Add.Crosshair(0, 0);
             crosshair.IsVisible = false;
             crosshair.LineColor = curveCol;
             crosshair.LinePattern = ScottPlot.LinePattern.Dotted;
-
-            wpfPlot.Refresh();
+            return crosshair;
         }
 
         private static ScottPlot.Color GetThemeColor(string resourceKey)

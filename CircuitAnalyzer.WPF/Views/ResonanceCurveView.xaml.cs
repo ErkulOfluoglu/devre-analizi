@@ -42,33 +42,7 @@ namespace CircuitAnalyzer.WPF.Views
             if (data == null) return;
 
             // Frekans birimi seçimi: f0 >= 1000 veya eğri tepe noktası >= 1000 ise kHz
-            bool hasCurve = data.Curve != null
-                && data.Curve.F != null
-                && data.Curve.Y != null
-                && data.Curve.F.Count > 0
-                && data.Curve.F.Count == data.Curve.Y.Count;
-
-            double maxF = data.F0;
-            if (hasCurve && data.Curve?.F is { Count: > 0 } fList)
-            {
-                maxF = Math.Max(maxF, fList.Max());
-            }
-
-            if (maxF >= 1e6)
-            {
-                _freqUnit = "MHz";
-                _freqScale = 1e-6;
-            }
-            else if (maxF >= 1000)
-            {
-                _freqUnit = "kHz";
-                _freqScale = 1e-3;
-            }
-            else
-            {
-                _freqUnit = "Hz";
-                _freqScale = 1.0;
-            }
+            (_freqScale, _freqUnit) = FreqUnitFor(data);
 
             TxtSummaryInfo.Text = $"f₀ = {EngFormat.Format(data.F0, "Hz")} | Q = {TurkishNumber.Format(data.Q, "G4")} | BW = {EngFormat.Format(data.Bw, "Hz")}";
             SubscriptText.Apply(TxtSummaryInfo);
@@ -80,34 +54,57 @@ namespace CircuitAnalyzer.WPF.Views
         {
             if (_data == null) return;
 
-            var plot = PlotResonance.Plot;
+            _crosshair = BuildPlot(PlotResonance.Plot, _data, _freqScale, _freqUnit,
+                PlotMarkers.DataWidthPx(PlotResonance.ActualWidth), GetThemeColor);
+            PlotResonance.Refresh();
+        }
+
+        /// <summary>Eğrinin frekans birimi: en büyük frekans 1 MHz ve üstüyse MHz, 1 kHz ve üstüyse kHz.</summary>
+        internal static (double Scale, string Unit) FreqUnitFor(ResonanceDto data)
+        {
+            double maxF = data.F0;
+            if (data.Curve?.F is { Count: > 0 } fList && data.Curve.Y != null && data.Curve.Y.Count == fList.Count)
+                maxF = Math.Max(maxF, fList.Max());
+            if (maxF >= 1e6) return (1e-6, "MHz");
+            if (maxF >= 1000) return (1e-3, "kHz");
+            return (1.0, "Hz");
+        }
+
+        /// <summary>
+        /// Rezonans eğrisini verilen <paramref name="plot"/>'a kurar. Ekrandaki kontrol uygulama
+        /// temasının, yazdırma açık temanın renkleriyle (ekran dışı) çağırır.
+        /// </summary>
+        internal static ScottPlot.Plottables.Crosshair BuildPlot(
+            Plot plot, ResonanceDto data, double freqScale, string freqUnit,
+            double dataWidth, Func<string, ScottPlot.Color> color)
+        {
             plot.Clear();
 
-            var bgCol = GetThemeColor("Brush.Bg.Surface");
-            var subTextCol = GetThemeColor("Brush.Text.Secondary");
-            var gridCol = GetThemeColor("Brush.Border.Default");
-            var markerCol = GetThemeColor("Brush.Text.Tertiary");
-            var curveCol = GetThemeColor("Brush.Accent");
+            var bgCol = color("Brush.Bg.Surface");
+            var subTextCol = color("Brush.Text.Secondary");
+            var gridCol = color("Brush.Border.Default");
+            var markerCol = color("Brush.Text.Tertiary");
+            var curveCol = color("Brush.Accent");
 
             plot.FigureBackground.Color = bgCol;
             plot.DataBackground.Color = bgCol;
             plot.Axes.Color(subTextCol);
             plot.Grid.MajorLineColor = gridCol;
 
-            bool isParallel = string.Equals(_data.Kind, "parallel", StringComparison.OrdinalIgnoreCase);
-            bool hasCurve = _data.Curve != null
-                && _data.Curve.F != null
-                && _data.Curve.Y != null
-                && _data.Curve.F.Count > 0
-                && _data.Curve.F.Count == _data.Curve.Y.Count;
+            bool isParallel = string.Equals(data.Kind, "parallel", StringComparison.OrdinalIgnoreCase);
+            bool hasCurve = data.Curve != null
+                && data.Curve.F != null
+                && data.Curve.Y != null
+                && data.Curve.F.Count > 0
+                && data.Curve.F.Count == data.Curve.Y.Count;
 
-            double f1 = _data.F1Exact > 0 ? _data.F1Exact : _data.F1;
-            double f2 = _data.F2Exact > 0 ? _data.F2Exact : _data.F2;
+            double f1 = data.F1Exact > 0 ? data.F1Exact : data.F1;
+            double f2 = data.F2Exact > 0 ? data.F2Exact : data.F2;
 
             // f1-f2 arası hafif gölgeli (BW) - eğrinin altında kalsın diye önce eklenir
             if (f1 > 0 && f2 > f1)
             {
-                var hspan = plot.Add.HorizontalSpan(f1 * _freqScale, f2 * _freqScale);
+                var hspan = plot.Add.HorizontalSpan(f1 * freqScale, f2 * freqScale);
                 hspan.FillColor = new ScottPlot.Color(curveCol.R, curveCol.G, curveCol.B, 30);
                 hspan.LineColor = ScottPlot.Colors.Transparent;
             }
@@ -115,36 +112,35 @@ namespace CircuitAnalyzer.WPF.Views
             // Dikey kesikli çizgiler: f0, f1, f2. Adları eksen sayılarının üstüne binmesin diye eğrinin
             // üstündeki rozet bandına yazılır (yakın çıkarlarsa alt alta satırlara).
             var markers = new List<(double X, string Text)>();
-            if (_data.F0 > 0)
+            if (data.F0 > 0)
             {
-                var vl0 = plot.Add.VerticalLine(_data.F0 * _freqScale);
+                var vl0 = plot.Add.VerticalLine(data.F0 * freqScale);
                 vl0.LinePattern = ScottPlot.LinePattern.Dashed;
                 vl0.Color = markerCol;
                 vl0.LineWidth = 1.2f;
-                markers.Add((_data.F0 * _freqScale, "f₀"));
+                markers.Add((data.F0 * freqScale, "f₀"));
             }
             if (f1 > 0)
             {
-                var vl1 = plot.Add.VerticalLine(f1 * _freqScale);
+                var vl1 = plot.Add.VerticalLine(f1 * freqScale);
                 vl1.LinePattern = ScottPlot.LinePattern.Dashed;
                 vl1.Color = markerCol;
                 vl1.LineWidth = 1.0f;
-                markers.Add((f1 * _freqScale, "f₁"));
+                markers.Add((f1 * freqScale, "f₁"));
             }
             if (f2 > 0)
             {
-                var vl2 = plot.Add.VerticalLine(f2 * _freqScale);
+                var vl2 = plot.Add.VerticalLine(f2 * freqScale);
                 vl2.LinePattern = ScottPlot.LinePattern.Dashed;
                 vl2.Color = markerCol;
                 vl2.LineWidth = 1.0f;
-                markers.Add((f2 * _freqScale, "f₂"));
+                markers.Add((f2 * freqScale, "f₂"));
             }
-            var textCol = GetThemeColor("Brush.Text.Primary");
-            double dataWidth = PlotMarkers.DataWidthPx(PlotResonance.ActualWidth);
+            var textCol = color("Brush.Text.Primary");
 
             // Yatay kesikli çizgi: seride I_max * 0.707 (i0 * 0.707), paralelde Z0 * 0.707 (z0 * 0.707), etiket "0,707"
-            double peak = isParallel ? _data.Z0 : _data.I0;
-            if (peak <= 0 && hasCurve && _data.Curve?.Y is { Count: > 0 } curveYList)
+            double peak = isParallel ? data.Z0 : data.I0;
+            if (peak <= 0 && hasCurve && data.Curve?.Y is { Count: > 0 } curveYList)
             {
                 peak = curveYList.Max();
             }
@@ -160,14 +156,14 @@ namespace CircuitAnalyzer.WPF.Views
             }
 
             // Eğri noktalarını çiz
-            var curve = _data.Curve;
+            var curve = data.Curve;
             if (hasCurve && curve?.F is { } fList && curve.Y is { } yList)
             {
                 double[] xVals = new double[fList.Count];
                 double[] yVals = new double[yList.Count];
                 for (int i = 0; i < xVals.Length; i++)
                 {
-                    xVals[i] = fList[i] * _freqScale;
+                    xVals[i] = fList[i] * freqScale;
                     yVals[i] = yList[i];
                 }
 
@@ -180,13 +176,13 @@ namespace CircuitAnalyzer.WPF.Views
                 double yMin = yVals.Min();
                 double yMax = yVals.Max();
 
-                if (_data.F0 > 0)
+                if (data.F0 > 0)
                 {
-                    xMin = Math.Min(xMin, _data.F0 * _freqScale);
-                    xMax = Math.Max(xMax, _data.F0 * _freqScale);
+                    xMin = Math.Min(xMin, data.F0 * freqScale);
+                    xMax = Math.Max(xMax, data.F0 * freqScale);
                 }
-                if (f1 > 0) xMin = Math.Min(xMin, f1 * _freqScale);
-                if (f2 > 0) xMax = Math.Max(xMax, f2 * _freqScale);
+                if (f1 > 0) xMin = Math.Min(xMin, f1 * freqScale);
+                if (f2 > 0) xMax = Math.Max(xMax, f2 * freqScale);
 
                 double xSpan = Math.Max(1e-6, xMax - xMin);
                 double ySpan = Math.Max(1e-6, yMax - yMin);
@@ -199,8 +195,8 @@ namespace CircuitAnalyzer.WPF.Views
             }
             else
             {
-                double xCenter = _data.F0 > 0 ? _data.F0 * _freqScale : 1000 * _freqScale;
-                double span = _data.Bw > 0 ? _data.Bw * _freqScale * 3 : Math.Max(100 * _freqScale, xCenter * 0.5);
+                double xCenter = data.F0 > 0 ? data.F0 * freqScale : 1000 * freqScale;
+                double span = data.Bw > 0 ? data.Bw * freqScale * 3 : Math.Max(100 * freqScale, xCenter * 0.5);
                 double yData = Math.Max(1.0, peak > 0 ? peak * 1.05 : 1.0);
                 double left = Math.Max(0, xCenter - span), right = xCenter + span;
                 double yTop = PlotMarkers.AddBadges(plot, markers, left, right, 0, yData, dataWidth, 14f, textCol, bgCol, gridCol);
@@ -210,7 +206,7 @@ namespace CircuitAnalyzer.WPF.Views
 
             // Eksen ve başlık
             plot.Title("Rezonans Eğrisi");
-            plot.XLabel($"Frekans ({_freqUnit})");
+            plot.XLabel($"Frekans ({freqUnit})");
             plot.YLabel(isParallel ? "Empedans (Ω)" : "Akım (A)");
 
             // Sayı biçimlendirici (Türkçe ondalık virgülü); alt eksen yukarıda (ApplyBottomTicks)
@@ -221,12 +217,11 @@ namespace CircuitAnalyzer.WPF.Views
             plot.Axes.Left.TickGenerator = autoLeft;
 
             // Crosshair (fare ile gezinme)
-            _crosshair = plot.Add.Crosshair(0, 0);
-            _crosshair.IsVisible = false;
-            _crosshair.LineColor = curveCol;
-            _crosshair.LinePattern = ScottPlot.LinePattern.Dotted;
-
-            PlotResonance.Refresh();
+            var crosshair = plot.Add.Crosshair(0, 0);
+            crosshair.IsVisible = false;
+            crosshair.LineColor = curveCol;
+            crosshair.LinePattern = ScottPlot.LinePattern.Dotted;
+            return crosshair;
         }
 
         private static ScottPlot.Color GetThemeColor(string resourceKey)
