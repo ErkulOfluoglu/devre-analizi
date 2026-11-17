@@ -312,7 +312,7 @@ def test_transient_fallbacks(solve, name, net, mode, reason):
 
 def test_fallback_on_lcapy_mismatch(solve, monkeypatch):
     monkeypatch.setattr(transient_mod, "verify_with_lcapy",
-                        lambda a: "lcapy denetimi: zaman sabiti τ hesaplanan değerle uyuşmadı.")
+                        lambda a: "Program denetimi: zaman sabiti τ hesaplanan değerle uyuşmadı.")
     results, _, errors = solve(RC_CHARGE, "DC", analysis_type="TRANSIENT")
     assert results.transient is None
     assert "uyuşmadı" in results.explanation[0].blocks[0].text

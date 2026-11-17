@@ -76,7 +76,7 @@ DC ve AC (fazör) devrelerin hepsinde çalışır; AC değerleri [etkin ya da te
   </tr>
 </table>
 
-**Ayrıca:** listeden seçip tıklayarak kolay çizim · bağımlı kaynaklar (GKGK, GKAK, AKGK, AKAK) · anahtarlar (t = 0) · ölçüm probu ve wattmetre · hazır örnek devreler · 4 haneli **soru kodları** (öğretmen kodu paylaşır, bütün sınıf aynı soruyu açar) · kaydet/aç (`.devre`; program açıksa dosya açık pencerede açılır) · geri al/yinele · yazdır/PDF (zaman grafiği, rezonans eğrisi ve güç üçgeni de baskıya girer) · ondalık virgül (`4,7k` de `4.7k` de yazılabilir) · fare tekerleğiyle yakınlaştırma · adım adım açılan çözüm zinciri · pencerenin boyutunu ve yerini hatırlama · Windows 11 görünümü, açık ve koyu tema.
+**Ayrıca:** listeden seçip tıklayarak kolay çizim · bağımlı kaynaklar (GKGK, GKAK, AKGK, AKAK) · anahtarlar (t = 0) · ölçüm probu ve wattmetre · hazır örnek devreler · 4 haneli **soru kodları** (öğretmen kodu paylaşır, bütün sınıf aynı soruyu açar) · kaydet/aç (`.devre`; program açıksa dosya açık pencerede açılır) · geri al/yinele · yazdır/PDF (zaman grafiği, rezonans eğrisi ve güç üçgeni de baskıya girer) · ondalık virgül (`4,7k` de `4.7k` de yazılabilir) · fare tekerleğiyle yakınlaştırma · adım adım açılan çözüm zinciri · çözülemeyen devrede sorunlu elemanları adıyla ve "Ne yapabilirsiniz" önerileriyle söyleme (kısa devre kaynak, paralel kaynaklar, GND'ye yolu olmayan bölüm) · pencerenin boyutunu ve yerini hatırlama · Windows 11 görünümü, açık ve koyu tema.
 
 ## Kurulum
 

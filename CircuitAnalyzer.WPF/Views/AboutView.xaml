@@ -198,7 +198,11 @@
             <Hyperlink NavigateUri="https://ai.google.dev/gemma/terms" RequestNavigate="Hyperlink_RequestNavigate">
                 <Run Text="Gemma 4 modeli (Apache 2.0)"/>
             </Hyperlink>
-            <Run Text=". Bunları kullanıcı kendisi kurar; kendi lisans koşulları geçerlidir."/>
+            <Run Text=" · "/>
+            <Hyperlink NavigateUri="https://github.com/ROCm/FastFlowLM" RequestNavigate="Hyperlink_RequestNavigate">
+                <Run Text="FastFlowLM (program: MIT; NPU çekirdekleri: FastFlowLM NPU Binary License)"/>
+            </Hyperlink>
+            <Run Text=" — yalnızca AMD Ryzen AI NPU'su için. Bunları kullanıcı kendisi kurar; kendi lisans koşulları geçerlidir."/>
         </TextBlock>
         <TextBlock Style="{DynamicResource Text.Caption}" TextWrapping="Wrap" LineHeight="18" Margin="0,8,0,0"
                    Text="Tüm bileşenlerin tam listesi ve lisans metinleri, programın kurulu olduğu klasördeki “licenses” klasöründe ve THIRD_PARTY_NOTICES.md dosyasındadır."/>

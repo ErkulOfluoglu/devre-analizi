@@ -299,7 +299,7 @@
                     <TextBlock Grid.Row="3" Grid.Column="2" Text="Önerilmez" Foreground="{DynamicResource Brush.Error}" FontSize="12.5" FontWeight="SemiBold" Margin="0,2,0,0"/>
                 </Grid>
 
-                <TextBlock Text="Ekran kartı gerekmez; yapay zekâ işlemcide çalışır ve bir cevap 15–60 saniye sürebilir. Çalışırken bilgisayar yavaşlayabilir, diğer programları kapatmak iyi olur. Yapay zekâ olmadan da programın her özelliği çalışır."
+                <TextBlock Text="Ekran kartı gerekmez: yapay zekâ her bilgisayarın işlemcisinde çalışır, bir cevap 15–60 saniye sürebilir. Uygun bir ekran kartınız ya da AMD Ryzen AI NPU'nuz varsa (NPU için FastFlowLM ayrıca kurulur) daha hızlı çalışabilir; bunu yapay zekâ bölümündeki “Çalıştığı yer” listesinden seçersiniz. Çalışırken bilgisayar yavaşlayabilir, diğer programları kapatmak iyi olur. Yapay zekâ olmadan da programın her özelliği çalışır."
                            Style="{DynamicResource Text.Caption}"
                            Margin="0,0,0,6"/>
 

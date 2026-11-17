@@ -531,11 +531,11 @@ def verify_with_lcapy(a: TransientAnalysis) -> Optional[str]:
         ):
             span = max(abs(start - final), abs(start), abs(final), _TINY)
             if not _close(at(expr, 0), start, span):
-                return "lcapy denetimi: t = 0⁺ değeri hesaplanan değerle uyuşmadı."
+                return "Program denetimi: t = 0⁺ değeri hesaplanan değerle uyuşmadı."
             if not _close(at(expr, 60 * a.tau), final, span):
-                return "lcapy denetimi: t → ∞ değeri hesaplanan değerle uyuşmadı."
+                return "Program denetimi: t → ∞ değeri hesaplanan değerle uyuşmadı."
             if not _close(at(expr, a.tau), final + (start - final) * e_inv, span):
-                return "lcapy denetimi: zaman sabiti τ hesaplanan değerle uyuşmadı."
+                return "Program denetimi: zaman sabiti τ hesaplanan değerle uyuşmadı."
     except TransientNotApplicable:
         raise
     except Exception as exc:    # lcapy çözemedi → sonucu doğrulanmamış bırakma
@@ -559,5 +559,5 @@ def verify_with_lcapy(a: TransientAnalysis) -> Optional[str]:
         except Exception:
             return None          # t<0 devresi lcapy ile çözülemiyor (yüzen düğüm gibi) → atla
         if not _close(ref, a.x_before, max(abs(ref), abs(a.x_before), _TINY)):
-            return "lcapy denetimi: t = 0⁻ değeri hesaplanan değerle uyuşmadı."
+            return "Program denetimi: t = 0⁻ değeri hesaplanan değerle uyuşmadı."
     return None
