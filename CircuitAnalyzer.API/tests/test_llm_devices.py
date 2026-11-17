@@ -15,6 +15,14 @@ DIVIDER = f"V1 1 0 DC 12\nR1 1 2 1k\nR2 2 0 2k\n{GND}"
 ASK = {"netlist": DIVIDER, "mode": "DC", "analysis_type": "NODAL", "question": "V2 nedir?"}
 
 
+class FakeProc:
+    """Çalışan bir süreç gibi davranan sahte Popen (gerçek süreç açılmaz)."""
+    pid = 4242
+
+    def poll(self):
+        return None
+
+
 def npu_ready(monkeypatch, models=("gemma4-it:e4b",)):
     monkeypatch.setattr(devices, "_probe_npu", lambda: devices.NpuInfo(True, None, "", list(models)))
     monkeypatch.setattr(devices, "_npu_cached", None)
@@ -58,7 +66,7 @@ def test_auto_choice_order(monkeypatch):
     assert devices.auto_choice(ready, devices.GpuInfo("dedicated", "RTX")) == "npu"
     assert devices.auto_choice(none, devices.GpuInfo("dedicated", "RTX")) == "gpu"
     assert devices.auto_choice(none, devices.GpuInfo("integrated", "860M")) == "cpu"
-    monkeypatch.setattr(devices, "_igpu_started", True)
+    monkeypatch.setattr(devices, "_igpu_proc", FakeProc())
     assert devices.auto_choice(none, devices.GpuInfo("integrated", "860M")) == "gpu"
     assert devices.auto_choice(none, devices.GpuInfo("none")) == "cpu"
 

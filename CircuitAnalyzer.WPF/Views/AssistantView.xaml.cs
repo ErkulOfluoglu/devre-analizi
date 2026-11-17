@@ -32,7 +32,7 @@ public partial class AssistantView : UserControl
     public Func<LlmAskRequestDto, CancellationToken, Task<LlmAnswerDto>>? Asker { get; set; }
     public Func<CancellationToken, Task<bool>>? StartOllama { get; set; }
     /// <summary>Ollama'yı tümleşik ekran kartı ayarıyla yeniden başlatır (POST /llm/gpu/enable).</summary>
-    public Func<CancellationToken, Task<bool>>? EnableGpu { get; set; }
+    public Func<CancellationToken, Task<(bool Ok, string Message)>>? EnableGpu { get; set; }
     public Func<string?, CancellationToken, Task<LlmPullStatusDto>>? StartPull { get; set; }
     public Func<CancellationToken, Task<LlmPullStatusDto?>>? GetPull { get; set; }
     public Func<CancellationToken, Task<bool>>? CancelPull { get; set; }
@@ -575,9 +575,12 @@ public partial class AssistantView : UserControl
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            if (!await EnableGpu(cts.Token))
+            var (ok, message) = await EnableGpu(cts.Token);
+            if (!ok)
             {
-                TxtGpuRestart.Text = "Ollama yeniden başlatılamadı. İşlemciyle devam edebilirsiniz.";
+                TxtGpuRestart.Text = string.IsNullOrWhiteSpace(message)
+                    ? "Ollama yeniden başlatılamadı. İşlemciyle devam edebilirsiniz."
+                    : message;
                 return;
             }
             // Ollama'nın açılmasını bekle (en fazla ~30 sn), sonra durumu yenile

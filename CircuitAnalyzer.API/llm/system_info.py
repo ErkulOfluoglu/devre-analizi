@@ -125,13 +125,32 @@ def start_ollama() -> bool:
     app = find_ollama_app()
     if app is None:
         return False
+    args = [str(app)] if app.name.lower() == "ollama app.exe" else [str(app), "serve"]
+    return spawn_surviving(args)
+
+
+def spawn_surviving(args: list) -> bool:
+    """
+    Süreci, bu çözücü ve programı kapansa bile açık kalacak şekilde başlatır.
+    Program çözücüyü bir Windows iş nesnesine (Job Object) bağlar; içindeki her süreç
+    program kapanınca kapanır. CREATE_BREAKAWAY_FROM_JOB ile başlatılan süreç bu
+    nesnenin dışında kalır. İş nesnesi ayrılmaya izin vermiyorsa (ör. geliştirici
+    başka bir iş nesnesinin içinden çalıştırıyor) Popen OSError verir; bu durumda
+    bayraksız bir kez daha denenir.
+    """
     flags = 0
+    breakaway = 0
     if sys.platform == "win32":
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
-    args = [str(app)] if app.name.lower() == "ollama app.exe" else [str(app), "serve"]
-    try:
-        subprocess.Popen(args, creationflags=flags, stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
-        return True
-    except Exception:
-        return False
+        breakaway = subprocess.CREATE_BREAKAWAY_FROM_JOB
+    attempts = [flags | breakaway] if not breakaway else [flags | breakaway, flags]
+    for creation in attempts:
+        try:
+            subprocess.Popen(args, creationflags=creation, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+            return True
+        except OSError:
+            continue
+        except Exception:
+            return False
+    return False

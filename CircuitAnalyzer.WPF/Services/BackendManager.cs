@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -108,10 +109,13 @@ namespace CircuitAnalyzer.WPF.Services
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            // Yeniden başlatma: eski bağlantı ve süreç önce kapanır (iki çözücü birden çalışmasın)
+            // Yeniden başlatma: önce ekran kartı ayarlı Ollama eski hâline döner (çözücü yaşıyorsa
+            // kendisi yapar), sonra eski bağlantı ve süreç kapanır (iki çözücü birden çalışmasın)
+            await ReleaseGpuBeforeStopAsync();
             Client?.Dispose();
             Client = null;
             Stop();
+            RestoreOllamaOurselvesIfNeeded();
             _external = false;
             lock (_logLock) _log.Clear();
 
@@ -311,34 +315,110 @@ namespace CircuitAnalyzer.WPF.Services
 
         public void Stop()
         {
+            StopProcessAndJob(_process, _job);
+            _process?.Dispose();
+            _process = null;
+            _job = null;
+        }
+
+        /// <summary>
+        /// Çözücüyü kapatır. İş nesnesi varsa yalnız çözücü süreci öldürülür; işin içinde
+        /// kalan alt süreçleri (FastFlowLM, ekran kartı ayarlı Ollama) iş nesnesi kapanırken
+        /// Windows kapatır. "Başlat" ile açılan Ollama iş nesnesinden ayrıldığı için
+        /// (BREAKAWAY) dokunulmaz: Process.Kill(entireProcessTree) ise üst-alt süreç
+        /// ilişkisinden yürüyüp onu da öldürürdü. İş nesnesi yoksa (atanamadıysa) tek yol
+        /// süreç ağacını öldürmektir.
+        /// </summary>
+        internal static void StopProcessAndJob(Process? process, JobObject? job)
+        {
             try
             {
-                if (_process is { HasExited: false })
-                    _process.Kill(entireProcessTree: true);
+                if (process is { HasExited: false })
+                    process.Kill(entireProcessTree: job == null);
             }
             catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
             {
                 // Zaten kapanmış
             }
-            _process?.Dispose();
-            _process = null;
-            _job?.Dispose();   // KILL_ON_JOB_CLOSE — kalan alt süreçleri de kapatır
-            _job = null;
+            job?.Dispose();   // KILL_ON_JOB_CLOSE — işin içinde kalanları kapatır
         }
 
         public void Dispose()
         {
             _disposed = true;
+            // Ekran kartı ayarı için kapatılan Ollama'yı geri aç (en çok ~8 sn; pencere takılmasın)
+            try
+            {
+                Task.Run(() => ReleaseGpuBeforeStopAsync()).Wait(TimeSpan.FromSeconds(10));
+            }
+            catch (Exception) { }
             Client?.Dispose();
             Client = null;
             Stop();
+            RestoreOllamaOurselvesIfNeeded();
         }
+
+        // ═══════════════════════════════════════════════════════
+        //  Ekran kartı ayarı: Ollama'yı eski hâline getirme
+        // ═══════════════════════════════════════════════════════
+
+        /// <summary>Bu çözücü ömründe ekran kartı ayarı yapıldı (Ollama yeniden başlatıldı).</summary>
+        private bool _gpuSwitched;
+        /// <summary>Ayar için kapatılan Ollama'yı eski hâliyle açacak komut (kapalıysa null).</summary>
+        private IReadOnlyList<string>? _gpuRestoreCommand;
+        /// <summary>Çözücü /llm/gpu/release çağrısını başarıyla yanıtladı.</summary>
+        private bool _gpuReleased;
+
+        /// <summary>Ekran kartı ayarı başarılı oldu: kapanışta Ollama eski hâline getirilecek.</summary>
+        public void NoteGpuSwitched(IReadOnlyList<string>? restoreCommand)
+        {
+            _gpuSwitched = true;
+            _gpuReleased = false;
+            _gpuRestoreCommand = restoreCommand;
+        }
+
+        /// <summary>Çözücü yaşıyorsa ve ayar yapıldıysa çözücüden Ollama'yı geri açmasını ister (≤ 8 sn).</summary>
+        private async Task ReleaseGpuBeforeStopAsync()
+        {
+            var client = Client;
+            if (!GpuRestorePolicy.ShouldAskBackendToRelease(_gpuSwitched, client != null && IsAlive))
+                return;
+            using var cts = new CancellationTokenSource(GpuReleaseTimeout);
+            _gpuReleased = await client!.ReleaseGpuAsync(cts.Token);
+        }
+
+        /// <summary>Çözücüden istenemediyse ya da başarısız olduysa Ollama'yı program kendisi açar.</summary>
+        private void RestoreOllamaOurselvesIfNeeded()
+        {
+            var command = _gpuRestoreCommand;
+            bool restore = GpuRestorePolicy.ShouldRestoreOurselves(_gpuSwitched, _gpuReleased, command);
+            _gpuSwitched = false;
+            _gpuRestoreCommand = null;
+            if (!restore || command == null) return;
+            try
+            {
+                Thread.Sleep(800);   // iş nesnesi kapanırken ekran kartı ayarlı Ollama'nın portu bıraktığından emin ol
+                var psi = new ProcessStartInfo(command[0])
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                for (int i = 1; i < command.Count; i++) psi.ArgumentList.Add(command[i]);
+                Process.Start(psi)?.Dispose();
+            }
+            catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
+            {
+                AppendLog($"[uyarı] Ollama eski hâline getirilemedi: {ex.Message}");
+            }
+        }
+
+        public static readonly TimeSpan GpuReleaseTimeout = TimeSpan.FromSeconds(8);
 
         // ═══════════════════════════════════════════════════════
         //  Windows Job Object (KILL_ON_JOB_CLOSE)
         // ═══════════════════════════════════════════════════════
 
-        private sealed class JobObject : IDisposable
+        internal sealed class JobObject : IDisposable
         {
             private IntPtr _handle;
 
@@ -352,7 +432,10 @@ namespace CircuitAnalyzer.WPF.Services
                 {
                     BasicLimitInformation = new JOBOBJECT_BASIC_LIMIT_INFORMATION
                     {
-                        LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                        // BREAKAWAY_OK: CREATE_BREAKAWAY_FROM_JOB ile başlatılan süreç (kullanıcının
+                        // "Başlat" ile açtığı Ollama) işten ayrılıp program kapanınca açık kalabilir.
+                        // SILENT_BREAKAWAY_OK bilerek yok: FastFlowLM ve ekran kartı ayarlı Ollama işte kalır.
+                        LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK,
                     },
                 };
                 int size = Marshal.SizeOf<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>();
@@ -385,7 +468,8 @@ namespace CircuitAnalyzer.WPF.Services
             }
 
             private const int JobObjectExtendedLimitInformation = 9;
-            private const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000;
+            internal const uint JOB_OBJECT_LIMIT_BREAKAWAY_OK = 0x00000800;   // Win32 JOBOBJECT_BASIC_LIMIT_INFORMATION
+            private const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;
 
             [StructLayout(LayoutKind.Sequential)]
             private struct JOBOBJECT_BASIC_LIMIT_INFORMATION

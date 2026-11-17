@@ -501,9 +501,13 @@ class LlmPullStatus(BaseModel):
 
 
 class LlmActionResult(BaseModel):
-    """POST /llm/start ve /llm/pull/cancel yanıtı."""
+    """POST /llm/start, /llm/pull/cancel, /llm/gpu/enable ve /llm/gpu/release yanıtı."""
     ok: bool = Field(..., description="İşlem yapıldı mı")
     message: str = Field(..., description="Türkçe açıklama")
+    restore_command: Optional[List[str]] = Field(
+        default=None,
+        description=("Yalnız /llm/gpu/enable: ayar için kapatılan Ollama'yı eski hâliyle açacak komut; "
+                     "çözücü ölmüşse program bunu kendisi çalıştırır. Kapalıydıysa boş"))
 
 
 class LlmNumberCheck(BaseModel):

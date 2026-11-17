@@ -418,6 +418,14 @@ namespace CircuitAnalyzer.WPF.Services
     {
         [JsonPropertyName("ok")] public bool Ok { get; set; }
         [JsonPropertyName("message")] public string Message { get; set; } = "";
+        /// <summary>Yalnız /llm/gpu/enable: ayar için kapatılan Ollama'yı geri açacak komut (kapalıysa null).</summary>
+        [JsonPropertyName("restore_command")] public List<string>? RestoreCommand { get; set; }
+    }
+
+    /// <summary>Ekran kartı ayarı sonucu: sunucunun Türkçe mesajı ve geri açma komutu.</summary>
+    public sealed record GpuEnableResult(bool Ok, string Message, IReadOnlyList<string>? RestoreCommand)
+    {
+        public const string DefaultFailure = "Ollama yeniden başlatılamadı. İşlemciyle devam edebilirsiniz.";
     }
 
     public static class ChatRoles

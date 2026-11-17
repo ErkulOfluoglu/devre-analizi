@@ -144,7 +144,7 @@
                     Visibility="Collapsed">
                 <StackPanel>
                     <TextBlock x:Name="TxtGpuRestart"
-                               Text="Ollama bu ekran kartını kendiliğinden kullanmıyor. Ekran kartı ayarıyla yeniden başlatılsın mı? Ayar yalnız program açıkken geçerlidir; Windows ayarlarınız değişmez."
+                               Text="Ollama bu ekran kartını kendiliğinden kullanmıyor. Ekran kartı ayarıyla yeniden başlatılsın mı? Ayar yalnız program açıkken geçerlidir; program kapanınca Ollama eski hâliyle yeniden açılır. Windows ayarlarınız değişmez."
                                TextWrapping="Wrap"/>
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                         <Button x:Name="BtnGpuRestart"

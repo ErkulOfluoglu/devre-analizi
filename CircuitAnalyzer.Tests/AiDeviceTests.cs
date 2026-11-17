@@ -155,7 +155,7 @@ public class AiDeviceTests
             var view = new AssistantView
             {
                 StatusProvider = _ => Task.FromResult<LlmStatusDto?>(Status(gpuRestart: !restarted)),
-                EnableGpu = _ => { restarted = true; return Task.FromResult(true); },
+                EnableGpu = _ => { restarted = true; return Task.FromResult((true, "")); },
             };
             view.Configure(new AnalysisRequestDto { Netlist = "R1 1 0 100" }, false, Array.Empty<PracticeQuestionDto>());
             RunAsync(view.RefreshStatusAsync);

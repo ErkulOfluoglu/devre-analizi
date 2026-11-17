@@ -481,13 +481,36 @@ def llm_status():
     summary="Ollama'yı tümleşik ekran kartı ayarıyla yeniden başlat",
     description=(
         "Ollama'yı kapatıp OLLAMA_IGPU_ENABLE=1 ile yeniden açar (yalnız bu oturum; Windows ayarı "
-        "değişmez, program kapanınca bu Ollama da kapanır). Hazır olmasını beklemez."
+        "değişmez, program kapanınca bu Ollama da kapanır). Hazır olmasını beklemez. Model indirmesi "
+        "sürerken hiçbir şey kapatılmaz (ok=false). restore_command: önceki Ollama'yı geri açacak komut; "
+        "POST /llm/gpu/release bunu kendisi yapar."
     ),
 )
 def llm_gpu_enable():
+    if pull.MANAGER.running:
+        return LlmActionResult(
+            ok=False,
+            message="Model indirmesi sürüyor. İndirme bitince ya da iptal edilince yeniden deneyin.")
     if devices.restart_ollama_with_igpu():
-        return LlmActionResult(ok=True, message="Ollama ekran kartı ayarıyla yeniden başlatılıyor…")
+        return LlmActionResult(ok=True, message="Ollama ekran kartı ayarıyla yeniden başlatılıyor…",
+                               restore_command=devices.igpu_restore_command())
     return LlmActionResult(ok=False, message="Ollama bu bilgisayarda bulunamadı.")
+
+
+@app.post(
+    "/llm/gpu/release",
+    response_model=LlmActionResult,
+    tags=["Yapay Zekâ"],
+    summary="Ekran kartı ayarlı Ollama'yı kapat, önceki Ollama'yı geri aç",
+    description=(
+        "Program kapanırken çağrılır. Bizim başlattığımız ekran kartı ayarlı Ollama'yı kapatır (en çok ~5 sn "
+        "bekler) ve ayardan önce çalışan Ollama'yı aynen açar (tepsi uygulaması / yalnız sunucu / hiçbiri). "
+        "Geri açılan Ollama programdan bağımsızdır. Yapılacak bir şey yoksa hemen döner."
+    ),
+)
+def llm_gpu_release():
+    ok, message = devices.release_igpu()
+    return LlmActionResult(ok=ok, message=message)
 
 
 @app.post(

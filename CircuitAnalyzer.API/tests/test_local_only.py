@@ -18,7 +18,7 @@ NETLIST = "V1 1 0 DC 12\nR1 1 2 1k\nR2 2 0 2k\n* GND1 — Referans toprak (Node 
 ANALYZE = {"netlist": NETLIST, "mode": "DC", "analysis_type": "NODAL"}
 
 
-@pytest.mark.parametrize("path", ["/llm/gpu/enable", "/llm/start", "/llm/pull", "/llm/pull/cancel"])
+@pytest.mark.parametrize("path", ["/llm/gpu/enable", "/llm/gpu/release", "/llm/start","/llm/pull", "/llm/pull/cancel"])
 def test_web_page_cannot_trigger_ai_actions(client, path):
     r = client.post(path, headers={"Origin": "https://kotu-site.example"})
     assert r.status_code == 403

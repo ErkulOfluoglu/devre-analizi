@@ -133,16 +133,38 @@ namespace CircuitAnalyzer.WPF.Services
 
         /// <summary>
         /// Ollama'yı tümleşik ekran kartı ayarıyla yeniden başlatır (yalnız bu oturum).
-        /// Hata fırlatmaz: başarısızsa false.
+        /// Hata fırlatmaz: başarısızsa Ok = false ve sunucunun (ya da yedek) Türkçe mesajı.
         /// </summary>
-        public async Task<bool> EnableGpuAsync(CancellationToken ct = default)
+        public async Task<GpuEnableResult> EnableGpuAsync(CancellationToken ct = default)
         {
             try
             {
                 var r = await PostAsync<object, LlmActionResultDto>("/llm/gpu/enable", new { }, ct);
+                return new GpuEnableResult(r.Ok, r.Message, r.RestoreCommand);
+            }
+            catch (AnalysisRequestException ex)
+            {
+                return new GpuEnableResult(false, ex.Message, null);
+            }
+            catch (BackendUnavailableException)
+            {
+                return new GpuEnableResult(false, GpuEnableResult.DefaultFailure, null);
+            }
+        }
+
+        /// <summary>
+        /// Ekran kartı ayarlı Ollama'yı kapatıp eskisini geri açtırır (/llm/gpu/release).
+        /// Hata fırlatmaz: çözücü ölmüş / zaman aşımı / hata ise false.
+        /// </summary>
+        public async Task<bool> ReleaseGpuAsync(CancellationToken ct = default)
+        {
+            try
+            {
+                var r = await PostAsync<object, LlmActionResultDto>("/llm/gpu/release", new { }, ct);
                 return r.Ok;
             }
-            catch (Exception ex) when (ex is AnalysisRequestException or BackendUnavailableException)
+            catch (Exception ex) when (ex is AnalysisRequestException or BackendUnavailableException
+                                          or OperationCanceledException)
             {
                 return false;
             }

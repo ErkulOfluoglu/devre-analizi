@@ -16,6 +16,8 @@ karar verir; işlemcinin adına bakılmaz.
 
 Programın başlattığı süreçler (FastFlowLM sunucusu, ekran kartı ayarlı Ollama)
 arka ucun iş nesnesine (Job Object) bağlıdır: program kapanınca onlar da kapanır.
+Ekran kartı ayarı için kapatılan Ollama, program kapanırken (release_igpu) ya da
+program bunu başaramazsa programın kendisi tarafından eski hâliyle yeniden açılır.
 """
 
 import json
@@ -84,18 +86,61 @@ class NpuInfo:
 
 _npu_cached: Optional[NpuInfo] = None
 _npu_cached_at = 0.0
-_lock = threading.Lock()
+_lock = threading.Lock()          # yalnız FastFlowLM süreci (_flm_proc) için; denetim bunu tutmaz
+_probe_lock = threading.Lock()    # denetim durumunu (önbellek + süren denetim) korur; kısa tutulur
+_probe_event: Optional[threading.Event] = None   # bir denetim sürerken var; bitince set edilir
+PROBE_WAIT_SECONDS = 45.0         # flm validate + flm list: en çok 2 × 20 sn zaman aşımı
+
+
+def _start_probe_locked() -> threading.Event:
+    """Süren denetim yoksa arka planda başlatır; varsa onunkini verir (aynı anda tek denetim)."""
+    global _probe_event
+    if _probe_event is not None:
+        return _probe_event
+    done = threading.Event()
+    _probe_event = done
+
+    def run():
+        global _npu_cached, _npu_cached_at, _probe_event
+        try:
+            info = _probe_npu()
+        except Exception:
+            info = NpuInfo(False, None, "NPU denetimi yapılamadı.")
+        with _probe_lock:
+            _npu_cached, _npu_cached_at = info, time.time()
+            _probe_event = None
+        done.set()
+
+    threading.Thread(target=run, daemon=True, name="npu-probe").start()
+    return done
 
 
 def npu_info(ollama_model: Optional[str] = None, refresh: bool = False) -> NpuInfo:
-    """NPU kullanılabilir mi? (FastFlowLM kurulu + NPU hazır + uygun model var)"""
-    global _npu_cached, _npu_cached_at
-    with _lock:
-        if not refresh and _npu_cached is not None and time.time() - _npu_cached_at < CACHE_SECONDS:
+    """
+    NPU kullanılabilir mi? (FastFlowLM kurulu + NPU hazır + uygun model var)
+
+    Denetim ~4 sn (donarsa 40 sn) sürer; bu yüzden hiçbir kilit altında yapılmaz:
+    - önbellek tazeyse hemen döner;
+    - önbellek eskidiyse eski değer hemen döner, yenileme arka planda (en çok bir tane) yapılır;
+    - önbellek boşsa (açılışta) süren denetimin sonucu beklenir ("NPU yok" diye yanlış
+      cevap verilip model sonradan NPU'ya geçmesin);
+    - refresh=True taze denetim ister ve sonucunu bekler.
+    Aynı anda gelen çağrılar tek denetimi paylaşır.
+    """
+    wait_for: Optional[threading.Event] = None
+    with _probe_lock:
+        base = _npu_cached
+        fresh = base is not None and time.time() - _npu_cached_at < CACHE_SECONDS
+        if refresh or base is None:
+            wait_for = _start_probe_locked()
+        elif not fresh:
+            _start_probe_locked()          # eski değer şimdilik geçerli; arkada yenilenir
+    if wait_for is not None:
+        wait_for.wait(PROBE_WAIT_SECONDS)
+        with _probe_lock:
             base = _npu_cached
-        else:
-            base = _probe_npu()
-            _npu_cached, _npu_cached_at = base, time.time()
+        if base is None:
+            base = NpuInfo(False, None, "NPU denetimi henüz bitmedi.")
     if not base.installed_models:
         return base
     wanted = NPU_MODELS.get(ollama_model or "")
@@ -222,38 +267,161 @@ def gpu_info() -> GpuInfo:
 
 def igpu_enabled() -> bool:
     """Çalışan Ollama'ya tümleşik kart ayarı verildi mi (bizim başlattığımız ya da kullanıcı ortamı)?"""
-    return _igpu_started or os.environ.get("OLLAMA_IGPU_ENABLE", "").strip() == "1"
+    alive = _igpu_proc is not None and _igpu_proc.poll() is None
+    return alive or os.environ.get("OLLAMA_IGPU_ENABLE", "").strip() == "1"
 
 
-_igpu_started = False
+# Bizim başlattığımız ekran kartı ayarlı Ollama (yoksa None) ve onu başlatmadan önce
+# çalışan Ollama'yı geri açacak komut (hiçbiri çalışmıyorduysa None).
+_igpu_proc: Optional[subprocess.Popen] = None
+_igpu_restore: Optional[List[str]] = None
+_igpu_lock = threading.Lock()     # yeniden başlatma / bırakma aynı anda tek iş yapsın
+TRAY_IMAGE, SERVE_IMAGE = "ollama app.exe", "ollama.exe"
+RELEASE_WAIT_SECONDS = 5.0
+
+
+def parse_tasklist(text: str) -> set:
+    """
+    `tasklist /FO CSV /NH` çıktısındaki işlem adları (küçük harfle). Dil fark etmez:
+    işlem satırları '"ad.exe","PID",...' biçimindedir; "görev yok" gibi bilgi satırları
+    virgüllü CSV olmadığı için atlanır.
+    """
+    import csv
+    names = set()
+    for row in csv.reader(text.splitlines()):
+        if len(row) >= 2 and row[0].strip():
+            names.add(row[0].strip().lower())
+    return names
+
+
+def ollama_state(running_images: set) -> str:
+    """'tray' (Ollama uygulaması açık), 'serve' (yalnız ollama.exe) ya da 'none'."""
+    if TRAY_IMAGE in running_images:
+        return "tray"
+    if SERVE_IMAGE in running_images:
+        return "serve"
+    return "none"
+
+
+def restore_command_for(state: str, app: Path) -> Optional[List[str]]:
+    """Kapatmadan önceki Ollama'yı yeniden açacak komut (tepsi uygulaması yoksa 'serve')."""
+    exe = app.with_name(SERVE_IMAGE)
+    if state == "tray":
+        tray = app.with_name(TRAY_IMAGE)
+        return [str(tray)] if tray.is_file() else [str(exe), "serve"]
+    if state == "serve":
+        return [str(exe), "serve"]
+    return None
+
+
+def _tasklist() -> str:
+    if sys.platform != "win32":
+        return ""
+    try:
+        out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, text=True,
+                             errors="replace", timeout=15, creationflags=_NO_WINDOW)
+        return out.stdout
+    except Exception:
+        return ""
+
+
+def _kill_image(image: str):
+    # /T: modeli tutan alt süreçler (llama-server) de kapansın, RAM'de kalmasın
+    subprocess.run(["taskkill", "/F", "/T", "/IM", image], capture_output=True, creationflags=_NO_WINDOW)
+
+
+def _kill_tree(pid: int):
+    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, creationflags=_NO_WINDOW)
+
+
+def _start_igpu_ollama(exe: Path) -> subprocess.Popen:
+    # Bilerek iş nesnesinin içinde kalır (ayrılma bayrağı yok): program kapanınca kapanır.
+    env = dict(os.environ, OLLAMA_IGPU_ENABLE="1")
+    return subprocess.Popen([str(exe), "serve"], env=env, stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=_NO_WINDOW)
+
+
+def _pause(seconds: float):
+    time.sleep(seconds)
+
+
+def _ollama_answers() -> bool:
+    from llm import ollama
+    try:
+        return bool(ollama.get_status().available)
+    except Exception:
+        return False
+
+
+def igpu_restore_command() -> Optional[List[str]]:
+    """Ekran kartı ayarlı Ollama kapanınca eski Ollama'yı açacak komut (yoksa None)."""
+    return list(_igpu_restore) if _igpu_restore else None
 
 
 def restart_ollama_with_igpu() -> bool:
     """
     Ollama'yı kapatıp OLLAMA_IGPU_ENABLE=1 ile yeniden başlatır (yalnız bu süreç
-    için; Windows ayarı değişmez). Program kapanınca bu Ollama da kapanır.
+    için; Windows ayarı değişmez). Önceki durum (tepsi uygulaması / yalnız sunucu /
+    kapalı) kaydedilir; release_igpu() onu geri getirir. Program kapanınca bu Ollama
+    da kapanır. Zaten bizim ayarlı Ollama'mız çalışıyorsa hiçbir şey kapatılmaz.
     """
-    global _igpu_started
-    app = system_info.find_ollama_app()
-    if app is None:
-        return False
-    exe = app.with_name("ollama.exe")
-    if not exe.is_file():
-        return False
-    if sys.platform == "win32":
-        # /T: modeli tutan alt süreçler (llama-server) de kapansın, RAM'de kalmasın
-        for image in ("ollama app.exe", "ollama.exe"):
-            subprocess.run(["taskkill", "/F", "/T", "/IM", image], capture_output=True,
-                           creationflags=_NO_WINDOW)
-        time.sleep(1.0)
-    env = dict(os.environ, OLLAMA_IGPU_ENABLE="1")
-    try:
-        subprocess.Popen([str(exe), "serve"], env=env, stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=_NO_WINDOW)
-    except Exception:
-        return False
-    _igpu_started = True
-    return True
+    global _igpu_proc, _igpu_restore
+    with _igpu_lock:
+        if _igpu_proc is not None and _igpu_proc.poll() is None:
+            return True
+        app = system_info.find_ollama_app()
+        if app is None:
+            return False
+        exe = app.with_name(SERVE_IMAGE)
+        if not exe.is_file():
+            return False
+        restore = None
+        if sys.platform == "win32":
+            restore = restore_command_for(ollama_state(parse_tasklist(_tasklist())), app)
+            for image in (TRAY_IMAGE, SERVE_IMAGE):
+                _kill_image(image)
+            _pause(1.0)
+        try:
+            proc = _start_igpu_ollama(exe)
+        except Exception:
+            if restore:                       # kapattığımızı geri aç; kullanıcı Ollama'sız kalmasın
+                system_info.spawn_surviving(restore)
+            return False
+        _igpu_proc, _igpu_restore = proc, restore
+        return True
+
+
+def release_igpu() -> tuple:
+    """
+    Bizim başlattığımız ekran kartı ayarlı Ollama'yı kapatır (en çok ~5 sn bekler, 11434
+    portu boşalsın) ve ayardan önce çalışan Ollama'yı aynen geri açar. Bizim Ollama'mız
+    yoksa hemen döner (tekrar çağrılabilir). Geri açılan süreç programdan bağımsızdır.
+    Döner: (başarılı mı, Türkçe mesaj)
+    """
+    global _igpu_proc, _igpu_restore
+    with _igpu_lock:
+        proc, restore = _igpu_proc, _igpu_restore
+        if proc is None:
+            return True, "Ekran kartı ayarlı Ollama zaten açık değil."
+        was_running = proc.poll() is None
+        if was_running:
+            try:
+                _kill_tree(proc.pid)
+                proc.wait(timeout=RELEASE_WAIT_SECONDS)
+            except Exception:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=2)
+                except Exception:
+                    pass
+        _igpu_proc, _igpu_restore = None, None
+        if not restore:
+            return True, "Ekran kartı ayarlı Ollama kapatıldı."
+        if not was_running and _ollama_answers():
+            return True, "Ollama zaten açık."          # kullanıcı kendisi yeniden açmış
+        if system_info.spawn_surviving(restore):
+            return True, "Ollama eski hâliyle yeniden açılıyor."
+        return False, "Ollama eski hâliyle açılamadı. Elle açabilirsiniz."
 
 
 # ── Seçim ──

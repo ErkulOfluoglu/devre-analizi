@@ -32,7 +32,10 @@ def no_real_ai_hardware(monkeypatch):
     monkeypatch.setattr(devices, "_npu_cached", None)
     monkeypatch.setattr(devices, "_display_adapters", lambda: [])
     monkeypatch.setattr(devices, "flm_running", lambda: False)
-    monkeypatch.setattr(devices, "_igpu_started", False)
+    monkeypatch.setattr(devices, "_npu_cached_at", 0.0)
+    monkeypatch.setattr(devices, "_probe_event", None)
+    monkeypatch.setattr(devices, "_igpu_proc", None)
+    monkeypatch.setattr(devices, "_igpu_restore", None)
     monkeypatch.setattr(devices, "_last_where", None)
     monkeypatch.setattr(ollama, "running_models", lambda: None)
 

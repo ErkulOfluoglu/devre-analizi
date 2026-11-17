@@ -86,7 +86,7 @@ public partial class AnalysisPanel : UserControl
     public Func<CancellationToken, Task<LlmStatusDto?>>? LlmStatusProvider { get; set; }
     public Func<LlmAskRequestDto, CancellationToken, Task<LlmAnswerDto>>? LlmAsker { get; set; }
     public Func<CancellationToken, Task<bool>>? LlmStartOllama { get; set; }
-    public Func<CancellationToken, Task<bool>>? LlmEnableGpu { get; set; }
+    public Func<CancellationToken, Task<(bool Ok, string Message)>>? LlmEnableGpu { get; set; }
     public Func<string?, CancellationToken, Task<LlmPullStatusDto>>? LlmStartPull { get; set; }
     public Func<CancellationToken, Task<LlmPullStatusDto?>>? LlmGetPull { get; set; }
     public Func<CancellationToken, Task<bool>>? LlmCancelPull { get; set; }
