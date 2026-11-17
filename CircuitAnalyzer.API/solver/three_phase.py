@@ -275,6 +275,7 @@ def expand_three_phase(parsed: ParsedCircuit, is_dc: bool = False,
         warnings=list(parsed.warnings), errors=list(parsed.errors),
         node_positions=dict(parsed.node_positions), value_basis=basis)
     flat.node_count = len({n for e in elems for n in element_nodes(e)})
+    flat.internal_names = True   # eleman adları açılım içi (V_U1_R …); tanı metinlerinde kullanılmaz
     exp.flat = flat
     return exp
 

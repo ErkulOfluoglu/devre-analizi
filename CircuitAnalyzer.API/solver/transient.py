@@ -539,7 +539,9 @@ def verify_with_lcapy(a: TransientAnalysis) -> Optional[str]:
     except TransientNotApplicable:
         raise
     except Exception as exc:    # lcapy çözemedi → sonucu doğrulanmamış bırakma
-        return f"Sayılar bağımsız çözücüyle doğrulanamadı ({type(exc).__name__})."
+        from solver.error_text import log_raw
+        log_raw(exc, "doğrulama")
+        return "Sayılar bağımsız çözücüyle doğrulanamadı."
 
     if not a.uncharged:
         try:

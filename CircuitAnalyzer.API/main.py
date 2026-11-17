@@ -38,7 +38,8 @@ from models.response import (
 )
 from practice.checker import check_answer
 from parser.netlist_parser import parse_netlist, to_lcapy_netlist, circuit_at_time
-from solver.circuit_solver import solve_circuit, UNSOLVABLE_PREFIX
+from solver.circuit_solver import solve_circuit, topology_gate, UNSOLVABLE_PREFIX
+from solver.error_text import turkish_error
 
 
 # ═══════════════════════════════════════════════════════
@@ -164,6 +165,24 @@ def _raise_if_request_invalid(request) -> None:
                    "arasında bulunur.")
 
 
+def _topology_precheck(parsed, request, probes) -> list:
+    """
+    Çözümden önce hızlı yapı denetimi. Hata kesinse (yalnız R/L/C ve bağımsız kaynaklar varken
+    kısa devre edilmiş gerilim kaynağı, kaynak halkası, GND'ye bağlı olmayan bölüm) HTTP 422 ile
+    adıyla söyler. Döndürdüğü liste: bir ucu boşta kalan elemanlar için ⚠ uyarıları.
+    Seçili Thevenin/Norton uçları ve gerilim probu düğümleri bilerek açık bırakılmış sayılır.
+    """
+    ignore = set()
+    t = request.thevenin_terminals
+    if t is not None:
+        ignore.update((t.node_positive.strip(), t.node_negative.strip()))
+    ignore.update(p.target for p in (probes or []) if str(getattr(p, "type", "")).upper() == "V")
+    reason, warns = topology_gate(parsed, request.mode, request.analysis_type, ignore)
+    if reason:
+        raise HTTPException(status_code=422, detail=reason)
+    return warns
+
+
 # ═══════════════════════════════════════════════════════
 #  ENDPOINT'LER
 # ═══════════════════════════════════════════════════════
@@ -241,7 +260,7 @@ def analyze_circuit(
     except Exception as e:
         raise HTTPException(
             status_code=400,
-            detail=f"Netlist ayrıştırma hatası: {str(e)}"
+            detail=f"Netlist ayrıştırma hatası: {turkish_error(e, 'netlist')}"
         )
 
     _raise_if_netlist_invalid(parsed)
@@ -260,7 +279,7 @@ def analyze_circuit(
     # ── 2. DEVRE ÇÖZÜMÜ (lcapy) ──
     # Senkron uç nokta: FastAPI iş parçacığı havuzunda çalıştırır, uzun bir çözüm
     # sürerken sunucu öbür isteklere (/health, yapay zekâ durumu) cevap verir.
-    warnings: list = []
+    warnings: list = _topology_precheck(parsed, request, probes)
     with _SOLVE_LOCK:
         results, solution_steps, errors = solve_circuit(
             parsed=parsed,
@@ -344,7 +363,7 @@ def parse_only(
     except Exception as e:
         raise HTTPException(
             status_code=400,
-            detail=f"Ayrıştırma hatası: {str(e)}"
+            detail=f"Ayrıştırma hatası: {turkish_error(e, 'netlist')}"
         )
 
     return {
@@ -628,10 +647,12 @@ def llm_ask(request: LlmAskRequest):
     try:
         parsed = parse_netlist(request.netlist, value_basis=request.value_display.value)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Netlist ayrıştırma hatası: {str(e)}")
+        raise HTTPException(status_code=400,
+                            detail=f"Netlist ayrıştırma hatası: {turkish_error(e, 'netlist')}")
     _raise_if_netlist_invalid(parsed)
     _raise_if_request_invalid(request)
 
+    _topology_precheck(parsed, request, None)
     with _SOLVE_LOCK:
         results, _, solve_errors = solve_circuit(
             parsed=parsed, mode=request.mode, frequency=request.frequency,

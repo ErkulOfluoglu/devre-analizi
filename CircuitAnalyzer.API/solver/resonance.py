@@ -354,7 +354,9 @@ def _verify_tank(a: ResonanceAnalysis, cct) -> Optional[str]:
                 return "Program denetimi: tam yarım güç frekanslarında V_x = V/√2 sağlanmadı."
         a.check = chk
     except Exception as exc:
-        return f"Sayılar bağımsız çözücüyle doğrulanamadı ({type(exc).__name__})."
+        from solver.error_text import log_raw
+        log_raw(exc, "doğrulama")
+        return "Sayılar bağımsız çözücüyle doğrulanamadı."
     return None
 
 
@@ -430,5 +432,7 @@ def verify_with_lcapy(a: ResonanceAnalysis, cct) -> Optional[str]:
 
         a.check = chk
     except Exception as exc:        # lcapy çözemedi → sonucu doğrulanmamış bırakma
-        return f"Sayılar bağımsız çözücüyle doğrulanamadı ({type(exc).__name__})."
+        from solver.error_text import log_raw
+        log_raw(exc, "doğrulama")
+        return "Sayılar bağımsız çözücüyle doğrulanamadı."
     return None

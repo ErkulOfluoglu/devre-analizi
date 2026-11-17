@@ -407,7 +407,18 @@ def parse_netlist(netlist_text: str, value_basis: str = "PEAK") -> ParsedCircuit
             continue
 
         # Eleman satırı
-        element = _parse_element_line(line, line_num, circuit)
+        try:
+            element = _parse_element_line(line, line_num, circuit)
+        except ValueError:
+            # Bir değer sayı olarak okunamadı (ör: R1 1 2 abc): Python hatası değil, Türkçe satır hatası
+            _reject(circuit,
+                    f"Satır {line_num}: bir değer sayı olarak okunamadı → '{line}'. Değerlerde ondalık "
+                    "için nokta kullanın; çarpan için k, m, u, n, p ya da MEG yazabilirsiniz "
+                    "(örnek: 4.7k, 100u, 2m).")
+            continue
+        if element and not math.isfinite(element.value):
+            _reject(circuit, f"Satır {line_num}: değer sonlu bir sayı olmalı → '{line}'.")
+            continue
         if element:
             key = element.id.upper()
             if key in first_line:
@@ -562,12 +573,12 @@ def _parse_element_line(
     # ── AC Kaynak (SINE): VAC1 1 0 SINE(0 10 50 0 0 30) ──
     m = _PATTERNS["ac_sine"].match(line)
     if m:
-        return _parse_ac_sine(m)
+        return _parse_ac_sine(m, line_num, circuit)
 
     # ── AC Kaynak (Fazör): VAC1 1 0 AC_PHASOR(10, 30) ──
     m = _PATTERNS["ac_phasor"].match(line)
     if m:
-        return _parse_ac_phasor(m)
+        return _parse_ac_phasor(m, line_num, circuit)
 
     # ── Üç faz: U1 … 3PH_SOURCE (RMS eki alabilir), Y1 … 3PH_LOAD, W1 … WATTMETER ──
     if line[0].upper() == "U":
@@ -590,12 +601,12 @@ def _parse_element_line(
     # ── Empedans (Dikdörtgensel): Z1 2 3 COMPLEX(50, 30) ──
     m = _PATTERNS["impedance_complex"].match(line)
     if m:
-        return _parse_impedance_complex(m)
+        return _parse_impedance_complex(m, line_num, circuit)
 
     # ── Empedans (Kutupsal): Z1 2 3 POLAR(58.31, 30.96) ──
     m = _PATTERNS["impedance_polar"].match(line)
     if m:
-        return _parse_impedance_polar(m)
+        return _parse_impedance_polar(m, line_num, circuit)
 
     # ── Bağımlı kaynak: E1 3 0 V(R2) 3 ──
     m = _PATTERNS["dependent"].match(line)
@@ -972,7 +983,43 @@ def _validate_dependents(circuit: ParsedCircuit) -> None:
         _reject(circuit, message)
 
 
-def _parse_ac_sine(m: re.Match) -> ParsedElement:
+def _read_fields(
+    text: str, line_num: int, circuit: ParsedCircuit, eid: str, what: str, names: List[str],
+    required: int,
+) -> Optional[List[float]]:
+    """
+    Parantez içindeki alanları (boşluk ya da virgülle ayrılmış) SI önekleriyle okur
+    ("2m" → 0.002, "1k" → 1000, "1meg" → 10⁶). Eksik isteğe bağlı alanlar 0 olur.
+    Okunamayan, eksik zorunlu ya da sonsuz/tanımsız alanda Türkçe satır hatası verir (None döner).
+    """
+    parts = re.split(r"\s*,\s*|\s+", text.strip()) if text.strip() else []
+    while parts and not parts[-1]:      # sondaki boş alanlar ("SINE(0 10 50,)") yok sayılır
+        parts.pop()
+    if len(parts) < required:
+        _reject(circuit,
+                f"Satır {line_num}: {eid} {what} için en az {required} değer gerekir "
+                f"({', '.join(names[:required])}).")
+        return None
+    out: List[float] = []
+    for i, name in enumerate(names):
+        if i >= len(parts):
+            out.append(0.0)
+            continue
+        try:
+            x = parse_spice_value(parts[i])
+        except ValueError:
+            x = None
+        if x is None or not math.isfinite(x):
+            _reject(circuit,
+                    f"Satır {line_num}: {eid} {what} için {name} sayı olarak okunamadı → "
+                    f"'{parts[i]}'. Ondalık için nokta, çarpan için k, m, u, n, p ya da MEG "
+                    "kullanabilirsiniz (örnek: 2m, 1k).")
+            return None
+        out.append(x)
+    return out
+
+
+def _parse_ac_sine(m: re.Match, line_num: int, circuit: ParsedCircuit) -> Optional[ParsedElement]:
     """
     SINE formatını ayrıştırır.
 
@@ -982,13 +1029,12 @@ def _parse_ac_sine(m: re.Match) -> ParsedElement:
 
     Parametreler boşluk veya virgülle ayrılabilir.
     """
-    parts = re.split(r"[,\s]+", m.group(4).strip())
-    parts = [p for p in parts if p]  # Boş elemanları temizle
-
-    offset = float(parts[0]) if len(parts) > 0 else 0
-    amplitude = float(parts[1]) if len(parts) > 1 else 0
-    frequency = float(parts[2]) if len(parts) > 2 else 0
-    phase = float(parts[5]) if len(parts) > 5 else 0
+    fields = _read_fields(
+        m.group(4), line_num, circuit, m.group(1), "sinüs kaynağı (SINE)",
+        ["ofset", "genlik", "frekans", "gecikme", "sönüm", "faz (derece)"], 0)
+    if fields is None:
+        return None
+    offset, amplitude, frequency, delay, damping, phase = fields
     input_basis = "RMS" if m.group(5) else "PEAK"
 
     return ParsedElement(
@@ -1003,22 +1049,27 @@ def _parse_ac_sine(m: re.Match) -> ParsedElement:
             "amplitude": amplitude,
             "frequency": frequency,
             "phase": phase,
+            # Çözücü gecikme ve sönümü hesaba katmaz; sıfır değilse API öğrenciyi uyarır
+            "delay": delay,
+            "damping": damping,
             "input_value": amplitude,
             "input_basis": input_basis,
         }
     )
 
 
-def _parse_ac_phasor(m: re.Match) -> ParsedElement:
+def _parse_ac_phasor(m: re.Match, line_num: int, circuit: ParsedCircuit) -> Optional[ParsedElement]:
     """
     AC_PHASOR formatını ayrıştırır.
 
     AC_PHASOR(Magnitude, Phase_degrees) [RMS]
     Örnek: AC_PHASOR(10, 30) → 10∠30° V
     """
-    parts = re.split(r"[,\s]+", m.group(4).strip())
-    magnitude = float(parts[0])
-    phase = float(parts[1]) if len(parts) > 1 else 0
+    fields = _read_fields(m.group(4), line_num, circuit, m.group(1), "fazör kaynağı (AC_PHASOR)",
+                          ["büyüklük", "faz (derece)"], 1)
+    if fields is None:
+        return None
+    magnitude, phase = fields
     input_basis = "RMS" if m.group(5) else "PEAK"
 
     return ParsedElement(
@@ -1042,16 +1093,18 @@ def _parse_ac_phasor(m: re.Match) -> ParsedElement:
     )
 
 
-def _parse_impedance_complex(m: re.Match) -> ParsedElement:
+def _parse_impedance_complex(m: re.Match, line_num: int, circuit: ParsedCircuit) -> Optional[ParsedElement]:
     """
     COMPLEX formatını ayrıştırır.
 
     COMPLEX(real, imaginary)
     Örnek: COMPLEX(50, 30) → Z = 50 + j30 Ω
     """
-    parts = re.split(r"[,\s]+", m.group(4).strip())
-    real = float(parts[0])
-    imag = float(parts[1]) if len(parts) > 1 else 0
+    fields = _read_fields(m.group(4), line_num, circuit, m.group(1), "empedansı (COMPLEX)",
+                          ["gerçek kısım", "sanal kısım"], 1)
+    if fields is None:
+        return None
+    real, imag = fields
     z = complex(real, imag)
 
     return ParsedElement(
@@ -1070,7 +1123,7 @@ def _parse_impedance_complex(m: re.Match) -> ParsedElement:
     )
 
 
-def _parse_impedance_polar(m: re.Match) -> ParsedElement:
+def _parse_impedance_polar(m: re.Match, line_num: int, circuit: ParsedCircuit) -> Optional[ParsedElement]:
     """
     POLAR formatını ayrıştırır.
 
@@ -1081,9 +1134,11 @@ def _parse_impedance_polar(m: re.Match) -> ParsedElement:
         a = r·cos(θ)
         b = r·sin(θ)
     """
-    parts = re.split(r"[,\s]+", m.group(4).strip())
-    magnitude = float(parts[0])
-    angle_deg = float(parts[1]) if len(parts) > 1 else 0
+    fields = _read_fields(m.group(4), line_num, circuit, m.group(1), "empedansı (POLAR)",
+                          ["büyüklük", "açı (derece)"], 1)
+    if fields is None:
+        return None
+    magnitude, angle_deg = fields
     angle_rad = math.radians(angle_deg)
     z = complex(
         magnitude * math.cos(angle_rad),
