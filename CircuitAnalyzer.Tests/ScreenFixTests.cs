@@ -174,6 +174,77 @@ public class ScreenFixTests
         Assert.All(centers, c => Assert.InRange(c, 12.0001, axisMax));   // eğrinin üstünde, eksen sayılarından uzak
     }
 
+    [Theory]
+    [InlineData(300, 12)]
+    [InlineData(530, 12)]       // kâğıttaki genişlik
+    [InlineData(900, 14)]
+    [InlineData(160, 14)]       // çok dar kart
+    public void Badges_AtTheEndsOfTheAxis_StayFullyInside(double w, double font)
+    {
+        // Geçici durum: −0,5τ … 5τ, 5τ tam sağ kenarda; rezonans rozetleri de iki uçta sınanır
+        var cases = new[]
+        {
+            (Centers: Enumerable.Range(1, 5).Select(k => (k + 0.5) / 5.5 * w).ToArray(), Texts: new[] { "τ", "2τ", "3τ", "4τ", "5τ" }),
+            (Centers: new[] { 0.0, w / 2, w }, Texts: new[] { "f₁", "f₀", "f₂" }),
+        };
+        foreach (var (natural, texts) in cases)
+        {
+            double[] widths = texts.Select(t => PlotLayout.BadgeWidthPx(t, font)).ToArray();
+            double[] c = natural.Select((x, i) => PlotLayout.ClampBadgeCenterPx(x, widths[i], w)).ToArray();
+            int[] rows = PlotLayout.BadgeRows(c, widths);
+            for (int i = 0; i < c.Length; i++)
+            {
+                Assert.InRange(c[i] - widths[i] / 2, 0, w);
+                Assert.InRange(c[i] + widths[i] / 2, 0, w);
+                for (int j = i + 1; j < c.Length; j++)
+                    if (rows[i] == rows[j])
+                        Assert.True(Math.Abs(c[i] - c[j]) >= (widths[i] + widths[j]) / 2, $"{texts[i]} ile {texts[j]} üst üste");
+            }
+        }
+        // İçerideki rozet yerinden oynamaz
+        Assert.Equal(w / 2, PlotLayout.ClampBadgeCenterPx(w / 2, PlotLayout.BadgeWidthPx("f₀", font), w));
+    }
+
+    [Theory]
+    [InlineData(135, 12, 1)]    // kâğıttaki geçici durum grafiği (230 − 95)
+    [InlineData(205, 14, 1)]    // kâğıttaki rezonans eğrisi (300 − 95)
+    [InlineData(205, 14, 3)]    // yüksek Q: f₁ f₀ f₂ üç satırda
+    [InlineData(130, 14, 2)]    // ölçü bilinmiyor (varsayılan)
+    [InlineData(400, 12, 1)]    // büyütülmüş pencere
+    public void TopBand_BadgesFitBetweenTheCurveAndTheTopEdge(double h, double font, int rowCount)
+    {
+        double axisMin = -1.5, dataMax = 10.5;          // veri 0…10, altında ve üstünde pay
+        double badgeH = PlotLayout.BadgeHeightPx(font);
+        var (axisMax, centers) = PlotLayout.TopBandPx(axisMin, dataMax, rowCount, h, badgeH);
+        Assert.Equal(rowCount, centers.Length);
+        double Px(double y) => (axisMax - y) / (axisMax - axisMin) * h;   // üst kenardan piksel
+        double curveTopPx = Px(dataMax);
+        foreach (double c in centers)
+        {
+            double top = Px(c) - badgeH / 2, bottom = Px(c) + badgeH / 2;
+            Assert.True(top >= 2, $"rozet üst kenara yapışık/taşıyor: {top:F1} px");
+            Assert.True(bottom <= curveTopPx - 2, $"rozet eğriye biniyor: {bottom:F1} > {curveTopPx:F1}");
+        }
+        for (int r = 1; r < centers.Length; r++)
+            Assert.True(Px(centers[r]) - Px(centers[r - 1]) >= badgeH, "satırlar üst üste");
+    }
+
+    [Theory]
+    [InlineData(0.8, 1.2, 0.5, 2.0, true)]      // sağda boşluk çok
+    [InlineData(4.0, 4.6, 0.5, 5.0, false)]     // f₂ sağ kenara yakın: solda
+    [InlineData(0.95, 1.05, 0.5, 1.5, true)]    // simetrik: sağda
+    public void HalfPowerLabel_GoesInsideThePlot_OnTheSideAwayFromTheCurve(double f1, double f2, double left, double right, bool expectRight)
+    {
+        bool onRight = PlotLayout.HalfPowerLabelOnRight(left, right, f1, f2);
+        Assert.Equal(expectRight, onRight);
+
+        double w = 530, labelW = PlotLayout.BadgeWidthPx("0,707·I_max", 12);
+        var (bl, br) = PlotLayout.HalfPowerLabelBoxPx(onRight, labelW, w);
+        Assert.True(bl >= 0 && br <= w, "etiket çizim alanının dışında (eksen sayılarının üstünde)");
+        double f1Px = (f1 - left) / (right - left) * w, f2Px = (f2 - left) / (right - left) * w;
+        Assert.True(br <= f1Px || bl >= f2Px, $"etiket eğrinin 0,707 üstündeki kısmına biniyor: [{bl:F0}, {br:F0}] / [{f1Px:F0}, {f2Px:F0}]");
+    }
+
     // ── Güç üçgeni: kenarlarda değerler, kompanzasyon yazıları, çakışma yok ──
 
     public static IEnumerable<object?[]> TriangleCases() => new[]

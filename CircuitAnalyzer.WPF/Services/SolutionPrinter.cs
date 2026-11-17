@@ -78,6 +78,9 @@ namespace CircuitAnalyzer.WPF.Services
             doc.Background = brushBg;
             doc.Foreground = brushPrimary;
 
+            // Sonuç tablolarının başlığı ve tablosu (sayfa sonunda birlikte tutulur)
+            var tableGroups = new List<(Paragraph BreakTarget, Paragraph Heading, Table Table)>();
+
             // ═══════════════════════════════════════════════════════
             //  1. ÜST BAŞLIK (Logo + Başlık + Dosya/Tarih)
             // ═══════════════════════════════════════════════════════
@@ -408,6 +411,20 @@ namespace CircuitAnalyzer.WPF.Services
 
                     if (hasVoltages || hasCurrents || hasPower)
                     {
+                        Paragraph TableHeading(string text, double top)
+                        {
+                            var p = new Paragraph(new Bold(new Run(text)))
+                            {
+                                FontSize = 13,
+                                Foreground = brushPrimary,
+                                Margin = new Thickness(0, top, 0, 4),
+                                KeepWithNext = true,
+                                KeepTogether = true
+                            };
+                            doc.Blocks.Add(p);
+                            return p;
+                        }
+
                         var pResTitle = new Paragraph(new Run("Sonuçlar"))
                         {
                             FontSize = 15,
@@ -443,13 +460,7 @@ namespace CircuitAnalyzer.WPF.Services
                         // Düğüm Gerilimleri Tablosu
                         if (hasVoltages)
                         {
-                            var pSub = new Paragraph(new Bold(new Run("Düğüm Gerilimleri")))
-                            {
-                                FontSize = 13,
-                                Foreground = brushPrimary,
-                                Margin = new Thickness(0, 4, 0, 4)
-                            };
-                            doc.Blocks.Add(pSub);
+                            var pSub = TableHeading("Düğüm Gerilimleri", 4);
 
                             var tblVoltages = CreateTable(doc, new[] { "Düğüm", "Gerilim" }, new[] { 240.0, 200.0 });
                             var rg = tblVoltages.RowGroups[0];
@@ -458,18 +469,13 @@ namespace CircuitAnalyzer.WPF.Services
                                 rg.Rows.Add(CreateRow(doc, new[] { name, value }));
                             }
                             doc.Blocks.Add(tblVoltages);
+                            tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pSub, pSub, tblVoltages));
                         }
 
                         // Eleman Akımları Tablosu
                         if (hasCurrents)
                         {
-                            var pSub = new Paragraph(new Bold(new Run("Eleman Akımları")))
-                            {
-                                FontSize = 13,
-                                Foreground = brushPrimary,
-                                Margin = new Thickness(0, 8, 0, 4)
-                            };
-                            doc.Blocks.Add(pSub);
+                            var pSub = TableHeading("Eleman Akımları", 8);
 
                             var tblCurrents = CreateTable(doc, new[] { "Eleman", "Akım", "Yön" }, new[] { 100.0, 160.0, 120.0 });
                             var rg = tblCurrents.RowGroups[0];
@@ -478,18 +484,13 @@ namespace CircuitAnalyzer.WPF.Services
                                 rg.Rows.Add(CreateRow(doc, new[] { name, value, direction }));
                             }
                             doc.Blocks.Add(tblCurrents);
+                            tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pSub, pSub, tblCurrents));
                         }
 
                         // Güç Analizi Tablosu
                         if (hasPower)
                         {
-                            var pSub = new Paragraph(new Bold(new Run("Güç Analizi")))
-                            {
-                                FontSize = 13,
-                                Foreground = brushPrimary,
-                                Margin = new Thickness(0, 8, 0, 4)
-                            };
-                            doc.Blocks.Add(pSub);
+                            var pSub = TableHeading("Güç Analizi", 8);
 
                             var tblPower = CreateTable(doc,
                                 new[] { "Eleman", "Aktif Güç", "Reaktif Güç", "Görünür Güç", "cos φ", "Rol" },
@@ -500,6 +501,7 @@ namespace CircuitAnalyzer.WPF.Services
                                 rg.Rows.Add(CreateRow(doc, PrintContent.PowerRow(elem, ep)));
                             }
                             doc.Blocks.Add(tblPower);
+                            tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pSub, pSub, tblPower));
                         }
                     }
                 }
@@ -529,7 +531,80 @@ namespace CircuitAnalyzer.WPF.Services
             pFooter.Inlines.Add(new Run(AppInfo.Disclaimer));
             doc.Blocks.Add(pFooter);
 
+            KeepTablesWithHeadings(doc, tableGroups);
             return doc;
+        }
+
+        /// <summary>
+        /// Tablo başlığı sayfa sonunda tek başına kalmasın, sayfaya sığan tablo bölünmesin
+        /// (son satırı yeni sayfaya tek başına düşmesin). FlowDocument'ta tablonun "birlikte tut"
+        /// özelliği yoktur ve paragrafın KeepWithNext'i tabloya uygulanmaz; bu yüzden belge A4'te
+        /// sayfalanır, bölünen tablonun başlığına sayfa sonu konur ve yeniden sayfalanarak sınanır.
+        /// Karar <see cref="PrintContent.TableBreakHelps"/>'te. İlk tabloda sayfa sonu "Sonuçlar"
+        /// başlığının önüne konur (<paramref name="groups"/>'taki BreakTarget): o başlık da tablosuyla kalır.
+        /// </summary>
+        private static void KeepTablesWithHeadings(FlowDocument doc, List<(Paragraph BreakTarget, Paragraph Heading, Table Table)> groups)
+        {
+            if (groups.Count == 0)
+                return;
+            try
+            {
+                foreach (var (target, _, table) in groups)
+                {
+                    var before = Placement(doc, target, table);
+                    if (!PrintContent.TableIsSplit(before))
+                        continue;
+                    target.BreakPageBefore = true;
+                    var after = Placement(doc, target, table);
+                    if (!PrintContent.TableBreakHelps(before, after))
+                        target.BreakPageBefore = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Sayfalama ölçülemezse belge yine basılır (yalnız sayfa sonları düzeltilmez)
+                System.Diagnostics.Debug.WriteLine($"Tablo sayfa sonları ayarlanamadı: {ex}");
+            }
+        }
+
+        private static TablePlacement Placement(FlowDocument doc, Paragraph heading, Table table)
+        {
+            var starts = PageStarts(doc);
+            var rows = table.RowGroups.SelectMany(g => g.Rows).ToList();
+            var first = rows.Count > 1 ? rows[1] : rows[0];   // satır 0 sütun başlıklarıdır
+            return new TablePlacement(PageOf(starts, heading), PageOf(starts, first), PageOf(starts, rows[^1]));
+        }
+
+        /// <summary>
+        /// Tek satırlık öğenin (başlık, tablo satırı) sayfası. Sayfa başı konumu öğenin ilk yazı
+        /// konumudur (öğenin başlangıcından sonra); bu yüzden öğenin sonu ile karşılaştırılır.
+        /// </summary>
+        internal static int PageOf(IReadOnlyList<TextPointer> pageStarts, TextElement element) =>
+            PageOf(pageStarts, element.ContentEnd);
+
+        /// <summary>Belgeyi A4'te sayfalar; her sayfanın başladığı içerik konumu.</summary>
+        internal static List<TextPointer> PageStarts(FlowDocument doc)
+        {
+            var paginator = (DynamicDocumentPaginator)((IDocumentPaginatorSource)doc).DocumentPaginator;
+            paginator.PageSize = new Size(doc.PageWidth, doc.PageHeight);
+            paginator.ComputePageCount();
+            var starts = new List<TextPointer>();
+            for (int i = 0; i < paginator.PageCount; i++)
+            {
+                var page = paginator.GetPage(i);
+                starts.Add(paginator.GetPagePosition(page) as TextPointer ?? doc.ContentStart);
+            }
+            return starts;
+        }
+
+        /// <summary>Konumun bulunduğu sayfa (0'dan).</summary>
+        internal static int PageOf(IReadOnlyList<TextPointer> pageStarts, TextPointer position)
+        {
+            int page = 0;
+            for (int i = 1; i < pageStarts.Count; i++)
+                if (pageStarts[i].CompareTo(position) <= 0)
+                    page = i;
+            return page;
         }
 
         /// <summary>Geçici durum tablolarının üstündeki notun etiketi (testler bulur).</summary>
@@ -540,6 +615,10 @@ namespace CircuitAnalyzer.WPF.Services
 
         /// <summary>Güç üçgeni tuvalinin yüksekliği (DIP).</summary>
         internal const double TriangleHeight = 240;
+
+        /// <summary>Kâğıttaki geçici durum grafiğinin (her büyüklük) ve rezonans eğrisinin yüksekliği (DIP).</summary>
+        internal const double TransientPlotHeight = 230;
+        internal const double ResonancePlotHeight = 300;
 
         /// <summary>Grafik görüntüsünün çözünürlük katı: 600 DIP → 1800 px (~270 dpi kâğıtta).</summary>
         private const double PlotPixelScale = 3;
@@ -618,8 +697,9 @@ namespace CircuitAnalyzer.WPF.Services
                         bool isTop = i == 0;
                         panel.Children.Add(PlotImage(doc, plot =>
                             Views.TransientPlotView.BuildPlot(plot, data, q, isTop,
-                                Views.PlotMarkers.DataWidthPx(FigureWidth), c => ScottColor(doc, c)),
-                            FigureWidth, 230, i > 0 ? 6 : 0));
+                                Views.PlotMarkers.DataWidthPx(FigureWidth), Views.PlotMarkers.DataHeightPx(TransientPlotHeight),
+                                c => ScottColor(doc, c)),
+                            FigureWidth, TransientPlotHeight, i > 0 ? 6 : 0));
                     }
                     return panel;
                 }
@@ -631,8 +711,9 @@ namespace CircuitAnalyzer.WPF.Services
                     var (scale, unit) = Views.ResonanceCurveView.FreqUnitFor(data);
                     return PlotImage(doc, plot =>
                         Views.ResonanceCurveView.BuildPlot(plot, data, scale, unit,
-                            Views.PlotMarkers.DataWidthPx(FigureWidth), c => ScottColor(doc, c)),
-                        FigureWidth, 300, 0);
+                            Views.PlotMarkers.DataWidthPx(FigureWidth), Views.PlotMarkers.DataHeightPx(ResonancePlotHeight),
+                            c => ScottColor(doc, c)),
+                        FigureWidth, ResonancePlotHeight, 0);
                 }
                 case PrintFigureKind.PowerTriangle:
                 {

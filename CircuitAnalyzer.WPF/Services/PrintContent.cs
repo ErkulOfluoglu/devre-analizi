@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using CircuitAnalyzer.WPF.Views;
 
 namespace CircuitAnalyzer.WPF.Services
@@ -16,6 +15,9 @@ namespace CircuitAnalyzer.WPF.Services
 
     internal sealed record PrintFigure(PrintFigureKind Kind, string Caption);
 
+    /// <summary>Bir sonuç tablosunun sayfalanmış yeri: başlığın, ilk veri satırının ve son satırın sayfası (0'dan).</summary>
+    internal readonly record struct TablePlacement(int Heading, int FirstRow, int LastRow);
+
     /// <summary>
     /// Yazdırılan çözümün içerik kararları (saf fonksiyonlar; çizim <see cref="SolutionPrinter"/>'da):
     /// tablo hücreleri ekrandaki "Sonuçlar" sekmesiyle aynı biçimde, hangi şekillerin ve
@@ -23,11 +25,8 @@ namespace CircuitAnalyzer.WPF.Services
     /// </summary>
     internal static class PrintContent
     {
-        private static readonly Regex AsciiMinus = new(@"-(?=\d)", RegexOptions.Compiled);
-
         /// <summary>Sayıların önündeki ASCII '-' işaretini Unicode eksiye çevirir: "1∠-90° A" → "1∠−90° A".</summary>
-        public static string UnicodeMinus(string text) =>
-            string.IsNullOrEmpty(text) ? text ?? "" : AsciiMinus.Replace(text, "−");
+        public static string UnicodeMinus(string text) => TurkishNumber.DisplayMinus(text);
 
         /// <summary>Düğüm gerilimleri tablosu: ekrandaki sırayla ve başlıklarla (üç fazda faz adlarıyla).</summary>
         public static List<(string Name, string Value)> NodeRows(IReadOnlyDictionary<string, NodeVoltageDto>? nodes)
@@ -81,6 +80,18 @@ namespace CircuitAnalyzer.WPF.Services
                 role
             };
         }
+
+        /// <summary>Başlık + tablo sayfaya bölünmüş mü (başlık ile son satır ayrı sayfalarda).</summary>
+        public static bool TableIsSplit(TablePlacement p) => p.Heading != p.LastRow;
+
+        /// <summary>
+        /// Başlığın önüne konan sayfa sonu kalsın mı: tablo artık tek sayfada (sayfaya sığan tablo
+        /// bölünmez, son satırı tek başına kalmaz) ya da sayfadan uzun tabloda başlık en azından
+        /// ilk satırlarıyla buluştu. Aksi hâlde sayfa sonu boşuna yer harcar, kaldırılır.
+        /// </summary>
+        public static bool TableBreakHelps(TablePlacement before, TablePlacement after) =>
+            !TableIsSplit(after)
+            || (before.Heading != before.FirstRow && after.Heading == after.FirstRow);
 
         private static TransientAnalysisDto? Transient(AnalysisResponseDto r) => r.Transient ?? r.Results?.Transient;
 

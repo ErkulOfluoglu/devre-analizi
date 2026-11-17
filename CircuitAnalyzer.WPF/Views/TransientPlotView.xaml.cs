@@ -147,9 +147,28 @@ namespace CircuitAnalyzer.WPF.Views
             bool isTop,
             out ScottPlot.Plottables.Crosshair crosshair)
         {
-            crosshair = BuildPlot(wpfPlot.Plot, _data!, q, isTop,
-                PlotMarkers.DataWidthPx(wpfPlot.ActualWidth), GetThemeColor);
+            double w = PlotMarkers.DataWidthPx(wpfPlot.ActualWidth);
+            double h = PlotMarkers.DataHeightPx(wpfPlot.ActualHeight);
+            if (isTop) _topBuiltForSize = w > 0 && h > 0;
+            else _bottomBuiltForSize = w > 0 && h > 0;
+            crosshair = BuildPlot(wpfPlot.Plot, _data!, q, isTop, w, h, GetThemeColor);
             wpfPlot.Refresh();
+        }
+
+        // Çizim kontrolün gerçek ölçüsüyle mi kuruldu (yerleşimden önce kurulduysa ilk ölçüde yenilenir)
+        private bool _topBuiltForSize;
+        private bool _bottomBuiltForSize;
+
+        private void PlotTop_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (!_topBuiltForSize)
+                RenderTopPlot();
+        }
+
+        private void PlotBottom_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (!_bottomBuiltForSize)
+                RenderBottomPlot();
         }
 
         /// <summary>
@@ -163,6 +182,7 @@ namespace CircuitAnalyzer.WPF.Views
             TransientQuantityDto q,
             bool isTop,
             double dataWidth,
+            double dataHeight,
             Func<string, ScottPlot.Color> color)
         {
             plot.Clear();
@@ -260,18 +280,14 @@ namespace CircuitAnalyzer.WPF.Views
             double yMin = Math.Min(q.Before, Math.Min(q.Start, q.Final)) * ys;
             double yMax = Math.Max(q.Before, Math.Max(q.Start, q.Final)) * ys;
             double ySpan = Math.Max(1e-6, yMax - yMin);
-            double yTop = PlotMarkers.AddBadges(plot, markers, xMin, xMax, yMin, yMax + ySpan * 0.05, dataWidth,
-                12f, textCol, bgCol, gridCol);
-            plot.Axes.SetLimits(xMin, xMax, yMin - ySpan * 0.15, yTop);
+            double yBottom = yMin - ySpan * 0.15;
+            double yTop = PlotMarkers.AddBadges(plot, markers, xMin, xMax, yBottom, yMax + ySpan * 0.05,
+                dataWidth, dataHeight, 12f, textCol, bgCol, gridCol);
+            plot.Axes.SetLimits(xMin, xMax, yBottom, yTop);
 
-            // Alt eksen: okunur sayıda yuvarlak işaret (Türkçe ondalık virgülü)
+            // Eksen sayıları: okunur sayıda yuvarlak işaret (Türkçe ondalık virgülü, Unicode eksi)
             PlotMarkers.ApplyBottomTicks(plot, xMin, xMax, dataWidth);
-
-            var autoLeft = new ScottPlot.TickGenerators.NumericAutomatic
-            {
-                LabelFormatter = pos => TurkishNumber.Format(pos, "G4")
-            };
-            plot.Axes.Left.TickGenerator = autoLeft;
+            PlotMarkers.ApplyLeftTicks(plot);
 
             // Crosshair (fare ile gezinme)
             var crosshair = plot.Add.Crosshair(0, 0);
@@ -351,7 +367,7 @@ namespace CircuitAnalyzer.WPF.Views
             crosshair.IsVisible = true;
             wpfPlot.Refresh();
 
-            txtHover.Text = $"t = {TurkishNumber.Format(tScaled, "G4")} {_timeUnit}, {q.Label} = {TurkishNumber.Format(val, "G4")} {yUnit}";
+            txtHover.Text = $"t = {TurkishNumber.FormatDisplay(tScaled, "G4")} {_timeUnit}, {q.Label} = {TurkishNumber.FormatDisplay(val, "G4")} {yUnit}";
             SubscriptText.Apply(txtHover);
         }
 

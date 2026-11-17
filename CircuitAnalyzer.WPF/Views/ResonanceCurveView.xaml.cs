@@ -54,9 +54,20 @@ namespace CircuitAnalyzer.WPF.Views
         {
             if (_data == null) return;
 
-            _crosshair = BuildPlot(PlotResonance.Plot, _data, _freqScale, _freqUnit,
-                PlotMarkers.DataWidthPx(PlotResonance.ActualWidth), GetThemeColor);
+            double w = PlotMarkers.DataWidthPx(PlotResonance.ActualWidth);
+            double h = PlotMarkers.DataHeightPx(PlotResonance.ActualHeight);
+            _builtForSize = w > 0 && h > 0;
+            _crosshair = BuildPlot(PlotResonance.Plot, _data, _freqScale, _freqUnit, w, h, GetThemeColor);
             PlotResonance.Refresh();
+        }
+
+        /// <summary>Çizim, kontrolün gerçek ölçüsüyle mi kuruldu (yerleşimden önce kurulduysa ilk ölçüde yenilenir).</summary>
+        private bool _builtForSize;
+
+        private void PlotResonance_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (!_builtForSize && _data != null)
+                RenderPlot();
         }
 
         /// <summary>Eğrinin frekans birimi: en büyük frekans 1 MHz ve üstüyse MHz, 1 kHz ve üstüyse kHz.</summary>
@@ -76,7 +87,7 @@ namespace CircuitAnalyzer.WPF.Views
         /// </summary>
         internal static ScottPlot.Plottables.Crosshair BuildPlot(
             Plot plot, ResonanceDto data, double freqScale, string freqUnit,
-            double dataWidth, Func<string, ScottPlot.Color> color)
+            double dataWidth, double dataHeight, Func<string, ScottPlot.Color> color)
         {
             plot.Clear();
 
@@ -151,9 +162,10 @@ namespace CircuitAnalyzer.WPF.Views
                 hl.LinePattern = ScottPlot.LinePattern.Dashed;
                 hl.Color = markerCol;
                 hl.LineWidth = 1.0f;
-                // Eksen paralelde Ω, seride A: etiket neyin 0,707 katı olduğunu söylesin
-                hl.Text = isParallel ? "0,707·Z₀" : "0,707·I_max";
+                // Etiketi eksen sayılarının üstüne değil, çizim alanına (eksen sınırları belli olunca)
             }
+            // Eksen paralelde Ω, seride A: etiket neyin 0,707 katı olduğunu söylesin
+            string cutoffText = isParallel ? "0,707·Z₀" : "0,707·I_max";
 
             // Eğri noktalarını çiz
             var curve = data.Curve;
@@ -189,9 +201,12 @@ namespace CircuitAnalyzer.WPF.Views
                 double left = xMin - xSpan * 0.05, right = xMax + xSpan * 0.05;
                 double bottom = Math.Max(0, yMin - ySpan * 0.1);
                 double yTop = PlotMarkers.AddBadges(plot, markers, left, right, bottom, yMax + ySpan * 0.05,
-                    dataWidth, 14f, textCol, bgCol, gridCol);
+                    dataWidth, dataHeight, 14f, textCol, bgCol, gridCol);
                 plot.Axes.SetLimits(left, right, bottom, yTop);
                 PlotMarkers.ApplyBottomTicks(plot, left, right, dataWidth);
+                if (cutoffLevel > 0)
+                    PlotMarkers.AddHalfPowerLabel(plot, cutoffText, cutoffLevel, left, right,
+                        f1 * freqScale, f2 * freqScale, 12f, textCol, bgCol, gridCol);
             }
             else
             {
@@ -199,9 +214,13 @@ namespace CircuitAnalyzer.WPF.Views
                 double span = data.Bw > 0 ? data.Bw * freqScale * 3 : Math.Max(100 * freqScale, xCenter * 0.5);
                 double yData = Math.Max(1.0, peak > 0 ? peak * 1.05 : 1.0);
                 double left = Math.Max(0, xCenter - span), right = xCenter + span;
-                double yTop = PlotMarkers.AddBadges(plot, markers, left, right, 0, yData, dataWidth, 14f, textCol, bgCol, gridCol);
+                double yTop = PlotMarkers.AddBadges(plot, markers, left, right, 0, yData, dataWidth, dataHeight,
+                    14f, textCol, bgCol, gridCol);
                 plot.Axes.SetLimits(left, right, 0, yTop);
                 PlotMarkers.ApplyBottomTicks(plot, left, right, dataWidth);
+                if (cutoffLevel > 0)
+                    PlotMarkers.AddHalfPowerLabel(plot, cutoffText, cutoffLevel, left, right,
+                        f1 * freqScale, f2 * freqScale, 12f, textCol, bgCol, gridCol);
             }
 
             // Eksen ve başlık
@@ -209,12 +228,8 @@ namespace CircuitAnalyzer.WPF.Views
             plot.XLabel($"Frekans ({freqUnit})");
             plot.YLabel(isParallel ? "Empedans (Ω)" : "Akım (A)");
 
-            // Sayı biçimlendirici (Türkçe ondalık virgülü); alt eksen yukarıda (ApplyBottomTicks)
-            var autoLeft = new ScottPlot.TickGenerators.NumericAutomatic
-            {
-                LabelFormatter = pos => TurkishNumber.Format(pos, "G4")
-            };
-            plot.Axes.Left.TickGenerator = autoLeft;
+            // Sayı biçimlendirici (Türkçe ondalık virgülü, Unicode eksi); alt eksen yukarıda (ApplyBottomTicks)
+            PlotMarkers.ApplyLeftTicks(plot);
 
             // Crosshair (fare ile gezinme)
             var crosshair = plot.Add.Crosshair(0, 0);

@@ -32,6 +32,20 @@ namespace CircuitAnalyzer.WPF.Services
                 : value.ToString(format, Culture);
         }
 
+        private static readonly Regex AsciiMinusRegex = new(@"-(?=\d)", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Öğrencinin gördüğü sayıların önündeki ASCII '-' işaretini Unicode eksiye ("−") çevirir:
+        /// "1∠-90° A" → "1∠−90° A". Yalnız gösterim içindir; ayrıştırıcılar (<see cref="TryParse"/>,
+        /// <see cref="TryParseSpice"/>) iki işareti de kabul eder.
+        /// </summary>
+        public static string DisplayMinus(string? text) =>
+            string.IsNullOrEmpty(text) ? text ?? string.Empty : AsciiMinusRegex.Replace(text, "−");
+
+        /// <summary><see cref="Format"/> gibi, ama ekranda gösterilecek: eksi işareti Unicode "−".</summary>
+        public static string FormatDisplay(double value, string? format = null) =>
+            DisplayMinus(Format(value, format));
+
         /// <summary>
         /// Sayısal metin içerisindeki iki basamak arasındaki ondalık noktalarını virgüle çevirir.
         /// Örnek: "10.09 V" -> "10,09 V", "3.5-j4.5" -> "3,5-j4,5".

@@ -333,7 +333,119 @@ public class PrintOutputTests
         });
     }
 
+    // ── 5. Sayfa sonları: tablo başlığı tablosuyla, sayfaya sığan tablo tek sayfada ──
+
+    [Fact]
+    public void TableBreakDecision_KeepsTheBreakOnlyWhenItHelps()
+    {
+        Assert.False(PrintContent.TableIsSplit(new TablePlacement(1, 1, 1)));
+        Assert.True(PrintContent.TableIsSplit(new TablePlacement(1, 2, 2)));   // başlık tek başına
+        Assert.True(PrintContent.TableIsSplit(new TablePlacement(1, 1, 2)));   // son satır(lar) yeni sayfada
+
+        // Sığan tablo: sayfa sonuyla tek sayfada → kalır
+        Assert.True(PrintContent.TableBreakHelps(new TablePlacement(1, 1, 2), new TablePlacement(2, 2, 2)));
+        // Uzun tablo, başlık zaten satırlarıyla: sayfa sonu bir şey kazandırmaz → kaldırılır
+        Assert.False(PrintContent.TableBreakHelps(new TablePlacement(1, 1, 2), new TablePlacement(2, 2, 3)));
+        // Uzun tablo, başlık tek başına kalmıştı: sayfa sonuyla satırlarına kavuşur → kalır
+        Assert.True(PrintContent.TableBreakHelps(new TablePlacement(1, 2, 3), new TablePlacement(2, 2, 3)));
+    }
+
+    private static List<(Paragraph Heading, Table Table)> TableGroups(FlowDocument doc)
+    {
+        var blocks = doc.Blocks.ToList();
+        var list = new List<(Paragraph, Table)>();
+        for (int i = 0; i + 1 < blocks.Count; i++)
+            if (blocks[i] is Paragraph p && blocks[i + 1] is Table t)
+                list.Add((p, t));
+        return list;
+    }
+
+    [Fact]
+    public void BuildDocument_TableHeadingStaysWithItsTable_AndSmallTablesAreNotSplit()
+    {
+        RunOnSta(() =>
+        {
+            var problems = new List<string>();
+            int checkedGroups = 0, splitAcrossBefore = 0;
+            // Anlatım uzadıkça tablolar sayfa sonunun üstünden kayar: her konumda sınanır
+            for (int filler = 0; filler <= 44; filler++)
+            {
+                var doc = SolutionPrinter.BuildDocument(new PrintInput { Response = TablesResponse(filler, powerRows: 6), Method = "Güç ve Güç Katsayısı" });
+                var starts = SolutionPrinter.PageStarts(doc);
+                var groups = TableGroups(doc);
+                foreach (var (heading, table) in groups)
+                {
+                    var rows = table.RowGroups[0].Rows;
+                    int h = SolutionPrinter.PageOf(starts, heading);
+                    int last = SolutionPrinter.PageOf(starts, rows[^1]);
+                    checkedGroups++;
+                    if (heading.BreakPageBefore) splitAcrossBefore++;
+                    if (h != last)
+                        problems.Add($"dolgu {filler}: '{new TextRange(heading.ContentStart, heading.ContentEnd).Text}' s.{h}, son satır s.{last}");
+                }
+
+                // "Sonuçlar" başlığı da ilk tablosundan ayrı sayfada kalmaz
+                var results = doc.Blocks.OfType<Paragraph>().Single(b => IsParagraphWithText(b, "Sonuçlar"));
+                if (results.BreakPageBefore) splitAcrossBefore++;
+                int resultsPage = SolutionPrinter.PageOf(starts, results);
+                int firstHeadingPage = SolutionPrinter.PageOf(starts, groups[0].Heading);
+                if (resultsPage != firstHeadingPage)
+                    problems.Add($"dolgu {filler}: 'Sonuçlar' s.{resultsPage}, ilk tablo başlığı s.{firstHeadingPage}");
+            }
+            Assert.Equal(45 * 3, checkedGroups);
+            Assert.Empty(problems);
+            Assert.True(splitAcrossBefore > 0, "hiçbir tablo sayfa sonuna denk gelmedi; dolgu aralığı sınamıyor");
+        });
+    }
+
+    [Fact]
+    public void BuildDocument_TableLongerThanAPage_KeepsItsHeadingWithTheFirstRows()
+    {
+        RunOnSta(() =>
+        {
+            for (int filler = 0; filler <= 40; filler += 4)
+            {
+                var doc = SolutionPrinter.BuildDocument(new PrintInput { Response = TablesResponse(filler, powerRows: 50), Method = "Güç ve Güç Katsayısı" });
+                var starts = SolutionPrinter.PageStarts(doc);
+                var (heading, table) = TableGroups(doc).Last();
+                var rows = table.RowGroups[0].Rows;
+                Assert.Equal(51, rows.Count);
+                int h = SolutionPrinter.PageOf(starts, heading);
+                Assert.Equal(h, SolutionPrinter.PageOf(starts, rows[1]));
+                Assert.True(SolutionPrinter.PageOf(starts, rows[^1]) > h, "uzun tablo bölünmeliydi");
+            }
+        });
+    }
+
     // ── Elle kurulmuş yanıtlar (arka uç gerekmez) ──
+
+    /// <summary>Üç sonuç tablosu ve önünde <paramref name="filler"/> satırlık anlatım (şekil yok).</summary>
+    private static AnalysisResponseDto TablesResponse(int filler, int powerRows) => new()
+    {
+        Status = "success",
+        Results = new AnalysisResultsDto
+        {
+            NodeVoltages = Enumerable.Range(1, 4).ToDictionary(i => i.ToString(),
+                i => new NodeVoltageDto { Value = ResultValue.FromReal(i * 2.5), Unit = "V" }),
+            ElementCurrents = Enumerable.Range(1, 4).ToDictionary(i => $"R{i}",
+                i => new ElementCurrentDto { Value = ResultValue.FromReal(i * 0.001), Unit = "A", Direction = "1→0" }),
+            Power = new PowerAnalysisDto
+            {
+                Elements = Enumerable.Range(1, powerRows).ToDictionary(i => $"R{i}",
+                    i => new ElementPowerDto { ElementId = $"R{i}", Role = "load", ActivePower = 10 * i, ReactivePower = 0, ApparentPower = 10 * i, PowerFactor = 1 })
+            },
+            Explanation = new()
+            {
+                new ExplanationSectionDto
+                {
+                    Title = "Devreyi Tanıyalım",
+                    Blocks = Enumerable.Range(1, filler + 1)
+                        .Select(i => new ExplanationBlockDto { Kind = "text", Text = $"Açıklama satırı {i}." })
+                        .ToList()
+                }
+            }
+        }
+    };
 
     private static ExplanationSectionDto Section(string title) => new()
     {

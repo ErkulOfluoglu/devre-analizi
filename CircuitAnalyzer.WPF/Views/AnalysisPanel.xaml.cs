@@ -1145,9 +1145,10 @@ public partial class AnalysisPanel : UserControl
         SubscriptText.Apply(lbl);
         sp.Children.Add(lbl);
 
+        // Değerler arka uçtan da gelebilir ("3.033∠-72.34°"): eksi işareti ekranda Unicode "−"
         var val = new TextBlock
         {
-            Text = primaryValue,
+            Text = TurkishNumber.DisplayMinus(primaryValue),
             FontSize = 15,
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 2, 0, 0)
@@ -1160,7 +1161,7 @@ public partial class AnalysisPanel : UserControl
         {
             var sec = new TextBlock
             {
-                Text = secondaryValue,
+                Text = TurkishNumber.DisplayMinus(secondaryValue),
                 Margin = new Thickness(0, 2, 0, 0)
             };
             sec.SetResourceReference(StyleProperty, "Text.Caption");

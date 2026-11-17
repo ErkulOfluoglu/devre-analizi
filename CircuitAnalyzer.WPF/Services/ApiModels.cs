@@ -707,7 +707,8 @@ namespace CircuitAnalyzer.WPF.Services
     }
 
     /// <summary>
-    /// Sayıları mühendislik notasyonunda gösterir: 0.004 A → "4 mA".
+    /// Sayıları mühendislik notasyonunda gösterir: 0.004 A → "4 mA", −0.004 A → "−4 mA" (Unicode eksi).
+    /// Yalnız gösterim içindir; çıktısı hiçbir yerde sayıya geri ayrıştırılmaz.
     /// </summary>
     public static class EngFormat
     {
@@ -750,10 +751,13 @@ namespace CircuitAnalyzer.WPF.Services
             return (1e-12, "p");
         }
 
+        /// <summary>Öğrencinin gördüğü sayı: ondalık virgülü, eksi işareti Unicode "−" (ekranda ve kâğıtta aynı).</summary>
         private static string Number(double x, int significant)
         {
             string s = x.ToString("G" + significant, TurkishNumber.Culture);
-            return s.Contains('E') ? x.ToString("0.###", TurkishNumber.Culture) : s;
+            if (s.Contains('E'))
+                s = x.ToString("0.###", TurkishNumber.Culture);
+            return TurkishNumber.DisplayMinus(s);
         }
     }
 
