@@ -87,6 +87,8 @@ public class PrintOutputTests
     [InlineData("1∠-90° A", "1∠−90° A")]
     [InlineData("-4 mA", "−4 mA")]
     [InlineData("1,556∠-45° A", "1,556∠−45° A")]
+    [InlineData("3,5-j4,5", "3,5−j4,5")]
+    [InlineData("-j31,83", "−j31,83")]
     [InlineData("1→0", "1→0")]
     [InlineData("12 V", "12 V")]
     public void UnicodeMinus_ReplacesTheSignOfNumbersOnly(string input, string expected)
@@ -132,6 +134,114 @@ public class PrintOutputTests
         };
         var row = Assert.Single(PrintContent.CurrentRows(currents));
         Assert.Equal(("I_R1", "4 mA", "0→1"), row);
+    }
+
+    [Fact]
+    public void ThreePhaseTables_IncludePhaseLineLoadAndNeutralVoltages()
+    {
+        var tp = new ThreePhaseResultDto
+        {
+            Source = "Y",
+            Load = "Y",
+            Wires = 3,
+            PhaseVoltages = new()
+            {
+                ["R"] = new() { Real = 220, Imaginary = 0, Magnitude = 220, PhaseDegrees = 0 },
+                ["S"] = new() { Real = -110, Imaginary = -190.5256, Magnitude = 220, PhaseDegrees = -120 },
+            },
+            LineVoltages = new()
+            {
+                ["RS"] = new() { Real = 330, Imaginary = 190.5256, Magnitude = 381.05, PhaseDegrees = 30 },
+            },
+            LineCurrents = new()
+            {
+                ["R"] = new() { Real = 10, Imaginary = -5, Magnitude = 11.18, PhaseDegrees = -26.57 },
+            },
+            NeutralCurrent = new() { Real = 1, Imaginary = -2, Magnitude = 2.236, PhaseDegrees = -63.43 },
+            LoadVoltages = new()
+            {
+                ["R"] = new() { Real = 200, Imaginary = -10, Magnitude = 200.25, PhaseDegrees = -2.86 },
+            },
+            LoadNeutralVoltage = new() { Real = 20, Imaginary = 10, Magnitude = 22.36, PhaseDegrees = 26.57 },
+        };
+
+        var tables = PrintContent.ThreePhaseTables(tp);
+        Assert.Equal(new[]
+        {
+            "Kaynağın faz gerilimleri",
+            "Hat gerilimleri",
+            "Hat akımları",
+            "Yıldız yükün kol gerilimleri"
+        }, tables.Select(t => t.Header));
+
+        Assert.Equal(("V_RN", "220∠0° V"), tables[0].Rows[0]);
+        Assert.Equal(("V_SN", "220∠−120° V"), tables[0].Rows[1]);
+        Assert.Equal(("V_RS", "381,1∠30° V"), tables[1].Rows[0]);
+        Assert.Contains(("I_N", "2,236∠−63,43° A"), tables[2].Rows);
+        Assert.Equal(("V_RN′", "200,2∠−2,862° V"), tables[3].Rows[0]);
+        Assert.Equal(("V_N′N", "22,36∠26,57° V"), tables[3].Rows[1]);
+    }
+
+    [Fact]
+    public void WattmeterAndProbeRows_UseEngFormatAndUnicodeMinus()
+    {
+        var wattmeters = new List<WattmeterResultDto>
+        {
+            new() { Id = "W1", P = 1250.0 },
+            new() { Id = "W2", P = -320.0 },
+        };
+        Assert.Equal(new[] { ("W1", "1,25 kW"), ("W2", "−320 W") }, PrintContent.WattmeterRows(wattmeters));
+
+        var probes = new List<ProbeResultDto>
+        {
+            new() { ProbeId = "VP1", Type = "V", Value = ResultValue.FromReal(-0.015), Unit = "V" },
+            new() { ProbeId = "IP1", Type = "I", Value = ResultValue.FromComplex(new ComplexNumberDto { Real = 0, Imaginary = -0.004 }), Unit = "A" },
+        };
+        Assert.Equal(new[] { ("VP1", "−15 mV"), ("IP1", "4∠−90° mA") }, PrintContent.ProbeRows(probes));
+    }
+
+    [Fact]
+    public void BuildDocument_IncludesThreePhaseWattmeterAndProbeTables()
+    {
+        RunOnSta(() =>
+        {
+            var resp = new AnalysisResponseDto
+            {
+                Status = "success",
+                ThreePhase = new ThreePhaseResultDto
+                {
+                    Source = "Y",
+                    Load = "Y",
+                    Wires = 3,
+                    PhaseVoltages = new() { ["R"] = new() { Real = 220, Imaginary = 0 } },
+                    LineVoltages = new() { ["RS"] = new() { Real = 330, Imaginary = 190.5256 } },
+                    LoadVoltages = new() { ["R"] = new() { Real = 200, Imaginary = -10 } },
+                    LoadNeutralVoltage = new() { Real = 20, Imaginary = 10 },
+                    P = 1000, Q = 500, S = 1118, Pf = 0.894, PfType = "lagging"
+                },
+                Wattmeters = new() { new() { Id = "W1", P = -450 } },
+                Results = new AnalysisResultsDto
+                {
+                    ProbeResults = new()
+                    {
+                        new() { ProbeId = "VP1", Type = "V", Value = ResultValue.FromReal(-12.5), Unit = "V" }
+                    }
+                }
+            };
+
+            var doc = SolutionPrinter.BuildDocument(new PrintInput { Response = resp, Method = "Üç Faz" });
+            var headings = TableGroups(doc).Select(g => new TextRange(g.Heading.ContentStart, g.Heading.ContentEnd).Text.Trim()).ToList();
+            Assert.Contains("Kaynağın faz gerilimleri", headings);
+            Assert.Contains("Hat gerilimleri", headings);
+            Assert.Contains("Yıldız yükün kol gerilimleri", headings);
+            Assert.Contains("Wattmetre Okumaları", headings);
+            Assert.Contains("Ölçüm Probları", headings);
+
+            string text = new TextRange(doc.ContentStart, doc.ContentEnd).Text;
+            Assert.Contains("220∠0° V", text);
+            Assert.Contains("−450 W", text);
+            Assert.Contains("−12,5 V", text);
+        });
     }
 
     // ── 3. Geçici durum: tablolar t → ∞ değerleri ──
@@ -348,6 +458,12 @@ public class PrintOutputTests
         Assert.False(PrintContent.TableBreakHelps(new TablePlacement(1, 1, 2), new TablePlacement(2, 2, 3)));
         // Uzun tablo, başlık tek başına kalmıştı: sayfa sonuyla satırlarına kavuşur → kalır
         Assert.True(PrintContent.TableBreakHelps(new TablePlacement(1, 2, 3), new TablePlacement(2, 2, 3)));
+
+        // Dul satır (widow row) kararı: yalnız son veri satırı yeni sayfada tek başınaysa sondan bir önceki satırdan bölünür
+        Assert.Equal(-1, PrintContent.WidowBreakRowIndex(new[] { 0, 0, 0, 0 }));
+        Assert.Equal(-1, PrintContent.WidowBreakRowIndex(new[] { 0, 0, 1, 1 }));   // son sayfada zaten 2 satır var
+        Assert.Equal(2, PrintContent.WidowBreakRowIndex(new[] { 0, 0, 0, 1 }));    // son satır tek başına → 2. satırdan kır
+        Assert.Equal(-1, PrintContent.WidowBreakRowIndex(new[] { 0, 0, 1 }));      // yalnız 2 veri satırı varsa kırılmaz
     }
 
     private static List<(Paragraph Heading, Table Table)> TableGroups(FlowDocument doc)
@@ -399,21 +515,33 @@ public class PrintOutputTests
     }
 
     [Fact]
-    public void BuildDocument_TableLongerThanAPage_KeepsItsHeadingWithTheFirstRows()
+    public void BuildDocument_TableLongerThanAPage_KeepsItsHeadingWithTheFirstRows_AndNeverLeavesSingleWidowRow()
     {
         RunOnSta(() =>
         {
-            for (int filler = 0; filler <= 40; filler += 4)
+            int widowPrevented = 0;
+            for (int filler = 0; filler <= 44; filler++)
             {
                 var doc = SolutionPrinter.BuildDocument(new PrintInput { Response = TablesResponse(filler, powerRows: 50), Method = "Güç ve Güç Katsayısı" });
                 var starts = SolutionPrinter.PageStarts(doc);
                 var (heading, table) = TableGroups(doc).Last();
-                var rows = table.RowGroups[0].Rows;
-                Assert.Equal(51, rows.Count);
+                var dataRows = table.RowGroups.SelectMany(g => g.Rows.Skip(1)).ToList();
+                Assert.Equal(50, dataRows.Count);
                 int h = SolutionPrinter.PageOf(starts, heading);
-                Assert.Equal(h, SolutionPrinter.PageOf(starts, rows[1]));
-                Assert.True(SolutionPrinter.PageOf(starts, rows[^1]) > h, "uzun tablo bölünmeliydi");
+                Assert.Equal(h, SolutionPrinter.PageOf(starts, dataRows[0]));
+                int lastPage = SolutionPrinter.PageOf(starts, dataRows[^1]);
+                Assert.True(lastPage > h, "uzun tablo bölünmeliydi");
+                // Son sayfada en az 2 veri satırı olmalı (tek satır dul kalmaz)
+                Assert.Equal(lastPage, SolutionPrinter.PageOf(starts, dataRows[^2]));
+                if (table.RowGroups.Count > 1)
+                {
+                    widowPrevented++;
+                    // Devam grubundaki sütun başlığı da son sayfada yer alır
+                    var repHeader = table.RowGroups[1].Rows[0];
+                    Assert.Equal(lastPage, SolutionPrinter.PageOf(starts, repHeader));
+                }
             }
+            Assert.True(widowPrevented > 0, "hiçbir dolgu değerinde dul satır durumu oluşmadı");
         });
     }
 

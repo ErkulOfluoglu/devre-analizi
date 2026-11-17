@@ -81,6 +81,40 @@ namespace CircuitAnalyzer.WPF.Services
             };
         }
 
+        /// <summary>
+        /// Üç faz sonuçları: ekrandaki <see cref="AnalysisPanel.ThreePhaseSections"/> ile aynı
+        /// başlıklar ve satırlar; değerler Unicode eksi ile.
+        /// </summary>
+        public static List<(string Header, List<(string Name, string Value)> Rows)> ThreePhaseTables(ThreePhaseResultDto? tp)
+        {
+            if (tp == null)
+                return new();
+            return AnalysisPanel.ThreePhaseSections(tp)
+                .Select(sec => (sec.Header,
+                                sec.Items.Select(it => (it.Title, UnicodeMinus(it.Value))).ToList()))
+                .ToList();
+        }
+
+        /// <summary>Wattmetre okumaları tablosu: ekrandaki ad ve W birimiyle.</summary>
+        public static List<(string Name, string Value)> WattmeterRows(IReadOnlyList<WattmeterResultDto>? wattmeters)
+        {
+            if (wattmeters == null)
+                return new();
+            return wattmeters
+                .Select(w => (w.Id, UnicodeMinus(EngFormat.Format(w.P, "W"))))
+                .ToList();
+        }
+
+        /// <summary>Ölçüm probları tablosu: ekrandaki sırayla, önekli birimle.</summary>
+        public static List<(string Name, string Value)> ProbeRows(IReadOnlyList<ProbeResultDto>? probes)
+        {
+            if (probes == null)
+                return new();
+            return probes
+                .Select(p => (p.ProbeId, UnicodeMinus(EngFormat.Format(p.Value, p.Unit ?? ""))))
+                .ToList();
+        }
+
         /// <summary>Başlık + tablo sayfaya bölünmüş mü (başlık ile son satır ayrı sayfalarda).</summary>
         public static bool TableIsSplit(TablePlacement p) => p.Heading != p.LastRow;
 
@@ -92,6 +126,27 @@ namespace CircuitAnalyzer.WPF.Services
         public static bool TableBreakHelps(TablePlacement before, TablePlacement after) =>
             !TableIsSplit(after)
             || (before.Heading != before.FirstRow && after.Heading == after.FirstRow);
+
+        /// <summary>
+        /// Sayfadan uzun bir tabloda son veri satırı yeni sayfanın başında tek başına (dul satır)
+        /// kaldıysa, bir önceki satırın önüne sayfa sonu konarak son sayfaya en az 2 satır düşmesi
+        /// sağlanır. Dönüş: <c>BreakPageBefore = true</c> yapılacak satırın <paramref name="rowPages"/>
+        /// içindeki dizini (0 sütun başlığıdır; veri satırları 1'den başlar); tablo yalnızca tek bir
+        /// sayfada yer alıyorsa (sayfaya sığıyorsa) veya son sayfada zaten ≥ 2 satır varsa −1.
+        /// </summary>
+        public static int WidowBreakRowIndex(IReadOnlyList<int> rowPages)
+        {
+            // En az 1 başlık + 3 veri satırı olmalı ve tablo gerçekten sayfaya bölünmüş olmalı
+            // (ilk veri satırı ile son veri satırı farklı sayfalarda).
+            if (rowPages == null || rowPages.Count < 4)
+                return -1;
+            int firstDataPage = rowPages[1];
+            int lastPage = rowPages[^1];
+            int prevPage = rowPages[^2];
+            if (lastPage > firstDataPage && lastPage > prevPage)
+                return rowPages.Count - 2;
+            return -1;
+        }
 
         private static TransientAnalysisDto? Transient(AnalysisResponseDto r) => r.Transient ?? r.Results?.Transient;
 

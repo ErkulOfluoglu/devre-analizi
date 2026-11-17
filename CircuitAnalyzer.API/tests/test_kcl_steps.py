@@ -92,7 +92,7 @@ def test_symbolic_line_precedes_numeric_line(solve):
     sym = next(i for i, e in enumerate(eqs) if "(sembolik)" in e)
     assert "(sayısal)" in eqs[sym + 1]
     assert "Z_C1" in eqs[sym]
-    assert "(-j31,83)" in eqs[sym + 1]
+    assert "(−j31,83)" in eqs[sym + 1]
 
 
 def test_source_node_has_no_kcl_equation(solve):

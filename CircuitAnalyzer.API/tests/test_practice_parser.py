@@ -111,8 +111,11 @@ def test_parse_polar(text, expected_mag, expected_phase, expected_unit, expected
     "text, expected_complex, expected_unit",
     [
         ("0.92-2.89j", complex(0.92, -2.89), None),
+        ("3,5-j4,5", complex(3.5, -4.5), None),
+        ("3,5−j4,5", complex(3.5, -4.5), None),
         ("0.92 − j2.89 V", complex(0.92, -2.89), "V"),
         ("-j31.83", complex(0.0, -31.83), None),
+        ("−j31,83", complex(0.0, -31.83), None),
         ("5+5i", complex(5.0, 5.0), None),
         ("j", complex(0.0, 1.0), None),
         ("(0.92 - j2.89) mA", complex(0.92e-3, -2.89e-3), "A"),

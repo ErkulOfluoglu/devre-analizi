@@ -58,6 +58,7 @@ def test_isc_route_shows_shorted_circuit_equations():
     assert "V₂ = 10 / 2,5 = 4 V" in sec
     assert any(t.startswith("I_R3 = (V₂ − V₃)/R3 = (4 V − 0 V) / 1 kΩ = 4 mA") for t in sec)
     assert "G1 = 0,002·V_R2 = 0,002 · 4 V = 8 mA" in sec
+    assert any(t.startswith("I_R4 = V₃/R4 = 0 V / 4 kΩ = 0 mA") for t in sec)
     assert f"Isc = G1 + I_R3 {MINUS} I_R4 = 8 mA + 4 mA {MINUS} 0 mA = 12 mA" in sec
     # Eski satırlar korunur, türetmeden SONRA gelir
     assert sec.index("In = Isc = 12 mA") > sec.index(
@@ -101,7 +102,7 @@ def test_isc_route_with_current_controlled_voltage_source():
 
 def test_isc_route_cut_containing_ground():
     """
-    G1 devresi, port 1 (+) – 2 (−). Kısa devre: V₂ = V₁ = 10 V, V_R2 = 10 → G1 = 20 mA,
+    G1 devresi, port 1 (+) – 2 (−). Kısa devre: V₂ = V₁ = 10 V, V_R2 = 10 V → G1 = 20 mA,
       Düğüm 3: (V₃ − 10)/1000 + V₃/4000 − 0,02 = 0 → 1,25·V₃ = 30 → V₃ = 24 V.
       Düğüm 1'deki V1'in akımı bilinmez → küme {0, 1}:
         R1 (1 → 2) çıkar: −0; R2 (2 → 0) girer: +5 mA; G1 (0 → 3) çıkar: −20 mA;
@@ -110,6 +111,9 @@ def test_isc_route_cut_containing_ground():
     """
     sec = _step(_sections(G_CIRCUIT, ("1", "2")), "2. Adım")
     assert any("Düğüm 0 ve 1 birlikte ele alınarak" in t for t in sec)
+    assert f"V_R2 = V₂ {MINUS} V₀ = 10 V" in sec
+    assert any(t.startswith(f"I_R1 = (V₁ {MINUS} V₂)/R1 = (10 V {MINUS} 10 V) / 1 kΩ = 0 mA")
+               for t in sec)
     assert (f"Isc = {MINUS}I_R1 + I_R2 {MINUS} G1 + I_R4 = 0 mA + 5 mA {MINUS} 20 mA + 6 mA "
             f"= {MINUS}9 mA") in sec
     assert "Rth = 10 kΩ" in sec
@@ -244,9 +248,21 @@ def test_ac_isc_route_sums_phasors_in_rectangular_form():
         "V1 1 0 SINE(0 10 159.15494309189535 0 0 0)\nR1 1 2 1000\nC1 2 0 1u\n"
         "G1 0 3 V(C1) 0.002\nR3 2 3 1000\nR4 3 0 4000",
         mode="AC_PHASOR", frequency=159.15494309189535), "2. Adım")
+    assert any(t.startswith("I_R4 = V₃/R4 = 0 V / 4∠0° kΩ = 0 mA") for t in sec)
     assert (f"Isc = G1 + I_R3 {MINUS} I_R4 = (8 {MINUS} j4 mA) + (4 {MINUS} j2 mA) {MINUS} (0 mA) "
             f"= 12 {MINUS} j6 mA = 13,42∠{MINUS}26,57° mA") in sec
     assert f"In = Isc = 13,42∠{MINUS}26,57° mA" in sec
+
+
+def test_ac_test_source_route_uses_zth_in_intro():
+    """AC ölü portta test kaynağı giriş cümlesi Rth değil Zth der."""
+    sec = _step(_sections(
+        "R1 1 0 20\nC1 1 0 1u\nG1 0 1 V(R1) -0.03",
+        ("1", "0"), mode="AC_PHASOR", frequency=1000.0), "2. Adım")
+    intro = next(t for t in sec if "test kaynağı yöntemi kullanılır" in t)
+    assert "Zth = Vth / In = 0/0 belirsizdir" in intro
+    assert "Zth = V_test / I_test olur" in intro
+    assert "Rth" not in intro
 
 
 def test_unverified_derivation_falls_back_to_old_text(monkeypatch):

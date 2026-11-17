@@ -238,6 +238,11 @@ def _solve_square(s: _Section, ctx: _Ctx, M: int, Zs, V, I, Is, unit_i: str,
     syms = syms or [mesh_symbol(k + 1) for k in range(M)]
     if ctx.is_dc and M in (2, 3):
         Z2, V2, mult = integer_rows(Zs, V)
+        for r in range(M):
+            if mult[r] > 1 and all(abs(c.real - round(c.real)) <= 1e-9 for c in Zs[r]):
+                Z2[r, :] = Zs[r, :]
+                V2[r] = V[r]
+                mult[r] = 1
         if any(m > 1 for m in mult):
             _integer_step(s, labels, syms, Z2, V2, mult)
             Zs, V = Z2, V2

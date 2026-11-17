@@ -165,7 +165,7 @@ namespace CircuitAnalyzer.WPF.Views
                 // Etiketi eksen sayılarının üstüne değil, çizim alanına (eksen sınırları belli olunca)
             }
             // Eksen paralelde Ω, seride A: etiket neyin 0,707 katı olduğunu söylesin
-            string cutoffText = isParallel ? "0,707·Z₀" : "0,707·I_max";
+            string cutoffText = isParallel ? "0,707·Z₀" : "0,707·Iₘₐₓ";
 
             // Eğri noktalarını çiz
             var curve = data.Curve;

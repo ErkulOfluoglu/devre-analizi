@@ -32,12 +32,12 @@ namespace CircuitAnalyzer.WPF.Services
                 : value.ToString(format, Culture);
         }
 
-        private static readonly Regex AsciiMinusRegex = new(@"-(?=\d)", RegexOptions.Compiled);
+        private static readonly Regex AsciiMinusRegex = new(@"-(?=(?:\d|j\b|j\d))", RegexOptions.Compiled);
 
         /// <summary>
         /// Öğrencinin gördüğü sayıların önündeki ASCII '-' işaretini Unicode eksiye ("−") çevirir:
-        /// "1∠-90° A" → "1∠−90° A". Yalnız gösterim içindir; ayrıştırıcılar (<see cref="TryParse"/>,
-        /// <see cref="TryParseSpice"/>) iki işareti de kabul eder.
+        /// "1∠-90° A" → "1∠−90° A", "3,5-j4,5" → "3,5−j4,5". Yalnız gösterim içindir; ayrıştırıcılar
+        /// (<see cref="TryParse"/>, <see cref="TryParseSpice"/>) iki işareti de kabul eder.
         /// </summary>
         public static string DisplayMinus(string? text) =>
             string.IsNullOrEmpty(text) ? text ?? string.Empty : AsciiMinusRegex.Replace(text, "−");
@@ -47,15 +47,16 @@ namespace CircuitAnalyzer.WPF.Services
             DisplayMinus(Format(value, format));
 
         /// <summary>
-        /// Sayısal metin içerisindeki iki basamak arasındaki ondalık noktalarını virgüle çevirir.
-        /// Örnek: "10.09 V" -> "10,09 V", "3.5-j4.5" -> "3,5-j4,5".
+        /// Sayısal metin içerisindeki iki basamak arasındaki ondalık noktalarını virgüle,
+        /// sayıların ve sanal kısmın önündeki ASCII '-' işaretini Unicode eksiye ("−") çevirir.
+        /// Örnek: "10.09 V" -> "10,09 V", "3.5-j4.5" -> "3,5−j4,5".
         /// </summary>
         public static string NormalizeForDisplay(string? text)
         {
             if (string.IsNullOrEmpty(text))
                 return text ?? string.Empty;
 
-            return DecimalDotRegex.Replace(text, ",");
+            return DisplayMinus(DecimalDotRegex.Replace(text, ","));
         }
 
         /// <summary>

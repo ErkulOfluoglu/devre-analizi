@@ -174,7 +174,11 @@ def _make_control(ctx: _Ctx, e: ParsedElement) -> Union[Control, str]:
 
     if p["control_kind"] == "V":
         simp = _expr_text(diff)
-        line = f"{label} = {diff_sym}" + ("" if simp == diff_sym else f" = {simp}")
+        if not diff.c:
+            simp_shown = f"{simp} V"
+        else:
+            simp_shown = simp
+        line = f"{label} = {diff_sym}" + ("" if simp == diff_sym else f" = {simp_shown}")
         return Control(e, label, diff, paren(simp), [line])
 
     # ── Akım kontrolü ──

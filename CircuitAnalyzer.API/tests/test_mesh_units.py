@@ -32,6 +32,8 @@ def test_dependent_mesh_current_source_lines_stay_in_amperes():
                "* NODEPOS 2 340 140\n* NODEPOS 3 510 150\n* NODEPOS 4 340 200")
     assert "I₂ = −0,002 A" in t
     assert "I₂ = −2 mA" not in t
+    assert not any("500 ile çarpalım" in x for x in t)
+    assert "−I₂ = 0,002" in t
     assert any("Yönler ters" in x for x in t)
     assert any("I₁ = Δ₁/Δ" in x and x.endswith("= 1,2 mA") for x in t)
 

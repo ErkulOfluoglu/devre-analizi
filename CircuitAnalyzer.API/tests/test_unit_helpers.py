@@ -463,8 +463,10 @@ class TestStepGeneratorHelpers:
         """_format_complex_latex ile karmaşık sayıların LaTeX biçimlendirmesi."""
         assert _format_complex_latex(8.0, "V") == "8 \\; \\text{V}"
         assert _format_complex_latex(50 + 30j, "Ω").startswith("50 + j30")
-        assert _format_complex_latex(-2.5j) == "-j2,5"
-        assert _format_complex_latex(-31.83j) == "-j31,83"
+        assert _format_complex_latex(-2.5j) == "−j2,5"
+        assert _format_complex_latex(-31.83j) == "−j31,83"
+        assert _format_complex_latex(-1j) == "−j"
+        assert _format_complex_latex(50 - 30j, "Ω") == "50 − j30 \\; \\text{Ω}"
 
     def test_format_polar_latex(self):
         """_format_polar_latex ile kutupsal LaTeX formatı."""
@@ -483,9 +485,10 @@ class TestStepGeneratorHelpers:
 
     @pytest.mark.parametrize("val,expected", [
         (12, "12"),
-        (-31.83j, "-j31,83"),
+        (-31.83j, "−j31,83"),
         (14.14 + 14.14j, "14,14+j14,14"),
-        (3 - 4j, "3-j4"),
+        (3 - 4j, "3−j4"),
+        (3.5 - 4.5j, "3,5−j4,5"),
     ])
     def test_format_complex_text(self, val, expected):
         """_format_complex_text ile düz metin biçimlendirmesi."""
@@ -493,8 +496,9 @@ class TestStepGeneratorHelpers:
 
     @pytest.mark.parametrize("val,expected", [
         (1000, "1000"),
-        (-31.83j, "(-j31,83)"),
+        (-31.83j, "(−j31,83)"),
         (3 + 4j, "(3+j4)"),
+        (3 - 4j, "(3−j4)"),
         (-5, "(−5)"),
     ])
     def test_paren(self, val, expected):

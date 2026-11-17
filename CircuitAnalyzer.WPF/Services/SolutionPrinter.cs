@@ -402,18 +402,24 @@ namespace CircuitAnalyzer.WPF.Services
                 // ═══════════════════════════════════════════════════════
                 //  6. SONUÇ TABLOSU
                 // ═══════════════════════════════════════════════════════
-                if (input.Response?.Results != null)
+                if (input.Response?.Results != null || input.Response?.ThreePhaseResult != null || input.Response?.WattmeterResults != null)
                 {
                     var results = input.Response.Results;
-                    bool hasVoltages = results.NodeVoltages != null && results.NodeVoltages.Count > 0;
-                    bool hasCurrents = results.ElementCurrents != null && results.ElementCurrents.Count > 0;
-                    bool hasPower = results.Power?.Elements != null && results.Power.Elements.Count > 0;
+                    var threePhaseTables = PrintContent.ThreePhaseTables(input.Response.ThreePhaseResult);
+                    var wattmeterRows = PrintContent.WattmeterRows(input.Response.WattmeterResults);
+                    var probeRows = PrintContent.ProbeRows(results?.ProbeResults);
+                    bool hasThreePhase = threePhaseTables.Count > 0;
+                    bool hasVoltages = results?.NodeVoltages != null && results.NodeVoltages.Count > 0;
+                    bool hasWattmeters = wattmeterRows.Count > 0;
+                    bool hasCurrents = results?.ElementCurrents != null && results.ElementCurrents.Count > 0;
+                    bool hasProbes = probeRows.Count > 0;
+                    bool hasPower = results?.Power?.Elements != null && results.Power.Elements.Count > 0;
 
-                    if (hasVoltages || hasCurrents || hasPower)
+                    if (hasThreePhase || hasVoltages || hasWattmeters || hasCurrents || hasProbes || hasPower)
                     {
                         Paragraph TableHeading(string text, double top)
                         {
-                            var p = new Paragraph(new Bold(new Run(text)))
+                            var p = new Paragraph
                             {
                                 FontSize = 13,
                                 Foreground = brushPrimary,
@@ -421,6 +427,9 @@ namespace CircuitAnalyzer.WPF.Services
                                 KeepWithNext = true,
                                 KeepTogether = true
                             };
+                            var bold = new Bold();
+                            bold.Inlines.AddRange(SubscriptText.ToInlines(text, 13));
+                            p.Inlines.Add(bold);
                             doc.Blocks.Add(p);
                             return p;
                         }
@@ -457,14 +466,29 @@ namespace CircuitAnalyzer.WPF.Services
                             doc.Blocks.Add(pNote);
                         }
 
+                        // Üç Faz Tabloları (faz/hat/yük gerilimleri, nötr gerilimi, hat/faz akımları)
+                        foreach (var (header, rows) in threePhaseTables)
+                        {
+                            var pSub = TableHeading(header, tableGroups.Count == 0 ? 4 : 8);
+                            string col1 = header.Contains("akım", StringComparison.OrdinalIgnoreCase) ? "Akım" : "Gerilim";
+                            var tblTp = CreateTable(doc, new[] { "Büyüklük", col1 }, new[] { 240.0, 200.0 });
+                            var rg = tblTp.RowGroups[0];
+                            foreach (var (name, value) in rows)
+                            {
+                                rg.Rows.Add(CreateRow(doc, new[] { name, value }));
+                            }
+                            doc.Blocks.Add(tblTp);
+                            tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pSub, pSub, tblTp));
+                        }
+
                         // Düğüm Gerilimleri Tablosu
                         if (hasVoltages)
                         {
-                            var pSub = TableHeading("Düğüm Gerilimleri", 4);
+                            var pSub = TableHeading("Düğüm Gerilimleri", tableGroups.Count == 0 ? 4 : 8);
 
                             var tblVoltages = CreateTable(doc, new[] { "Düğüm", "Gerilim" }, new[] { 240.0, 200.0 });
                             var rg = tblVoltages.RowGroups[0];
-                            foreach (var (name, value) in PrintContent.NodeRows(results.NodeVoltages))
+                            foreach (var (name, value) in PrintContent.NodeRows(results!.NodeVoltages))
                             {
                                 rg.Rows.Add(CreateRow(doc, new[] { name, value }));
                             }
@@ -472,14 +496,29 @@ namespace CircuitAnalyzer.WPF.Services
                             tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pSub, pSub, tblVoltages));
                         }
 
+                        // Wattmetre Okumaları Tablosu
+                        if (hasWattmeters)
+                        {
+                            var pSub = TableHeading("Wattmetre Okumaları", tableGroups.Count == 0 ? 4 : 8);
+
+                            var tblWatt = CreateTable(doc, new[] { "Wattmetre", "Okuma" }, new[] { 240.0, 200.0 });
+                            var rg = tblWatt.RowGroups[0];
+                            foreach (var (name, value) in wattmeterRows)
+                            {
+                                rg.Rows.Add(CreateRow(doc, new[] { name, value }));
+                            }
+                            doc.Blocks.Add(tblWatt);
+                            tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pSub, pSub, tblWatt));
+                        }
+
                         // Eleman Akımları Tablosu
                         if (hasCurrents)
                         {
-                            var pSub = TableHeading("Eleman Akımları", 8);
+                            var pSub = TableHeading("Eleman Akımları", tableGroups.Count == 0 ? 4 : 8);
 
                             var tblCurrents = CreateTable(doc, new[] { "Eleman", "Akım", "Yön" }, new[] { 100.0, 160.0, 120.0 });
                             var rg = tblCurrents.RowGroups[0];
-                            foreach (var (name, value, direction) in PrintContent.CurrentRows(results.ElementCurrents))
+                            foreach (var (name, value, direction) in PrintContent.CurrentRows(results!.ElementCurrents))
                             {
                                 rg.Rows.Add(CreateRow(doc, new[] { name, value, direction }));
                             }
@@ -487,16 +526,31 @@ namespace CircuitAnalyzer.WPF.Services
                             tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pSub, pSub, tblCurrents));
                         }
 
+                        // Ölçüm Probları Tablosu
+                        if (hasProbes)
+                        {
+                            var pSub = TableHeading("Ölçüm Probları", tableGroups.Count == 0 ? 4 : 8);
+
+                            var tblProbes = CreateTable(doc, new[] { "Prob", "Değer" }, new[] { 240.0, 200.0 });
+                            var rg = tblProbes.RowGroups[0];
+                            foreach (var (name, value) in probeRows)
+                            {
+                                rg.Rows.Add(CreateRow(doc, new[] { name, value }));
+                            }
+                            doc.Blocks.Add(tblProbes);
+                            tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pSub, pSub, tblProbes));
+                        }
+
                         // Güç Analizi Tablosu
                         if (hasPower)
                         {
-                            var pSub = TableHeading("Güç Analizi", 8);
+                            var pSub = TableHeading("Güç Analizi", tableGroups.Count == 0 ? 4 : 8);
 
                             var tblPower = CreateTable(doc,
                                 new[] { "Eleman", "Aktif Güç", "Reaktif Güç", "Görünür Güç", "cos φ", "Rol" },
                                 new[] { 80.0, 105.0, 105.0, 105.0, 105.0, 70.0 });
                             var rg = tblPower.RowGroups[0];
-                            foreach (var (elem, ep) in results.Power!.Elements)
+                            foreach (var (elem, ep) in results!.Power!.Elements)
                             {
                                 rg.Rows.Add(CreateRow(doc, PrintContent.PowerRow(elem, ep)));
                             }
@@ -558,6 +612,18 @@ namespace CircuitAnalyzer.WPF.Services
                     var after = Placement(doc, target, table);
                     if (!PrintContent.TableBreakHelps(before, after))
                         target.BreakPageBefore = false;
+
+                    // Sayfadan uzun tablonun son satırı yeni sayfada tek başına (dul satır)
+                    // kaldıysa, sondan bir önceki satırı ikiye bölecek şekilde yeni sayfaya
+                    // taşı (yeni sayfada en az 2 satır kalsın).
+                    var starts = PageStarts(doc);
+                    var rows = table.RowGroups[0].Rows;
+                    var rowPages = rows.Select(r => PageOf(starts, r)).ToList();
+                    int widowBreakIdx = PrintContent.WidowBreakRowIndex(rowPages);
+                    if (widowBreakIdx >= 1 && widowBreakIdx < rows.Count)
+                    {
+                        SplitTableAtRow(doc, table, widowBreakIdx);
+                    }
                 }
             }
             catch (Exception ex)
@@ -573,6 +639,50 @@ namespace CircuitAnalyzer.WPF.Services
             var rows = table.RowGroups.SelectMany(g => g.Rows).ToList();
             var first = rows.Count > 1 ? rows[1] : rows[0];   // satır 0 sütun başlıklarıdır
             return new TablePlacement(PageOf(starts, heading), PageOf(starts, first), PageOf(starts, rows[^1]));
+        }
+
+        /// <summary>
+        /// Uzun bir tabloyu <paramref name="breakRowIndex"/> satırından yeni bir <see cref="TableRowGroup"/>'a
+        /// böler ve o grubun başına sütun başlıklarının bir kopyasını ekler. Böylece kalan boşluğa
+        /// yalnız 1 satır sığdığında eklenen başlık satırı yüzünden son iki veri satırı birlikte
+        /// yeni sayfaya geçer (son sayfada en az 2 veri satırı + tekrarlanan başlık bulunur).
+        /// </summary>
+        private static void SplitTableAtRow(FlowDocument doc, Table table, int breakRowIndex)
+        {
+            var rows = table.RowGroups[0].Rows;
+            if (breakRowIndex < 1 || breakRowIndex >= rows.Count)
+                return;
+
+            string[] headers = rows[0].Cells
+                .Select(c => new TextRange(c.ContentStart, c.ContentEnd).Text.Trim())
+                .ToArray();
+
+            var movingRows = new List<TableRow>();
+            while (rows.Count > breakRowIndex)
+            {
+                var r = rows[breakRowIndex];
+                rows.RemoveAt(breakRowIndex);
+                movingRows.Add(r);
+            }
+
+            var contGroup = new TableRowGroup();
+            contGroup.Rows.Add(CreateHeaderRow(doc, headers));
+            foreach (var r in movingRows)
+            {
+                contGroup.Rows.Add(r);
+            }
+            table.RowGroups.Add(contGroup);
+
+            // Tekrarlanan başlık satırı önceki sayfanın sonunda tek başına kaldıysa
+            // bir önceki satıra (ilk grubun son satırına) alt iç boşluk vererek onu da yeni sayfaya it.
+            var starts = PageStarts(doc);
+            if (PageOf(starts, contGroup.Rows[0]) < PageOf(starts, movingRows[0]) && rows.Count > 1)
+            {
+                foreach (var cell in rows[^1].Cells)
+                {
+                    cell.Padding = new Thickness(cell.Padding.Left, cell.Padding.Top, cell.Padding.Right, cell.Padding.Bottom + 28);
+                }
+            }
         }
 
         /// <summary>
@@ -774,10 +884,6 @@ namespace CircuitAnalyzer.WPF.Services
 
         private static Table CreateTable(FlowDocument doc, string[] headers, double[] widths)
         {
-            var brushSurfaceAlt = GetBrush(doc, "Brush.Bg.SurfaceAlt");
-            var brushPrimary = GetBrush(doc, "Brush.Text.Primary");
-            var brushBorder = GetBrush(doc, "Brush.Border.Default");
-
             var table = new Table
             {
                 CellSpacing = 0,
@@ -793,6 +899,17 @@ namespace CircuitAnalyzer.WPF.Services
             table.RowGroups.Add(group);
 
             // Başlık satırı
+            group.Rows.Add(CreateHeaderRow(doc, headers));
+
+            return table;
+        }
+
+        private static TableRow CreateHeaderRow(FlowDocument doc, string[] headers)
+        {
+            var brushSurfaceAlt = GetBrush(doc, "Brush.Bg.SurfaceAlt");
+            var brushPrimary = GetBrush(doc, "Brush.Text.Primary");
+            var brushBorder = GetBrush(doc, "Brush.Border.Default");
+
             var headerRow = new TableRow { Background = brushSurfaceAlt };
             foreach (string h in headers)
             {
@@ -805,9 +922,7 @@ namespace CircuitAnalyzer.WPF.Services
                 };
                 headerRow.Cells.Add(cell);
             }
-            group.Rows.Add(headerRow);
-
-            return table;
+            return headerRow;
         }
 
         private static TableRow CreateRow(FlowDocument doc, string[] values)

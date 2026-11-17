@@ -1251,10 +1251,12 @@ def _flow_text(p: str, n: str) -> str:
     return f"Düğüm {p} → Düğüm {n}"
 
 
-def _currents(ctx: _Ctx, mark: str = "", passive_only: bool = False) -> List[_Section]:
+def _currents(ctx: _Ctx, mark: str = "", passive_only: bool = False,
+              zero_unit: str = "A") -> List[_Section]:
     """
     Eleman akımları (Ohm yasası). mark: süperpozisyon adımının işareti (′, ″…) —
-    akım ve düğüm gerilimi adlarına eklenir; passive_only: kaynak satırları yazılmaz.
+    akım ve düğüm gerilimi adlarına eklenir; passive_only: kaynak satırları yazılmaz;
+    zero_unit: sıfır çıkan akımın gösterileceği birim (ör. KCL toplamındaki 'mA').
     """
     s = _Section("Eleman Akımları (Ohm Yasası)")
     s.text("Her elemanın akımı, uçlarındaki gerilim farkının empedansına bölümüdür: I = (V₊ − V₋)/Z.")
@@ -1296,7 +1298,8 @@ def _currents(ctx: _Ctx, mark: str = "", passive_only: bool = False) -> List[_Se
             extra_digits = extra_digits or d > 4
             diff_num = (eng(vp.real, 'V', d) if n == "0"
                         else f"({eng(vp.real, 'V', d)} {MINUS} {paren(eng(vn.real, 'V', d))})")
-            line = f"{name} = {diff_sym}/{lbl} = {diff_num} / {eng(z.real, 'Ω')} = {eng(cur.real, 'A')}"
+            cur_txt = f"0 {zero_unit}" if abs(cur.real) < 1e-15 else eng(cur.real, 'A')
+            line = f"{name} = {diff_sym}/{lbl} = {diff_num} / {eng(z.real, 'Ω')} = {cur_txt}"
             if cur.real >= 0:
                 s.math(f"{line}  ({_flow_text(p, n)})")
             else:
@@ -1305,7 +1308,8 @@ def _currents(ctx: _Ctx, mark: str = "", passive_only: bool = False) -> List[_Se
                        f"{eng(-cur.real, 'A')}, {_flow_text(n, p)}.")
         else:
             vd = vp - vn
-            s.math(f"{name} = {diff_sym}/{lbl} = {polar(vd, 'V')} / {polar(z, 'Ω')} = {polar(cur, 'A')}")
+            cur_txt = f"0 {zero_unit}" if abs(cur) < 1e-15 else polar(cur, 'A')
+            s.math(f"{name} = {diff_sym}/{lbl} = {polar(vd, 'V')} / {polar(z, 'Ω')} = {cur_txt}")
 
     if extra_digits:
         s.note(EXTRA_DIGITS_NOTE)
@@ -1393,7 +1397,7 @@ def _dependent_solution(ctx: _Ctx) -> List[_Section]:
     return [s] + _dependent_check(ctx)
 
 
-def _dependent_check(ctx: _Ctx) -> List[_Section]:
+def _dependent_check(ctx: _Ctx, zero_i_unit: str = "A") -> List[_Section]:
     """Bulunan değerlerle her bağımlı kaynağın çıkışını kontrol büyüklüğünden yeniden hesaplar."""
     by_id = {e.id: e for e in ctx.elements}
     chk = _Section("Bağımlı Kaynakların Kontrolü")
@@ -1417,8 +1421,10 @@ def _dependent_check(ctx: _Ctx) -> List[_Section]:
             actual, ou = ctx.node_value(e.node_positive) - ctx.node_value(e.node_negative), "V"
         if actual is None or not _close(out, actual, 1e-5):
             continue   # tutarsızsa yanlış bir türetme göstermeyiz
+        cv_txt = f"0 {zero_i_unit}" if cu == "A" and abs(cv) < 1e-15 else ctx.val(cv, cu)
+        out_txt = f"0 {zero_i_unit}" if ou == "A" and abs(out) < 1e-15 else ctx.val(out, ou)
         chk.math(f"{e.id} = {num(p['gain'])}·{_control_text(ctx, e)} = {num(p['gain'])} · "
-                 f"{paren(ctx.val(cv, cu))} = {ctx.val(out, ou)}")
+                 f"{paren(cv_txt)} = {out_txt}")
     if len(chk.blocks) > 1:
         chk.check("Bağımlı kaynak çıkışları, kontrol büyüklükleriyle tutarlı ✓")
         return [chk]
@@ -1598,6 +1604,12 @@ def _port_equations_unsafe(ctx: _Ctx, role: str) -> Optional[List[ExplanationBlo
     if not _close(total, target, 1e-4):
         return None
 
+    # Toplamın tüm terimleri aynı önekle (mA gibi); AC'de elle toplanabilsin diye
+    # dikdörtgensel biçimde. Sıfır olan akımlar da (Ohm yasası satırı dahil) aynı birimi alır.
+    from explainer.formatting import _prefix_for
+    scale, prefix = _prefix_for(max(abs(v) for _, _, v, _ in terms) or abs(target) or 1.0)
+    unit = f"{prefix}A"
+
     # ── Akımların gösterimi: kesen pasif elemanlar + bağımlı kaynakların kontrol elemanı ──
     shown_ids = {e.id for _, _, _, e in terms
                  if e.element_type not in CURRENT_SOURCES + DEPENDENT_CURRENT_OUTPUT}
@@ -1611,8 +1623,8 @@ def _port_equations_unsafe(ctx: _Ctx, role: str) -> Optional[List[ExplanationBlo
                    analysis_type=AnalysisType.NODAL, terminals=None, v=sc.v,
                    i={x: c for x, c in sc.i.items() if x in shown_ids},
                    results=AnalysisResults())
-    cur_blocks = _currents(cur_ctx, passive_only=True)[0].blocks[1:] if shown_ids else []
-    chk = _dependent_check(sc) if deps else []
+    cur_blocks = _currents(cur_ctx, passive_only=True, zero_unit=unit)[0].blocks[1:] if shown_ids else []
+    chk = _dependent_check(sc, zero_i_unit=unit) if deps else []
     chk_blocks = chk[0].blocks if chk else []
     for d in deps:
         if not any(bl.kind == "math" and bl.text.startswith(f"{d.id} = ") for bl in chk_blocks):
@@ -1661,11 +1673,6 @@ def _port_equations_unsafe(ctx: _Ctx, role: str) -> Optional[List[ExplanationBlo
              + (":" if ctx.is_dc else " (fazörler dikdörtgensel biçimde toplanır):"))
     sym = _join_terms([(MINUS if sg < 0 else "") + name for sg, name, _, _ in terms])
 
-    # Toplamın tüm terimleri aynı önekle (mA gibi); AC'de elle toplanabilsin diye
-    # dikdörtgensel biçimde
-    from explainer.formatting import _prefix_for
-    scale, prefix = _prefix_for(max(abs(v) for _, _, v, _ in terms) or abs(target) or 1.0)
-    unit = f"{prefix}A"
     # Birbirine yakın terimlerin farkında 4 basamak elle hesabı tutturmayabilir
     # (333,3 − 330 = 3,3 ama sonuç 3,333) → terimler gerektiği kadar basamakla
     digits = 4
@@ -1748,12 +1755,13 @@ def _dependent_rth(ctx: _Ctx, s: _Section, symbol: str, expected: complex,
         return False
     if zeroing_intro is not None:
         zeroing_intro()
+    th_sym = "Rth" if ctx.is_dc else "Zth"
     s.text(
         "Devrede bağımlı kaynak var ve bağımsız kaynak sıfırlandığında (ya da hiç yokken) "
-        "Vth = 0 ve In = 0 olur; Rth = Vth / In = 0/0 belirsizdir. Bu durumda test kaynağı "
+        f"Vth = 0 ve In = 0 olur; {th_sym} = Vth / In = 0/0 belirsizdir. Bu durumda test kaynağı "
         "yöntemi kullanılır: bağımlı kaynak SIFIRLANMAZ (aktif kalır), bağımsız kaynaklar "
         "sıfırlanır ve terminallere 1 V'luk bir test kaynağı bağlanır. Kaynağın devreye "
-        "verdiği akım I_test bulunur ve Rth = V_test / I_test olur.")
+        f"verdiği akım I_test bulunur ve {th_sym} = V_test / I_test olur.")
     s.math(f"V_test = {ctx.val(ex.v_test, 'V')}  (Düğüm {a} (+), Düğüm {b} (−))")
     shown = _port_equations(ctx, "test")
     if shown is not None:
