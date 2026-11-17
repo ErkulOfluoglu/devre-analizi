@@ -304,6 +304,8 @@ namespace CircuitAnalyzer.WPF
                 return;
             }
             base.OnClosing(e);
+            if (!e.Cancel)
+                SaveWindowPlacement();
         }
 
         /// <summary>

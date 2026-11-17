@@ -12,8 +12,21 @@ namespace CircuitAnalyzer.WPF.Services
     /// </summary>
     public sealed class BackendUnavailableException : Exception
     {
+        /// <summary>Hatanın türü (kullanıcıya gösterilecek metni seçer); bilinmiyorsa null.</summary>
+        public BackendFailure? Failure { get; }
+
+        /// <summary>Yalnız geliştirici için ayrıntı (çözücü çıktısı); kullanıcı mesajına konmaz.</summary>
+        public string? Detail { get; }
+
         public BackendUnavailableException(string message, Exception? inner = null)
             : base(message, inner) { }
+
+        public BackendUnavailableException(BackendFailure failure, string message, string? detail = null, Exception? inner = null)
+            : base(message, inner)
+        {
+            Failure = failure;
+            Detail = detail;
+        }
     }
 
     /// <summary>
@@ -207,14 +220,14 @@ namespace CircuitAnalyzer.WPF.Services
             }
             catch (HttpRequestException ex)
             {
-                throw new BackendUnavailableException(
-                    "Çözücüye bağlanılamadı. Çözücü kapanmış olabilir.", ex);
+                throw new BackendUnavailableException(BackendFailure.Unreachable,
+                    "Çözücüye bağlanılamadı. Çözücü kapanmış olabilir.", inner: ex);
             }
             catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
             {
-                throw new BackendUnavailableException(
+                throw new BackendUnavailableException(BackendFailure.Timeout,
                     timeoutMessage ?? "Çözücü zamanında yanıt vermedi (zaman aşımı). " +
-                    "Devre çok büyük olabilir.", ex);
+                    "Devre çok büyük olabilir.", inner: ex);
             }
 
             using (response)

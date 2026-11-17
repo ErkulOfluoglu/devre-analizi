@@ -32,7 +32,7 @@ namespace CircuitAnalyzer.WPF.Services
                 {
                     TargetAccessor = () => window?.ElementRail,
                     Title = "Elemanlar",
-                    Body = "Bir kategoriye tıklayın, açılan listeden elemanı seçin. Eklenen eleman çizim alanının ortasına gelir; sürükleyip yerleştirin."
+                    Body = "Bir kategoriye tıklayın, açılan listeden elemanı seçin. Eleman fareyi izler; çizim alanında istediğiniz yere tıklayıp bırakın. (R: döndür · Esc: vazgeç)"
                 },
                 new()
                 {

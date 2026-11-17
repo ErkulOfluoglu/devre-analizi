@@ -1570,8 +1570,40 @@ public partial class AnalysisPanel : UserControl
         return panel;
     }
 
+    /// <summary>Son hata kartındaki eylem düğmesi (ör. "Yeniden dene"); yoksa null. Testler için.</summary>
+    public Button? ErrorActionButton { get; private set; }
+
+    /// <summary>
+    /// Hata kartı gösterir. actionText ve action verilirse kartın altında ikincil bir düğme
+    /// (ör. "Yeniden dene") olur; basılınca düğme kapanır ve action çalışır.
+    /// </summary>
+    public void ShowError(string title, string message, string? actionText, Action? action)
+    {
+        ShowError(title, message);
+        if (actionText == null || action == null || ResultsContainer.Children.Count == 0 ||
+            ResultsContainer.Children[^1] is not Border { Child: StackPanel stack })
+            return;
+
+        var button = new Button
+        {
+            Content = actionText,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            MinHeight = 32,
+            Margin = new Thickness(0, 10, 0, 0),
+        };
+        button.SetResourceReference(StyleProperty, "Button.Secondary");
+        button.Click += (_, _) =>
+        {
+            button.IsEnabled = false;   // çift tıklama iki kez başlatmasın
+            action();
+        };
+        stack.Children.Add(button);
+        ErrorActionButton = button;
+    }
+
     public void ShowError(string title, string message)
     {
+        ErrorActionButton = null;
         if (CurrentAssistantView is { IsBusy: true } av)
             av.Cancel();
         CurrentAssistantView = null;
@@ -1622,6 +1654,7 @@ public partial class AnalysisPanel : UserControl
 
     private void ClearResultsContent()
     {
+        ErrorActionButton = null;
         BannerStale.Visibility = Visibility.Collapsed;
         ResultsScrollViewer.Opacity = 1.0;
         ResultsContainer.Children.Clear();

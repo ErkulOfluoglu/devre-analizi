@@ -36,7 +36,66 @@ namespace CircuitAnalyzer.WPF.Services
         private readonly StringBuilder _log = new();
         private readonly object _logLock = new();
 
+        /// <summary>Süren başlatma (aynı anda ikinci bir başlatma onu bekler, ikinci süreç açılmaz).</summary>
+        private Task<AnalysisApiClient>? _startTask;
+
+        /// <summary>Çalışan süreç kapanınca iptal olur (bekleyen istek zaman aşımını beklemesin).</summary>
+        private CancellationTokenSource _stoppedCts = new();
+
+        /// <summary>Dışarıdan verilen (ortam değişkeni) sunucu kullanılıyor: süreç bizim değil.</summary>
+        private bool _external;
+        private bool _disposed;
+
         public AnalysisApiClient? Client { get; private set; }
+
+        /// <summary>
+        /// Kaynak koddan mı çalışıyor (paketlenmiş çözücü yok, Python ile başlatılıyor ya da ortam
+        /// değişkeniyle dış sunucu verilmiş)? Yalnız o zaman hata metinlerinde Python ipucu verilir.
+        /// </summary>
+        public static bool IsDeveloperRun =>
+            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(UrlEnvVar)) ||
+            (!File.Exists(Path.Combine(AppContext.BaseDirectory, BundledExe)) &&
+             FindApiSourceDir(AppContext.BaseDirectory) != null);
+
+        /// <summary>
+        /// Çözücü hâlâ çalışıyor mu? (Dış sunucuda bilinemez: true.) Başlatılmadıysa false.
+        /// </summary>
+        public bool IsAlive
+        {
+            get
+            {
+                if (Client == null) return false;
+                if (_external) return true;
+                try { return _process is { HasExited: false }; }
+                catch (InvalidOperationException) { return false; }
+            }
+        }
+
+        /// <summary>Çözücü süreci kapanınca iptal olan belirteç (istekler buna bağlanır).</summary>
+        public CancellationToken StoppedToken => _stoppedCts.Token;
+
+        /// <summary>Çözücü sürecinin kimliği (testler için); süreç yoksa null.</summary>
+        internal int? ProcessId
+        {
+            get
+            {
+                try { return _process?.Id; }
+                catch (InvalidOperationException) { return null; }
+            }
+        }
+
+        /// <summary>
+        /// Çözücüyü (yeniden) başlatır: önceki süreç ve bağlantı kapatılır, sonra yenisi açılır.
+        /// Başlatma sürerken çağrılırsa yeni süreç açmaz, sürenin sonucunu bekler.
+        /// </summary>
+        /// <exception cref="BackendUnavailableException">Çözücü başlatılamazsa.</exception>
+        public Task<AnalysisApiClient> StartAsync(
+            IProgress<string>? progress = null, CancellationToken ct = default)
+        {
+            if (_startTask is { IsCompleted: false })
+                return _startTask;
+            return _startTask = StartCoreAsync(progress, ct);
+        }
 
         /// <summary>Çözücü süreç çıktısı (hata teşhisi için).</summary>
         public string LogText
@@ -44,13 +103,18 @@ namespace CircuitAnalyzer.WPF.Services
             get { lock (_logLock) return _log.ToString(); }
         }
 
-        /// <summary>
-        /// Çözücüyü hazırlar. Başarılıysa Client dolu döner.
-        /// </summary>
-        /// <exception cref="BackendUnavailableException">Çözücü başlatılamazsa.</exception>
-        public async Task<AnalysisApiClient> StartAsync(
-            IProgress<string>? progress = null, CancellationToken ct = default)
+        private async Task<AnalysisApiClient> StartCoreAsync(
+            IProgress<string>? progress, CancellationToken ct)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            // Yeniden başlatma: eski bağlantı ve süreç önce kapanır (iki çözücü birden çalışmasın)
+            Client?.Dispose();
+            Client = null;
+            Stop();
+            _external = false;
+            lock (_logLock) _log.Clear();
+
             // 1. Dışarıdan verilen sunucu
             string? envUrl = Environment.GetEnvironmentVariable(UrlEnvVar);
             if (!string.IsNullOrWhiteSpace(envUrl))
@@ -58,10 +122,14 @@ namespace CircuitAnalyzer.WPF.Services
                 var client = new AnalysisApiClient(new Uri(envUrl));
                 progress?.Report($"Çözücüye bağlanılıyor: {envUrl}");
                 if (await WaitForHealthAsync(client, TimeSpan.FromSeconds(10), ct))
+                {
+                    _external = true;
                     return Client = client;
+                }
                 client.Dispose();
-                throw new BackendUnavailableException(
-                    $"{UrlEnvVar} ile verilen çözücüye ulaşılamadı: {envUrl}");
+                throw new BackendUnavailableException(BackendFailure.NotReady,
+                    $"{UrlEnvVar} ile verilen çözücüye ulaşılamadı: {envUrl}",
+                    detail: $"{UrlEnvVar} = {envUrl}");
             }
 
             int port = GetFreePort();
@@ -74,14 +142,15 @@ namespace CircuitAnalyzer.WPF.Services
             var apiClient = new AnalysisApiClient(baseUri);
             // İlk açılışta lcapy/SymPy yüklemesi birkaç saniye sürer
             bool ready = await WaitForHealthAsync(apiClient, TimeSpan.FromSeconds(90), ct);
-            if (!ready)
+            if (!ready || _disposed)
             {
                 apiClient.Dispose();
                 string tail = Tail(LogText, 1200);
                 Stop();
-                throw new BackendUnavailableException(
-                    "Çözücü başlatılamadı.\n\n" +
-                    (string.IsNullOrWhiteSpace(tail) ? "" : $"Çözücü çıktısı:\n{tail}"));
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                throw new BackendUnavailableException(BackendFailure.NotReady,
+                    "Çözücü başlatılamadı.",
+                    detail: string.IsNullOrWhiteSpace(tail) ? null : $"Çözücü çıktısı:\n{tail}");
             }
 
             progress?.Report("Çözücü hazır");
@@ -107,9 +176,9 @@ namespace CircuitAnalyzer.WPF.Services
 
             // 3. Geliştirme ortamı: kaynak koddan çalıştır
             string? apiDir = FindApiSourceDir(baseDir)
-                ?? throw new BackendUnavailableException(
-                    "Çözücü bulunamadı.\n" +
-                    $"Ne '{BundledExe}' ne de üst klasörlerde 'CircuitAnalyzer.API\\main.py' var.");
+                ?? throw new BackendUnavailableException(BackendFailure.Missing,
+                    "Çözücü bulunamadı.",
+                    detail: $"Ne '{BundledExe}' ne de üst klasörlerde 'CircuitAnalyzer.API\\main.py' var.");
 
             var psi = new ProcessStartInfo("python")
             {
@@ -158,17 +227,25 @@ namespace CircuitAnalyzer.WPF.Services
             var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
             process.OutputDataReceived += (_, e) => AppendLog(e.Data);
             process.ErrorDataReceived += (_, e) => AppendLog(e.Data);
+            // Kapanınca bekleyen istekler hemen düşsün (zaman aşımını beklemesin)
+            var stopped = new CancellationTokenSource();
+            _stoppedCts = stopped;
+            process.Exited += (_, _) =>
+            {
+                try { stopped.Cancel(); }
+                catch (ObjectDisposedException) { }
+            };
 
             try
             {
                 if (!process.Start())
-                    throw new BackendUnavailableException("Çözücü süreci başlatılamadı.");
+                    throw new BackendUnavailableException(BackendFailure.CouldNotStart, "Çözücü süreci başlatılamadı.");
             }
             catch (Win32Exception ex)
             {
                 process.Dispose();
-                throw new BackendUnavailableException(
-                    $"'{psi.FileName}' çalıştırılamadı. Python kurulu ve PATH'te mi?\n({ex.Message})", ex);
+                throw new BackendUnavailableException(BackendFailure.CouldNotStart,
+                    $"'{psi.FileName}' çalıştırılamadı.", detail: ex.Message, inner: ex);
             }
 
             try
@@ -197,6 +274,8 @@ namespace CircuitAnalyzer.WPF.Services
             while (sw.Elapsed < timeout)
             {
                 ct.ThrowIfCancellationRequested();
+                if (_disposed)
+                    return false;   // program kapanıyor
                 if (_process is { HasExited: true })
                     return false;   // Süreç erken öldü (ör: modül eksik)
                 if (await client.TryGetHealthAsync(ct) != null)
@@ -249,6 +328,7 @@ namespace CircuitAnalyzer.WPF.Services
 
         public void Dispose()
         {
+            _disposed = true;
             Client?.Dispose();
             Client = null;
             Stop();

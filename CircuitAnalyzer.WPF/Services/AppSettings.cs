@@ -73,6 +73,55 @@ namespace CircuitAnalyzer.WPF.Services
             set => Set("AnalysisPanelWidth", value.HasValue && double.IsFinite(value.Value) ? JsonValue.Create(value.Value) : null);
         }
 
+        /// <summary>
+        /// Ana pencerenin son kapanıştaki yeri (normal dikdörtgen + büyütülmüş mü); yoksa ya da
+        /// bozuksa null. Tek anahtarda tek nesne: tek yazım, değişmediyse dosyaya dokunulmaz.
+        /// Ekrana sığdırmak okuyanın işidir (WindowPlacementRules.Fit).
+        /// </summary>
+        public static SavedWindowPlacement? MainWindowPlacement
+        {
+            get
+            {
+                lock (Gate)
+                {
+                    try
+                    {
+                        if (Load()["MainWindowPlacement"] is not JsonObject o)
+                            return null;
+                        return new SavedWindowPlacement(
+                            o["Left"]!.GetValue<double>(),
+                            o["Top"]!.GetValue<double>(),
+                            o["Width"]!.GetValue<double>(),
+                            o["Height"]!.GetValue<double>(),
+                            o["Maximized"]?.GetValue<bool>() ?? false);
+                    }
+                    catch (Exception)
+                    {
+                        return null;
+                    }
+                }
+            }
+            set
+            {
+                if (value == null ||
+                    !double.IsFinite(value.Left) || !double.IsFinite(value.Top) ||
+                    !double.IsFinite(value.Width) || !double.IsFinite(value.Height))
+                {
+                    Set("MainWindowPlacement", null);
+                    return;
+                }
+                // Yuvarla: piksel altı farklar her kapanışta dosyayı yeniden yazdırmasın
+                Set("MainWindowPlacement", new JsonObject
+                {
+                    ["Left"] = Math.Round(value.Left),
+                    ["Top"] = Math.Round(value.Top),
+                    ["Width"] = Math.Round(value.Width),
+                    ["Height"] = Math.Round(value.Height),
+                    ["Maximized"] = value.Maximized,
+                });
+            }
+        }
+
         /// <summary>Son açılan dosyaların mutlak yolları (en fazla 8, en son açılan başta).</summary>
         public static IReadOnlyList<string> RecentFiles
         {

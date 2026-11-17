@@ -65,6 +65,7 @@ namespace CircuitAnalyzer.WPF
                 });
             }
             InitializeComponent();
+            RestoreWindowPlacement();
             ThemeManager.ApplyTitleBar(this);
             // Ekran testleri pencereyi kendisi boyar; Mica yalnız gerçek açılışta
             if (!HasAnySelfTest(Environment.GetCommandLineArgs()))
@@ -103,9 +104,7 @@ namespace CircuitAnalyzer.WPF
             var args = Environment.GetCommandLineArgs();
             if (!HasAnySelfTest(args))
             {
-                string? fileToOpen = args.Skip(1).FirstOrDefault(a =>
-                    !a.StartsWith("--", StringComparison.Ordinal) &&
-                    (a.EndsWith(".devre", StringComparison.OrdinalIgnoreCase) || System.IO.File.Exists(a)));
+                string? fileToOpen = StartupArgs.FindFileArgument(args.Skip(1));
 
                 if (!string.IsNullOrEmpty(fileToOpen))
                 {
@@ -120,6 +119,13 @@ namespace CircuitAnalyzer.WPF
                             ShowOnboarding(0);
                         }
                     });
+                }
+
+                // Pencere hazır olmadan ikinci açılıştan gelen istekler
+                if (Application.Current is App app)
+                {
+                    foreach (string? path in app.TakePendingActivations())
+                        HandleSecondInstance(path);
                 }
             }
         }

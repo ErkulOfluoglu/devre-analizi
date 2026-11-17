@@ -51,7 +51,8 @@ namespace CircuitAnalyzer.WPF
             AnalysisPanel.SolveRequested += async (_, _) => await SolveAsync();
             AnalysisPanel.ValueDisplayChanged += async (_, _) =>
             {
-                if (_hasResults) await SolveAsync();
+                // Bu devre az önce süre sınırı içinde çözüldü: büyük devre sorusu yeniden sorulmaz
+                if (_hasResults) await SolveAsync(confirmLarge: false);
             };
             AnalysisPanel.EnlargePlotRequested += (_, data) => PlotOverlay.Show(data);
             AnalysisPanel.EnlargeResonanceRequested += (_, data) => PlotOverlay.Show(data);
@@ -121,8 +122,13 @@ namespace CircuitAnalyzer.WPF
             }
         }
 
+        /// <summary>Panelde çözücü hata kartı (Yeniden dene düğmeli) mi gösteriliyor?</summary>
+        private bool _backendErrorShown;
+
         private async Task StartBackendAsync()
         {
+            bool isRetry = _backendErrorShown;
+            _api = null;
             AnalysisPanel.SetBackendStatus(BackendState.Starting, "Çözücü başlatılıyor…");
             try
             {
@@ -131,14 +137,42 @@ namespace CircuitAnalyzer.WPF
                 var health = await _api.TryGetHealthAsync();
                 AnalysisPanel.SetBackendStatus(BackendState.Ready,
                     $"Çözücü hazır — {_api.BaseAddress} (sürüm {health?.Version})");
-                TxtStatus.Text = "Çözücü hazır — devreyi çizip ▶ Çöz'e basın (F5)";
+                if (_backendErrorShown)
+                {
+                    // Eski hata kartı kalmasın: çözücü yeniden hazır
+                    AnalysisPanel.ClearResults();
+                    _backendErrorShown = false;
+                }
+                TxtStatus.Text = isRetry
+                    ? "Çözücü yeniden başlatıldı — ▶ Çöz'e basabilirsiniz (F5)"
+                    : "Çözücü hazır — devreyi çizip ▶ Çöz'e basın (F5)";
             }
             catch (BackendUnavailableException ex)
             {
-                AnalysisPanel.SetBackendStatus(BackendState.Failed, ex.Message);
-                AnalysisPanel.ShowError("Çözücü başlatılamadı", ex.Message);
+                ShowBackendFailure(ex, ex.Failure ?? BackendFailure.NotReady);
                 TxtStatus.Text = "Çözücü başlatılamadı — ayrıntılar sağ panelde";
             }
+        }
+
+        /// <summary>
+        /// Çözücüyü yeniden başlatır ("Yeniden dene"). Başlatma zaten sürüyorsa yenisini açmaz;
+        /// BackendManager eski süreci kapatmadan yenisini başlatmaz (iki çözücü birden çalışmaz).
+        /// </summary>
+        private Task RestartBackendAsync()
+        {
+            if (_backendStartTask is { IsCompleted: false })
+                return _backendStartTask;
+            return _backendStartTask = StartBackendAsync();
+        }
+
+        /// <summary>Çözücü hatasını türüne göre Türkçe metinle ve "Yeniden dene" düğmesiyle gösterir.</summary>
+        private void ShowBackendFailure(BackendUnavailableException ex, BackendFailure failure)
+        {
+            var (title, text) = BackendMessages.Describe(failure, BackendManager.IsDeveloperRun,
+                detail: ex.Detail, requestMessage: failure == BackendFailure.Timeout ? ex.Message : null);
+            AnalysisPanel.SetBackendStatus(BackendState.Failed, title);
+            AnalysisPanel.ShowError(title, text, BackendMessages.RetryText, () => _ = RestartBackendAsync());
+            _backendErrorShown = true;
         }
 
         // ═══════════════════════════════════════════════════════
@@ -194,7 +228,8 @@ namespace CircuitAnalyzer.WPF
         //  ÇÖZME
         // ═══════════════════════════════════════════════════════
 
-        private async Task SolveAsync()
+        /// <param name="confirmLarge">Büyük AC devrede çözmeden önce sorulsun mu (Etkin/Tepe ile yeniden çözmede hayır).</param>
+        private async Task SolveAsync(bool confirmLarge = true)
         {
             // Bağımlı kaynağın kontrol elemanı eksikse arka uca hiç gitmeden kullanıcıyı uyar
             if (!ValidateDependentSources())
@@ -206,7 +241,16 @@ namespace CircuitAnalyzer.WPF
                     "Çözücü henüz başlamadı veya başlatılamadı. Lütfen birkaç saniye bekleyin.");
                 return;
             }
-            if (!_elements.Any(e => e is not GroundElement and not TestProbe and not JunctionElement))
+            // Çözücü daha önce hazırdı ama sonradan kapandıysa isteği hiç göndermeden söyle
+            if (!_backend.IsAlive)
+            {
+                ShowBackendFailure(new BackendUnavailableException(BackendFailure.Stopped, "Çözücü kapandı."),
+                    BackendFailure.Stopped);
+                TxtStatus.Text = "Çözücü kapandı — sağ paneldeki “Yeniden dene” ile başlatın";
+                return;
+            }
+            int elementCount = _elements.Count(e => e is not GroundElement and not TestProbe and not JunctionElement);
+            if (elementCount == 0)
             {
                 AnalysisPanel.ShowError("Devre boş", "Önce soldaki şeritten eleman ekleyip tellerle bağlayın.");
                 return;
@@ -246,12 +290,45 @@ namespace CircuitAnalyzer.WPF
                 PowerFactorTarget = (options.AnalysisType == AnalysisTypes.Power || options.AnalysisType == AnalysisTypes.ThreePhase) ? options.PowerFactorTarget : null,
             };
 
+            // Büyük AC devre: 2 dakikalık sınıra takılabilir, önce sor (ekran testlerinde sorulmaz)
+            bool isLarge = LargeCircuitCheck.ShouldWarn(elementCount, request.Mode);
+            if (isLarge && confirmLarge && !HasAnySelfTest(Environment.GetCommandLineArgs()))
+            {
+                string? choice = DialogOverlay.ShowModal(
+                    LargeCircuitCheck.WarningTitle,
+                    LargeCircuitCheck.WarningText(elementCount),
+                    DialogKind.Warning,
+                    new[] { new DialogButton("cancel", "Vazgeç"), new DialogButton("solve", "Çöz", IsPrimary: true) },
+                    cancelId: "cancel");
+                if (choice != "solve")
+                {
+                    TxtStatus.Text = "Çözüm başlatılmadı";
+                    return;
+                }
+                if (_api == null)
+                    return;   // soru açıkken çözücü yeniden başlatılıyor olabilir
+            }
+
             int versionAtStart = _circuitVersion;
             AnalysisPanel.SetBusy(true);
             TxtStatus.Text = "Çözülüyor…";
+            _backendErrorShown = false;
+            var api = _api;
+            var stoppedToken = _backend.StoppedToken;
+            // Uzun çözümde durum satırı her saniye "hâlâ çalışıyor" desin
+            DispatcherTimer? busyTimer = null;
+            if (isLarge)
+            {
+                var started = System.Diagnostics.Stopwatch.StartNew();
+                TxtStatus.Text = LargeCircuitCheck.BusyText(TimeSpan.Zero);
+                busyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                busyTimer.Tick += (_, _) => TxtStatus.Text = LargeCircuitCheck.BusyText(started.Elapsed);
+                busyTimer.Start();
+            }
             try
             {
-                var response = await _api.AnalyzeAsync(request);
+                var response = await api.AnalyzeAsync(request, stoppedToken);
+                busyTimer?.Stop();
                 AnalysisPanel.CurrentRequest = request;
                 AnalysisPanel.ShowResults(response);
 
@@ -296,15 +373,25 @@ namespace CircuitAnalyzer.WPF
                 AnalysisPanel.ShowError("Devre çözülemedi", ex.Message);
                 TxtStatus.Text = "Devre çözülemedi";
             }
+            catch (OperationCanceledException) when (stoppedToken.IsCancellationRequested)
+            {
+                // Çözücü süreci istek sürerken kapandı: zaman aşımını beklemeden söyle
+                ShowBackendFailure(new BackendUnavailableException(BackendFailure.Stopped, "Çözücü kapandı."),
+                    BackendFailure.Stopped);
+                TxtStatus.Text = "Çözücü kapandı — sağ paneldeki “Yeniden dene” ile başlatın";
+            }
             catch (BackendUnavailableException ex)
             {
-                AnalysisPanel.SetBackendStatus(BackendState.Failed, ex.Message);
-                AnalysisPanel.ShowError("Çözücüye ulaşılamadı",
-                    ex.Message + "\n\nProgramı kapatıp yeniden açmayı deneyin.");
-                TxtStatus.Text = "Çözücüye ulaşılamadı";
+                // Süreç ölmüşse "kapandı"; yaşıyorsa zaman aşımı ya da bağlantı sorunu
+                var failure = !_backend.IsAlive ? BackendFailure.Stopped : ex.Failure ?? BackendFailure.Unreachable;
+                ShowBackendFailure(ex, failure);
+                TxtStatus.Text = failure == BackendFailure.Timeout
+                    ? "Çözüm zamanında bitmedi — ayrıntılar sağ panelde"
+                    : "Çözücüye ulaşılamadı — ayrıntılar sağ panelde";
             }
             finally
             {
+                busyTimer?.Stop();
                 AnalysisPanel.SetBusy(false);
             }
         }
