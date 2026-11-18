@@ -163,15 +163,19 @@
                     <StackPanel Grid.Column="0">
                         <TextBlock Text="+ terminal"
                                    Style="{DynamicResource Text.Caption}"
-                                   Margin="0,0,0,2"/>
-                        <ComboBox x:Name="CmbTerminalPositive"/>
+                                   Margin="0,0,0,2"
+                                   ToolTip="Eşdeğerin artı ucu. Vth, bu düğümün eksi uca göre gerilimidir (GND'ye göre değil)."/>
+                        <ComboBox x:Name="CmbTerminalPositive"
+                                  ToolTip="Eşdeğerin artı ucu. Vth, bu düğümün eksi uca göre gerilimidir (GND'ye göre değil)."/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2">
                         <TextBlock Text="− terminal"
                                    Style="{DynamicResource Text.Caption}"
-                                   Margin="0,0,0,2"/>
-                        <ComboBox x:Name="CmbTerminalNegative"/>
+                                   Margin="0,0,0,2"
+                                   ToolTip="Eşdeğerin eksi ucu: Vth bu düğüme göre ölçülür. GND olmak zorunda değildir."/>
+                        <ComboBox x:Name="CmbTerminalNegative"
+                                  ToolTip="Eşdeğerin eksi ucu: Vth bu düğüme göre ölçülür. GND olmak zorunda değildir."/>
                     </StackPanel>
                 </Grid>
 
@@ -201,7 +205,7 @@
                 <StackPanel x:Name="RowValueDisplay"
                             Margin="0,8,0,0"
                             Visibility="Collapsed">
-                    <TextBlock Text="Sonuçlar"
+                    <TextBlock Text="Gösterim"
                                Style="{DynamicResource Text.Caption}"
                                Margin="0,0,0,4"/>
                     <Border Style="{DynamicResource Segment.Track}">

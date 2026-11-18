@@ -84,10 +84,16 @@ namespace CircuitAnalyzer.WPF
             Closed += (_, _) => ThemeManager.ThemeChanged -= onThemeChanged;
             _undoHistory.Changed += (_, _) => Dispatcher.Invoke(UpdateUndoRedoButtons);
             _selection.Changed += (_, _) => UpdateSelectionHighlight();
+            Deactivated += (_, _) => ResetSpaceCursor();
+            LostKeyboardFocus += (_, args) =>
+            {
+                if (args.NewFocus == null)
+                    ResetSpaceCursor();
+            };
             InitializeAnalysisPanelLayout();
             InitializePlacementInput(); // bağlam menüsünden önce: yerleştirirken sağ tık menü açmak yerine vazgeçer
             InitializeCanvasContextMenu();
-            _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
+            ResetHistoryAsSaved();
             Loaded += MainWindow_Loaded;
             UpdateThemeButton();
         }
@@ -99,7 +105,7 @@ namespace CircuitAnalyzer.WPF
             UpdateTitle();
             UpdateUndoRedoButtons();
             UpdateZoomDisplay();
-            _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
+            ResetHistoryAsSaved();
 
             var args = Environment.GetCommandLineArgs();
             if (!HasAnySelfTest(args))
@@ -394,7 +400,7 @@ namespace CircuitAnalyzer.WPF
             // ── Space tuşu: Pan imleci ──
             if (e.Key == Key.Space && !e.IsRepeat && !_isPanning)
             {
-                Mouse.OverrideCursor = Cursors.Hand;
+                ShowSpaceCursor();
             }
 
             // ── Escape: Tel çizimini iptal et veya seçimi temizle ──
@@ -485,8 +491,29 @@ namespace CircuitAnalyzer.WPF
             base.OnPreviewKeyUp(e);
             if (e.Key == Key.Space && !_isPanning)
             {
-                Mouse.OverrideCursor = null;
+                ResetSpaceCursor();
             }
+        }
+
+        private bool _spaceCursorActive;
+
+        /// <summary>Space basılıyken "el" imleci (kaydırma ipucu).</summary>
+        internal void ShowSpaceCursor()
+        {
+            _spaceCursorActive = true;
+            Mouse.OverrideCursor = Cursors.Hand;
+        }
+
+        /// <summary>
+        /// "El" imlecini kaldırır. Space bırakılınca, pencere etkinliğini kaybedince (Alt+Tab)
+        /// ya da klavye odağı pencereden çıkınca çağrılır; yoksa imleç el olarak takılı kalırdı.
+        /// </summary>
+        internal void ResetSpaceCursor()
+        {
+            if (!_spaceCursorActive)
+                return;
+            _spaceCursorActive = false;
+            Mouse.OverrideCursor = null;
         }
     }
 }

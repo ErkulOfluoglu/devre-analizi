@@ -22,6 +22,18 @@ namespace CircuitAnalyzer.WPF
         private bool _isRestoringHistory;
         private int? _problemCode;
 
+        /// <summary>Son kaydedilen / açılan / yeni belgenin anlık görüntüsü; "•" bununla karşılaştırılır.</summary>
+        private string? _savedSnapshot;
+
+        /// <summary>Şu anki devreyi "kaydedilmiş" sayar ve geri al geçmişini bundan başlatır.</summary>
+        private void ResetHistoryAsSaved()
+        {
+            string snapshot = CircuitDocument.Snapshot(_elements, _wires);
+            _savedSnapshot = snapshot;
+            _isDirty = false;
+            _undoHistory.Reset(snapshot);
+        }
+
         // ═══════════════════════════════════════════════════════
         //  DOSYA (KAYDET / AÇ / YENİ) VE BAŞLIK
         // ═══════════════════════════════════════════════════════
@@ -78,6 +90,7 @@ namespace CircuitAnalyzer.WPF
         {
             var doc = CircuitDocument.FromJson(json);
             var circuit = doc.ToCircuit("Geri Yükleme");
+            var selectedIds = _selection.Elements.Select(el => el.Id).ToList();
             _isRestoringHistory = true;
             try
             {
@@ -93,8 +106,12 @@ namespace CircuitAnalyzer.WPF
                 SyncCountersFromIds();
 
                 OnCircuitChanged();
-                _isDirty = true;
+                // Kirli = son kaydedilen/açılan durumdan farklı; kayda dönüldüyse "•" kalkar
+                _isDirty = CircuitDocument.Snapshot(_elements, _wires) != _savedSnapshot;
                 UpdateTitle();
+                // Geri al / yinele seçimi silmesin: hâlâ var olan kimlikleri yeniden seç
+                if (selectedIds.Count > 0)
+                    ReselectByIds(selectedIds);
                 TxtStatus.Text = "Devre durumu geri yüklendi";
             }
             finally
@@ -148,6 +165,7 @@ namespace CircuitAnalyzer.WPF
                 doc.Save(path);
 
                 _currentFilePath = path;
+                _savedSnapshot = CircuitDocument.Snapshot(_elements, _wires);
                 _isDirty = false;
                 AppSettings.AddRecentFile(path);
                 UpdateTitle();
@@ -198,9 +216,10 @@ namespace CircuitAnalyzer.WPF
                 }
 
                 _currentFilePath = path;
-                _isDirty = false;
-                _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
-                AppSettings.AddRecentFile(path);
+                ResetHistoryAsSaved();
+                // Ekran testleri kullanıcının "son açılanlar" listesine dosya eklemesin
+                if (!isSelfTest && !HasAnySelfTest(Environment.GetCommandLineArgs()))
+                    AppSettings.AddRecentFile(path);
                 UpdateTitle();
                 AutoFitOrScrollCircuit();
                 TxtStatus.Text = $"Açıldı: {System.IO.Path.GetFileName(path)}";
@@ -263,8 +282,7 @@ namespace CircuitAnalyzer.WPF
             // Eski çözüm bayatlar (Ctrl+P eski devreyi yazdırmasın), boş tuval ipucu geri gelir
             OnCircuitChanged();
             _currentFilePath = null;
-            _isDirty = false;
-            _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
+            ResetHistoryAsSaved();
             UpdateTitle();
             AnalysisPanel.ClearResults();
             AutoFitOrScrollCircuit();
@@ -296,9 +314,29 @@ namespace CircuitAnalyzer.WPF
             };
         }
 
+        /// <summary>
+        /// Windows kapanırken / oturum kapatılırken: kaydedilmemiş devre varsa aynı soru sorulur;
+        /// "Vazgeç" denirse kapanış durdurulur.
+        /// </summary>
+        internal void HandleSessionEnding(SessionEndingCancelEventArgs e)
+        {
+            if (!_isDirty || HasAnySelfTest(Environment.GetCommandLineArgs()))
+                return;
+            if (!PromptSaveIfDirty())
+                e.Cancel = true;
+            else
+                // Pencere kapanırken aynı soru ikinci kez sorulmasın. Kapanışı başka bir program
+                // durdurur ve öğrenci çalışmaya devam ederse yeni değişiklikler yine sorulur.
+                _sessionEndingAnsweredFor = CircuitDocument.Snapshot(_elements, _wires);
+        }
+
+        private string? _sessionEndingAnsweredFor;
+
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
-            if (!PromptSaveIfDirty())
+            bool alreadyAnswered = _sessionEndingAnsweredFor != null
+                && _sessionEndingAnsweredFor == CircuitDocument.Snapshot(_elements, _wires);
+            if (!alreadyAnswered && !PromptSaveIfDirty())
             {
                 e.Cancel = true;
                 return;
@@ -425,10 +463,16 @@ namespace CircuitAnalyzer.WPF
             if (dialog.ShowDialog() == true)
             {
                 var paginator = ((System.Windows.Documents.IDocumentPaginatorSource)doc).DocumentPaginator;
-                dialog.PrintDocument(paginator, "Devre Analizi — PDF için yazıcı olarak “Microsoft Print to PDF”i seçin");
+                string docName = !string.IsNullOrEmpty(_currentFilePath)
+                    ? System.IO.Path.GetFileNameWithoutExtension(_currentFilePath)
+                    : "Adsız";
+                dialog.PrintDocument(paginator, PrintJobName(docName));
                 TxtStatus.Text = "Belge yazıcıya gönderildi";
             }
         }
+
+        /// <summary>Yazıcı kuyruğunda görünen iş adı.</summary>
+        internal static string PrintJobName(string docName) => $"Devre Analizi – {docName}";
 
         public RenderTargetBitmap? RenderCircuitBitmap()
         {
@@ -469,15 +513,21 @@ namespace CircuitAnalyzer.WPF
             double w = Math.Max(50, maxX - minX);
             double h = Math.Max(50, maxY - minY);
 
-            var prevChoice = ThemeManager.Choice;
             double oldZoom = _currentZoom;
+            // Koyu temada baskı açık renkle çıkar; pencerenin teması değişmesin (göz kırpma yok,
+            // ayar dosyası da yazılmaz): açık palet yalnızca tuvale yerel kaynak olarak eklenir.
+            ResourceDictionary? lightPalette = null;
+            if (ThemeManager.IsDark)
+            {
+                lightPalette = new ResourceDictionary
+                {
+                    Source = new Uri("pack://application:,,,/CircuitAnalyzer;component/Themes/Light.xaml")
+                };
+                CircuitCanvas.Resources.MergedDictionaries.Add(lightPalette);
+            }
 
             try
             {
-                if (ThemeManager.IsDark)
-                {
-                    ThemeManager.SetChoice(ThemeChoice.Light);
-                }
                 SetZoom(1.0);
                 CircuitCanvas.UpdateLayout();
 
@@ -487,7 +537,7 @@ namespace CircuitAnalyzer.WPF
                 var visual = new DrawingVisual();
                 using (var dc = visual.RenderOpen())
                 {
-                    var bgBrush = (Brush)Application.Current.FindResource("Brush.Bg.Surface");
+                    var bgBrush = (Brush)CircuitCanvas.FindResource("Brush.Bg.Surface");
                     dc.DrawRectangle(bgBrush, null, new Rect(0, 0, w, h));
                     var vb = new VisualBrush(CircuitCanvas)
                     {
@@ -506,10 +556,8 @@ namespace CircuitAnalyzer.WPF
             finally
             {
                 SetZoom(oldZoom);
-                if (ThemeManager.Choice != prevChoice)
-                {
-                    ThemeManager.SetChoice(prevChoice);
-                }
+                if (lightPalette != null)
+                    CircuitCanvas.Resources.MergedDictionaries.Remove(lightPalette);
             }
         }
 

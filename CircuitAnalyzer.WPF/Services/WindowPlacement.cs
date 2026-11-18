@@ -65,6 +65,26 @@ namespace CircuitAnalyzer.WPF.Services
         }
 
         /// <summary>
+        /// Kayıtlı yer yokken (ilk açılış): varsayılan boyutu çalışma alanına sığdırır ve ortalar.
+        /// Küçük ekranda (örn. 1366×768, %125 ölçek) pencere görev çubuğunun altına taşmaz;
+        /// en küçük boyutlar da çalışma alanından büyük kalmaz.
+        /// </summary>
+        public static (Rect Bounds, double MinWidth, double MinHeight) FitDefault(
+            double width, double height, double minWidth, double minHeight, Rect workArea)
+        {
+            if (workArea.IsEmpty || workArea.Width <= 0 || workArea.Height <= 0)
+                return (new Rect(0, 0, width, height), minWidth, minHeight);
+
+            double w = Math.Min(width, workArea.Width);
+            double h = Math.Min(height, workArea.Height);
+            double minW = Math.Min(minWidth, w);
+            double minH = Math.Min(minHeight, h);
+            double x = workArea.Left + (workArea.Width - w) / 2;
+            double y = workArea.Top + (workArea.Height - h) / 2;
+            return (new Rect(x, y, w, h), minW, minH);
+        }
+
+        /// <summary>
         /// Ekranların çalışma alanları (görev çubuğu hariç), WPF birimlerinde (1/96 inç).
         /// Sistem DPI'ı ile çevrilir; okunamazsa birincil ekranın çalışma alanı döner.
         /// </summary>

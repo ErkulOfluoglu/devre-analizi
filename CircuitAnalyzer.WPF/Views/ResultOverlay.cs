@@ -54,6 +54,28 @@ namespace CircuitAnalyzer.WPF.Views
 
         public CurrentFlowLayer Flow => _flow;
 
+        /// <summary>Görünen sonuç etiketlerinin tuval koordinatlarındaki kutuları ("sığdır" bunları da katar).</summary>
+        public IReadOnlyList<Rect> ItemBounds()
+        {
+            var list = new List<Rect>();
+            foreach (var item in _items)
+            {
+                if (item is not FrameworkElement fe)
+                    continue;
+                double left = Canvas.GetLeft(fe);
+                double top = Canvas.GetTop(fe);
+                if (double.IsNaN(left) || double.IsNaN(top))
+                    continue;
+                if (!fe.IsMeasureValid)
+                    fe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                var size = fe.DesiredSize;
+                if (size.Width <= 0 || size.Height <= 0)
+                    continue;
+                list.Add(new Rect(left, top, size.Width, size.Height));
+            }
+            return list;
+        }
+
         public void Clear()
         {
             _flow.Clear();

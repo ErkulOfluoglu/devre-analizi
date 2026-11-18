@@ -203,7 +203,7 @@ public partial class AnalysisPanel : UserControl
         _hasAcSource = hasAcSource;
         _needsFrequency = needsFrequency;
 
-        TxtModeLabel.Text = hasAcSource ? "AC (fazör) analiz" : "DC analiz";
+        UpdateModeLabel();
         RowFrequency.Visibility = hasAcSource ? Visibility.Visible : Visibility.Collapsed;
         RowValueDisplay.Visibility = hasAcSource ? Visibility.Visible : Visibility.Collapsed;
         TxtFrequencyLabel.Text = needsFrequency
@@ -405,6 +405,22 @@ public partial class AnalysisPanel : UserControl
     {
         UpdateTerminalsVisibility();
         UpdatePowerFactorTargetVisibility();
+        UpdateModeLabel();
+    }
+
+    /// <summary>Çözücü durumunun altındaki mod yazısı: "Geçici durum" yöntemde, yoksa AC / DC.</summary>
+    internal static string ModeLabelText(bool hasAcSource, string analysisType) =>
+        string.Equals(analysisType, AnalysisTypes.Transient, StringComparison.OrdinalIgnoreCase)
+            ? "Geçici durum"
+            : hasAcSource ? "AC (fazör) analiz" : "DC analiz";
+
+    private void UpdateModeLabel()
+    {
+        if (TxtModeLabel == null || CmbAnalysisType == null) return;
+        string selectedText = (CmbAnalysisType.SelectedItem as ComboBoxItem)?.Content as string
+            ?? CmbAnalysisType.SelectedItem as string
+            ?? "";
+        TxtModeLabel.Text = ModeLabelText(_hasAcSource, AnalysisTypeFromText(selectedText));
     }
 
     private void UpdateTerminalsVisibility()
@@ -1148,7 +1164,7 @@ public partial class AnalysisPanel : UserControl
         // Değerler arka uçtan da gelebilir ("3.033∠-72.34°"): eksi işareti ekranda Unicode "−"
         var val = new TextBlock
         {
-            Text = TurkishNumber.DisplayMinus(primaryValue),
+            Text = PhasorText.KeepTogether(TurkishNumber.DisplayMinus(primaryValue)),
             FontSize = 15,
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 2, 0, 0)
@@ -1161,7 +1177,7 @@ public partial class AnalysisPanel : UserControl
         {
             var sec = new TextBlock
             {
-                Text = TurkishNumber.DisplayMinus(secondaryValue),
+                Text = PhasorText.KeepTogether(TurkishNumber.DisplayMinus(secondaryValue)),
                 Margin = new Thickness(0, 2, 0, 0)
             };
             sec.SetResourceReference(StyleProperty, "Text.Caption");

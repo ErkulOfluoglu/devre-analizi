@@ -67,18 +67,23 @@ namespace CircuitAnalyzer.WPF.Services
 
         public AnalysisApiClient(Uri baseAddress, TimeSpan? timeout = null)
         {
-            _http = new HttpClient
+            _http = new HttpClient(CreateHandler())
             {
                 BaseAddress = baseAddress,
                 // Büyük AC devrelerinde sembolik çözüm birkaç saniye sürebilir
                 Timeout = timeout ?? TimeSpan.FromSeconds(120),
             };
-            _httpLong = new HttpClient
+            _httpLong = new HttpClient(CreateHandler())
             {
                 BaseAddress = baseAddress,
                 Timeout = LlmTimeout,
             };
         }
+
+        /// <summary>
+        /// Çözücü bu bilgisayarda (127.0.0.1) çalışır; sistem proxy'si (okul/şirket ağı) araya girmesin.
+        /// </summary>
+        internal static HttpClientHandler CreateHandler() => new() { UseProxy = false };
 
         /// <summary>
         /// Sunucu çalışıyor ve gerçekten bizim çözücümüz mü? (Hata fırlatmaz.)

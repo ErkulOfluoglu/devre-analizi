@@ -67,7 +67,66 @@ namespace CircuitAnalyzer.WPF
                 RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
 
             ThemeManager.Initialize(forced);
+
+            RegisterGlobalExceptionHandlers(CircuitAnalyzer.WPF.MainWindow.HasAnySelfTest(e.Args));
             base.OnStartup(e);
+        }
+
+        private bool _showCrashDialogs;
+        private bool _crashDialogOpen;
+
+        /// <summary>
+        /// Yakalanmamış hatalar: dosyaya yazılır; arayüz hatasında öğrenciye tek kısa ileti gösterilir
+        /// ve program açık kalır. Ekran testlerinde ileti kutusu çıkmaz (yalnız kayıt).
+        /// </summary>
+        private void RegisterGlobalExceptionHandlers(bool isSelfTest)
+        {
+            _showCrashDialogs = !isSelfTest;
+
+            DispatcherUnhandledException += (_, args) =>
+            {
+                CrashLog.Write(args.Exception, "Arayüz (DispatcherUnhandledException)");
+                if (_showCrashDialogs && !_crashDialogOpen)
+                {
+                    _crashDialogOpen = true;
+                    try { ShowCrashMessage(); }
+                    finally { _crashDialogOpen = false; }
+                }
+                args.Handled = true;
+            };
+
+            AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+                CrashLog.Write(args.ExceptionObject as Exception, "Alan (AppDomain.UnhandledException)");
+
+            System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, args) =>
+            {
+                CrashLog.Write(args.Exception, "Arka plan görevi (UnobservedTaskException)");
+                args.SetObserved();
+            };
+
+            SessionEnding += (_, args) =>
+            {
+                if (_showCrashDialogs && MainWindow is CircuitAnalyzer.WPF.MainWindow window)
+                    window.HandleSessionEnding(args);
+            };
+        }
+
+        private void ShowCrashMessage()
+        {
+            string text = CrashLog.UserMessage();
+            try
+            {
+                if (MainWindow is CircuitAnalyzer.WPF.MainWindow { IsLoaded: true } window)
+                {
+                    window.Inform("Beklenmeyen hata", text, CircuitAnalyzer.WPF.Views.DialogKind.Error);
+                    return;
+                }
+            }
+            catch (Exception)
+            {
+                // Kart açılamadıysa düz ileti kutusuna düş
+            }
+            MessageBox.Show(text, "Devre Analizi", MessageBoxButton.OK, MessageBoxImage.Error);
         }
 
         /// <summary>İkinci açılıştan gelen istek: pencere hazırsa hemen işlenir, değilse sıraya girer.</summary>

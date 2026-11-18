@@ -28,7 +28,12 @@ namespace CircuitAnalyzer.WPF.Views
         public bool IsEnlarged
         {
             get => BtnEnlarge.Visibility == Visibility.Collapsed;
-            set => BtnEnlarge.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            set
+            {
+                BtnEnlarge.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+                // Büyütülmüş pencerenin kendi başlığı var; kart başlığı iki kez görünmesin
+                TxtHeaderTitle.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            }
         }
 
         public ResonanceCurveView()
@@ -224,7 +229,9 @@ namespace CircuitAnalyzer.WPF.Views
             }
 
             // Eksen ve başlık
-            plot.Title("Rezonans Eğrisi");
+            // Başlık kartın üstünde (küçük kart) ya da büyütülmüş pencerenin başlığında zaten yazıyor;
+            // grafiğin içinde üçüncü kez tekrarlanmaz.
+            plot.Title("");
             plot.XLabel($"Frekans ({freqUnit})");
             plot.YLabel(isParallel ? "Empedans (Ω)" : "Akım (A)");
 

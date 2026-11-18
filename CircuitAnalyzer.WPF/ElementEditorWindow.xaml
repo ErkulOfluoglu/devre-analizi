@@ -27,9 +27,13 @@
                        Margin="0,0,0,16"/>
 
             <!-- Dinamik Alan (mod seçici + alanlar + önizleme) -->
-            <StackPanel x:Name="PropertiesPanel"
-                        Grid.Row="1"
-                        Margin="0,0,0,16"/>
+            <!-- Uzun formlarda (üç fazlı kaynak/yük) düğmeler görünür kalsın: yalnız alanlar kayar -->
+            <ScrollViewer Grid.Row="1"
+                          Margin="0,0,0,16"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="PropertiesPanel"/>
+            </ScrollViewer>
 
             <!-- Giriş hatası: ayrı mesaj kutusu yerine pencerenin içinde, Uygula'nın üstünde -->
             <Border x:Name="ErrorBar"

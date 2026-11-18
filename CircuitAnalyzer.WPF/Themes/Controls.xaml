@@ -162,8 +162,9 @@
         <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Error}"/>
     </Style>
     <Style x:Key="InfoBar.Info" TargetType="Border" BasedOn="{StaticResource InfoBar.Success}">
-        <Setter Property="Background" Value="{DynamicResource Brush.Info.Soft}"/>
-        <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Info}"/>
+        <!-- Bilgi mavi değil nötr: mavi yalnız eylem, seçim ve akım ışığı içindir (DESIGN.md) -->
+        <Setter Property="Background" Value="{DynamicResource Brush.Bg.Subtle}"/>
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource Brush.Text.Body}"/>
     </Style>
 
     <!-- ═══════════ Düğmeler ═══════════ -->
@@ -689,6 +690,7 @@
                     <Border Background="{DynamicResource Brush.Bg.Surface}" BorderBrush="{DynamicResource Brush.Border.Default}"
                             BorderThickness="1" CornerRadius="8">
                         <DockPanel>
+                            <!-- Odak halkası şablonun içinde (IsKeyboardFocused): klavyeyle gezen görsün -->
                             <ToggleButton DockPanel.Dock="Top" Cursor="Hand" FocusVisualStyle="{x:Null}"
                                           IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
                                 <ToggleButton.Template>
@@ -712,6 +714,10 @@
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="Hd" Property="Background" Value="{DynamicResource Brush.Bg.Hover}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="Hd" Property="BorderBrush" Value="{DynamicResource Brush.Border.Focus}"/>
+                                                <Setter TargetName="Hd" Property="BorderThickness" Value="2"/>
                                             </Trigger>
                                             <Trigger Property="IsChecked" Value="True">
                                                 <Setter TargetName="Chev" Property="RenderTransform">
@@ -740,7 +746,9 @@
     <!-- Dikey ayırıcı (GridSplitter): şeffaf geniş tutma alanı, ortada ince tutamaç; üstüne gelince/sürüklerken vurgulanır -->
     <Style x:Key="Splitter.Vertical" TargetType="GridSplitter">
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Focusable" Value="False"/>
+        <!-- Odaklanabilir: Tab ile gelinip ok tuşlarıyla yeniden boyutlandırılır; odak halkası tutamaçta -->
+        <Setter Property="Focusable" Value="True"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Cursor" Value="SizeWE"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -756,6 +764,10 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Brush.Accent}"/>
+                            <Setter TargetName="Grip" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Brush.Accent}"/>
                             <Setter TargetName="Grip" Property="Opacity" Value="1"/>
                         </Trigger>

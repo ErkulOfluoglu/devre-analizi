@@ -41,7 +41,19 @@ namespace CircuitAnalyzer.WPF
 
             var saved = AppSettings.MainWindowPlacement;
             if (saved == null)
+            {
+                // İlk açılış: varsayılan boyut küçük ekrana sığmayabilir; sığdır ve ortala
+                var (bounds, minW, minH) = WindowPlacementRules.FitDefault(
+                    Width, Height, MinWidth, MinHeight, SystemParameters.WorkArea);
+                MinWidth = minW;
+                MinHeight = minH;
+                Width = bounds.Width;
+                Height = bounds.Height;
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                Left = bounds.Left;
+                Top = bounds.Top;
                 return;
+            }
 
             var fit = WindowPlacementRules.Fit(saved.Left, saved.Top, saved.Width, saved.Height,
                 WindowPlacementRules.GetWorkAreas(), MinWidth, MinHeight);

@@ -226,6 +226,15 @@ namespace CircuitAnalyzer.WPF
             _selection.Clear();
         }
 
+        /// <summary>Verilen kimliklerden tuvalde hâlâ olanları yeniden seçer (geri al / yinele sonrası).</summary>
+        private void ReselectByIds(IEnumerable<string> ids)
+        {
+            var wanted = new HashSet<string>(ids);
+            var found = _elements.Where(el => wanted.Contains(el.Id)).ToList();
+            if (found.Count > 0)
+                _selection.Select(found);
+        }
+
         /// <summary>Tuvaldeki tüm elemanları ve telleri seçer (Ctrl+A).</summary>
         public void SelectAllElements()
         {

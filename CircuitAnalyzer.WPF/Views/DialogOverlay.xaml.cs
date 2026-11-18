@@ -225,6 +225,34 @@ namespace CircuitAnalyzer.WPF.Views
                         : Keyboard.FocusedElement is Button { Tag: string id } ? id : _defaultId;
                 }
                 Close();
+                return;
+            }
+
+            // Kaydırma çubuğu odaklanamaz; uzun kartlar klavyeyle de kayabilsin
+            // (metin kutusu / açılır kutu kendi ok tuşlarını kullanır)
+            if (Keyboard.FocusedElement is not (System.Windows.Controls.Primitives.TextBoxBase or ComboBox)
+                && HandleScrollKey(e.Key))
+            {
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>Yukarı / Aşağı / PageUp / PageDown / Home / End ile içeriği kaydırır; tuş işlendiyse true.</summary>
+        internal bool HandleScrollKey(Key key)
+        {
+            var sv = BodyScroll;
+            if (sv == null || sv.ScrollableHeight <= 0)
+                return false;
+
+            switch (key)
+            {
+                case Key.Up: sv.LineUp(); return true;
+                case Key.Down: sv.LineDown(); return true;
+                case Key.PageUp: sv.PageUp(); return true;
+                case Key.PageDown: sv.PageDown(); return true;
+                case Key.Home: sv.ScrollToTop(); return true;
+                case Key.End: sv.ScrollToBottom(); return true;
+                default: return false;
             }
         }
     }

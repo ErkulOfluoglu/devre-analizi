@@ -204,8 +204,9 @@ namespace CircuitAnalyzer.WPF
 
             if (!_isRestoringHistory)
             {
-                _undoHistory.Record(CircuitDocument.Snapshot(_elements, _wires));
-                _isDirty = true;
+                string snapshot = CircuitDocument.Snapshot(_elements, _wires);
+                _undoHistory.Record(snapshot);   // aynı içerik yeni adım açmaz
+                _isDirty = snapshot != _savedSnapshot;
                 UpdateTitle();
             }
         }
@@ -527,8 +528,7 @@ namespace CircuitAnalyzer.WPF
             AnalysisPanel.SetAnalysisType(example.SuggestedAnalysisType, example.SuggestedTerminal);
             TxtStatus.Text = $"Örnek yüklendi: {example.Name} — {example.Description}";
 
-            _isDirty = false;
-            _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
+            ResetHistoryAsSaved();
             UpdateTitle();
             AutoFitOrScrollCircuit();
         }

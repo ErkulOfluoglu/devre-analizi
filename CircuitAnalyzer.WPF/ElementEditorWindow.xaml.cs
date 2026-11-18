@@ -1040,34 +1040,6 @@ namespace CircuitAnalyzer.WPF
             UpdatePreview(currentText);
         }
 
-        /// <summary>
-        /// Kullanıcı yazarken karmaşık sayı önizlemesini günceller.
-        /// Her iki formatta (dikdörtgensel + kutupsal) gösterir.
-        /// </summary>
-        private void UpdateComplexPreview(string input)
-        {
-            if (_previewText == null) return;
-
-            if (ComplexValue.TryParse(input, out var cv))
-            {
-                _previewText.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Success");
-                string unit = _element switch
-                {
-                    AcVoltageSource => "V",
-                    AcCurrentSource => "A",
-                    _ => "Ω",
-                };
-                _previewText.Text =
-                    $"Dikdörtgensel: {cv.ToRectangularString()} {unit}\n" +
-                    $"Kutupsal: {cv.ToPolarString()} {unit}";
-            }
-            else
-            {
-                _previewText.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Error");
-                _previewText.Text = "Geçersiz format — Örnek: 50+j30, 10∠30, 4+3i";
-            }
-        }
-
         /// <summary>Empedans için başlangıç önizlemesi.</summary>
         private void AddPreview(ComplexValue cv)
         {
