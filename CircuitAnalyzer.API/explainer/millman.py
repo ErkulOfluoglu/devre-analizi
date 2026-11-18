@@ -350,7 +350,7 @@ def _inner_node_section(ctx, a: str, b: str, branches: List[_Branch], currents: 
                     i_sym = f"{MINUS}I{ki(br)}" if dir_sign > 0 else f"I{ki(br)}"
                     # Kol akımını işaretiyle yerine koy: −I₃ = −(−2,182 mA) adımı görünsün
                     i_val = paren(eng(i_k, 'A', d))
-                    i_txt = f"{MINUS}{i_val}" if dir_sign > 0 else i_val
+                    i_txt = f"{MINUS}{i_val}" if dir_sign > 0 and abs(i_k) > 1e-15 else i_val
                     lines.append(f"{node_v(to)} = {i_sym} · {el.id} = "
                                  f"{i_txt} · {eng(el.value, 'Ω')} = {eng(v_next, 'V')}")
                 else:

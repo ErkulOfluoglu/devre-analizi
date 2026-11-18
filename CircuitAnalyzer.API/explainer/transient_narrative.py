@@ -287,8 +287,9 @@ def build_transient_explanation(a: TransientAnalysis) -> List[ExplanationSection
     x0, xf = a.x_start, a.x_final
     s.math(f"{x_lbl}(t) = {_x(a, xf)} + [{_x(a, x0)} {MINUS} {paren(_x(a, xf))}] · e^({MINUS}t/τ),   τ = {tau_txt}")
     diff = x0 - xf
-    exp_term = (f"{MINUS} {_x(a, -diff)}·e^({MINUS}t/τ)" if diff < 0
-                else f"+ ({_x(a, diff)}) · e^({MINUS}t/τ)")
+    # Katsayı eksi ise eksi işareti öne alınır: "3 A − 1 A · e^(−t/τ)" (iki durum aynı biçimde)
+    exp_term = (f"{MINUS} {_x(a, -diff)} · e^({MINUS}t/τ)" if diff < 0
+                else f"+ {_x(a, diff)} · e^({MINUS}t/τ)")
     if abs(xf) > 1e-12 and abs(x0) > 1e-12:
         s.math(f"{x_lbl}(t) = {_x(a, xf)} {exp_term}")
     if abs(x0) < 1e-12 and abs(xf) > 1e-12:

@@ -321,7 +321,7 @@ def test_item19_transient_sign_reversal_and_negative_coefficient(client):
         "analysis_type": "TRANSIENT",
     }))
     assert f"+ ({MINUS}" not in t_neg
-    assert f"3 A {MINUS} 1 A·e^({MINUS}t/τ)" in t_neg
+    assert f"3 A {MINUS} 1 A · e^({MINUS}t/τ)" in t_neg
 
 
 # ─── Madde 21: LLM isteminde eleman kimlikleri en çok 24 karakterle kırpılır ───
