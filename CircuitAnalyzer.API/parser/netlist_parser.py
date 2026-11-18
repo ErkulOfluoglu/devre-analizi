@@ -983,6 +983,21 @@ def _validate_dependents(circuit: ParsedCircuit) -> None:
         _reject(circuit, message)
 
 
+def _split_fields(text: str) -> List[str]:
+    """
+    Alanları virgülle ya da boşlukla ayırır: "0 10, 50" → ["0", "10", "50"].
+    İki virgül arası boşsa boş alan kalır ("1,,2" → ["1", "", "2"]); okuyucu onu hata sayar.
+    Düzenli ifade kullanılmaz: uzun boşluk dizilerinde bile süre metnin uzunluğuyla doğru orantılıdır.
+    """
+    if not text.strip():
+        return []
+    parts: List[str] = []
+    for chunk in text.strip().split(","):
+        words = chunk.split()
+        parts.extend(words if words else [""])
+    return parts
+
+
 def _read_fields(
     text: str, line_num: int, circuit: ParsedCircuit, eid: str, what: str, names: List[str],
     required: int,
@@ -992,7 +1007,7 @@ def _read_fields(
     ("2m" → 0.002, "1k" → 1000, "1meg" → 10⁶). Eksik isteğe bağlı alanlar 0 olur.
     Okunamayan, eksik zorunlu ya da sonsuz/tanımsız alanda Türkçe satır hatası verir (None döner).
     """
-    parts = re.split(r"\s*,\s*|\s+", text.strip()) if text.strip() else []
+    parts = _split_fields(text)
     while parts and not parts[-1]:      # sondaki boş alanlar ("SINE(0 10 50,)") yok sayılır
         parts.pop()
     if len(parts) < required:
