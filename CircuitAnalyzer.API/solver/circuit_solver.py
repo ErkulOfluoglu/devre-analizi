@@ -26,7 +26,7 @@ import traceback
 from typing import Dict, Tuple, List, Optional, Union
 
 import sympy
-from explainer.formatting import MINUS, eng, ek, num
+from explainer.formatting import MINUS, eng, ek, node_name, node_pair, num
 
 from models.response import (
     AnalysisResults, SolutionStep, ComplexNumber,
@@ -1692,9 +1692,9 @@ def _solve_thevenin(
 
     steps.append(SolutionStep(
         step_number=len(steps) + 1,
-        title=f"Thevenin Eşdeğeri (Düğüm {node_pos} – Düğüm {node_neg})",
+        title=f"Thevenin Eşdeğeri ({node_name(node_pos)} – {node_name(node_neg)})",
         description=(
-            f"Düğüm {node_pos} ve Düğüm {node_neg} arasındaki "
+            f"{node_name(node_pos)} ve {node_name(node_neg)} arasındaki "
             "Thevenin eşdeğer devresi hesaplanıyor.\n\n"
             "Adım A: Açık devre gerilimi (Vth) — terminaller "
             "arasında yük bağlamadan gerilimi ölç.\n"
@@ -1759,10 +1759,10 @@ def _solve_thevenin(
 
     except InfiniteImpedanceError:
         errors.append(
-            f"⚠ Thevenin hesaplanamadı (Düğüm {node_pos}–{node_neg}): "
+            f"⚠ Thevenin hesaplanamadı ({node_pair(node_pos, node_neg)}): "
             "Zth sonsuz.\n"
             "Terminallerden bakıldığında devre açık görünüyor — ör: DC "
-            "analizde seri bağlı bir kapasitör akımı keser.\n"
+            "analizde seri bağlı bir kondansatör akımı keser.\n"
             "Bu port için Thevenin eşdeğeri tanımsızdır."
         )
         return None
@@ -1770,7 +1770,7 @@ def _solve_thevenin(
         err_str = str(e).lower()
         if "singular" in err_str:
             errors.append(
-                f"⚠ Thevenin hesaplanamadı (Düğüm {node_pos}–{node_neg}):\n"
+                f"⚠ Thevenin hesaplanamadı ({node_pair(node_pos, node_neg)}):\n"
                 "Devre denklemleri tek bir çözüme varmıyor (tekil sistem) — bu genellikle seçilen terminaller "
                 "arasında geçerli bir devre yolu olmadığı anlamına gelir.\n"
                 "Lütfen terminal düğümlerinin doğru seçildiğinden "
@@ -1778,7 +1778,7 @@ def _solve_thevenin(
             )
         elif "not found" in err_str or "unknown" in err_str:
             errors.append(
-                f"⚠ Düğüm {node_pos} veya {node_neg} devrede bulunamadı.\n"
+                f"⚠ {node_name(node_pos)} veya {node_name(node_neg)} devrede bulunamadı.\n"
                 "Lütfen Thevenin terminal düğümlerinin devredeki "
                 "geçerli düğüm numaraları olduğunu kontrol edin."
             )
@@ -1820,9 +1820,9 @@ def _solve_norton(
 
     steps.append(SolutionStep(
         step_number=len(steps) + 1,
-        title=f"Norton Eşdeğeri (Düğüm {node_pos} – Düğüm {node_neg})",
+        title=f"Norton Eşdeğeri ({node_name(node_pos)} – {node_name(node_neg)})",
         description=(
-            f"Düğüm {node_pos} ve Düğüm {node_neg} arasındaki "
+            f"{node_name(node_pos)} ve {node_name(node_neg)} arasındaki "
             "Norton eşdeğer devresi hesaplanıyor.\n\n"
             "Adım A: Kısa devre akımı (In) — terminalleri bir tel ile "
             "kısa devre et, telden geçen akımı bul.\n"
@@ -1917,7 +1917,7 @@ def _solve_norton(
         err_str = str(e).lower()
         if "not invertible" in err_str or "singular" in err_str:
             errors.append(
-                f"⚠ Norton hesaplanamadı (Düğüm {node_pos}–{node_neg}): "
+                f"⚠ Norton hesaplanamadı ({node_pair(node_pos, node_neg)}): "
                 "terminaller kısa devre edildiğinde bir gerilim kaynağı "
                 "da kısa devre oluyor.\n"
                 "Port doğrudan ideal bir gerilim kaynağına paralel → "
@@ -1927,7 +1927,7 @@ def _solve_norton(
             )
         elif "not found" in err_str or "unknown" in err_str:
             errors.append(
-                f"⚠ Düğüm {node_pos} veya {node_neg} devrede bulunamadı.\n"
+                f"⚠ {node_name(node_pos)} veya {node_name(node_neg)} devrede bulunamadı.\n"
                 "Lütfen Norton terminal düğümlerinin devredeki "
                 "geçerli düğüm numaraları olduğunu kontrol edin."
             )

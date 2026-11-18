@@ -70,7 +70,7 @@ def test_dc_power_lines_carry_units():
 def test_dc_thevenin_titles_in_turkish_without_phasors():
     steps = _steps("V1 1 0 DC 12\nR1 1 2 1000\nR2 2 0 2000\nR3 2 3 1000\nR4 3 0 1000",
                    "THEVENIN", terminals=("3", "0"))
-    assert "Thevenin Eşdeğeri (Düğüm 3 – Düğüm 0)" in _titles(steps)
+    assert "Thevenin Eşdeğeri (Düğüm 3 – GND)" in _titles(steps)
     res = next(s for s in steps if s["title"] == "Thevenin Sonuçları")
     assert "∠" not in res["description"]
     assert res["description"].startswith("Vth = ") and "Rth = " in res["description"]

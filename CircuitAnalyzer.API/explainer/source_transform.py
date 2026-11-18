@@ -97,6 +97,18 @@ class _Net:
         self.steps: List[List[Tuple[str, str]]] = []   # her adım: [(tür, metin), …]
         self.cur: List[Tuple[str, str]] = []
         self.used_new_node = False
+        # Yeni direncin ilk yazıldığı birim (ör. Ra = 0,8 kΩ): sonraki satırlarda da aynı birim kullanılır
+        self.r_scale: Dict[str, Tuple[float, str]] = {}
+
+    def remember_scale(self, name: str, scale: float, prefix: str):
+        self.r_scale[name] = (scale, prefix)
+
+    def r_txt(self, el: "_El") -> str:
+        """Direnç değeri: ilk yazıldığı birimle ("0,8 kΩ"), yoksa olağan mühendislik biçimiyle."""
+        if el.name in self.r_scale:
+            scale, prefix = self.r_scale[el.name]
+            return f"{num(el.val / scale)} {prefix}Ω"
+        return eng(el.val, "Ω")
 
     def new_name(self, kind: str) -> str:
         i = self.count[kind]
@@ -283,6 +295,7 @@ def _step_chain(net: _Net) -> bool:
                      "bağlı; seri dirençler toplanır.")
             net.math(f"{r_new_name} = {' + '.join(names)} = "
                      f"{' + '.join(r_fmt(e.val) for e in res)} = {r_fmt(r_tot)}")
+            net.remember_scale(r_new_name, scale, prefix)
 
         terms = [(e, 1 if (f == e.n and t == e.p) else -1) for e, f, t in vol]   # nk yönünde +
         e_signed = sum(s * e.val for e, s in terms)
@@ -339,6 +352,7 @@ def _step_parallel(net: _Net) -> bool:
             r_fmt = lambda v: f"{num(v / scale)} {prefix}Ω".strip()
             net.remove(*grp)
             net.els.append(_El("R", new_name, u, w, r_eq))
+            net.remember_scale(new_name, scale, prefix)
             net.text(f"{listing} dirençleri {node_name(u)} ile {node_name(w)} arasında paralel bağlı; "
                      "paralel dirençler tek dirençle gösterilir.")
             if len(grp) == 2:
@@ -465,7 +479,7 @@ def _step_vr(net: _Net) -> bool:
         net.text(f"{v.name} gerilim kaynağı ile {r.name} direnci seri bağlı ({node_ek(m, 'de')} başka eleman yok). "
                  f"Kaynak dönüşümü: {v.name}, {r.name} direncine paralel bir akım kaynağına dönüşür; "
                  f"akım okunun yönü, {v.name} kaynağının + ucu tarafına bakar.")
-        net.math(f"{i_name} = {v.name} / {r.name} = {eng(abs(emf_m), 'V')} / {eng(r.val, 'Ω')} = "
+        net.math(f"{i_name} = {v.name} / {r.name} = {eng(abs(emf_m), 'V')} / {net.r_txt(r)} = "
                  f"{eng(abs(amount), 'A')}  (kaynak içinde {node_name(new.p)} → {node_name(new.n)} yönünde)")
         net.recap()
         return True
@@ -483,7 +497,7 @@ def _norton_to_thevenin(net: _Net, src: _El, res: _El, x: str, z: str):
     net.text(f"{src.name} akım kaynağı ile {res.name} direnci paralel bağlı. Kaynak dönüşümü: "
              f"{src.name}, {res.name} direncine seri bir gerilim kaynağına dönüşür; gerilim "
              f"kaynağının + ucu, akım okunun gösterdiği {node_name(z if emf_z >= 0 else x)} tarafındadır.")
-    net.math(f"{e_name} = {src.name}·{res.name} = {eng(src.val, 'A')} · {eng(res.val, 'Ω')} = "
+    net.math(f"{e_name} = {src.name}·{res.name} = {eng(src.val, 'A')} · {net.r_txt(res)} = "
              f"{eng(src.val * res.val, 'V')}")
 
 
@@ -564,6 +578,7 @@ def _step_delta_y(net: _Net, with_sources: bool = False) -> bool:
             name = net.new_star_name("Ry")
             v = a1.val * a2.val / denom
             net.els.append(_El("R", name, node, y, v))
+            net.remember_scale(name, scale, prefix)
             lines.append(f"{name} = {a1.name}·{a2.name}/({sym_d}) = "
                          f"{r_op(a1.val)}·{r_op(a2.val)}/({num_d}) = {r_res(v)} ({node_pair(node, y)})")
         net.used_dy = True
@@ -616,6 +631,7 @@ def _step_y_delta(net: _Net) -> bool:
             name = net.new_star_name("Rd")
             val = s_sum / opp.val
             net.els.append(_El("R", name, u, v, val))
+            net.remember_scale(name, 1.0, "")      # Ω ile yazıldı, sonra da Ω
             lines.append(f"{name} = {sym}/{opp.name} = {numr}/{num(opp.val)} = {num(val)} Ω "
                          f"({node_pair(u, v)})")
         net.used_dy = True
@@ -779,7 +795,7 @@ def build_source_transform(ctx) -> Tuple[Optional[list], str]:
         toward = a if src.n == a else b
         s2.text(f"Terminaller arasında artık bir akım kaynağı ve ona paralel bir direnç (Norton biçimi) var. "
                 f"Gerilim kaynağına dönüştürürsek: E = {src.name}·{res.name}.")
-        s2.math(f"E = {src.name}·{res.name} = {eng(src.val, 'A')} · {eng(res.val, 'Ω')} = "
+        s2.math(f"E = {src.name}·{res.name} = {eng(src.val, 'A')} · {net.r_txt(res)} = "
                 f"{eng(src.val * res.val, 'V')}  (+ ucu {node_name(toward)} tarafında)")
     else:
         s2.text("Terminaller arasında tek bir gerilim kaynağı ve ona seri tek bir direnç kaldı "
