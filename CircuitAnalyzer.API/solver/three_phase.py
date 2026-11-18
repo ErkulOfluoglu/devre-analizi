@@ -110,6 +110,7 @@ class Expansion:
     src_neutral: Dict[str, str] = field(default_factory=dict)            # kaynak → (eşdeğer) nötr düğüm
     meter_ids: Dict[str, str] = field(default_factory=dict)              # wattmetre → 0 V kaynak kimliği
     rename: Dict[str, str] = field(default_factory=dict)                 # birleştirilen düğümler → "0"
+    owner: Dict[str, str] = field(default_factory=dict)                  # iç eleman kimliği → çizilen eleman (U1, Y1, W1)
     notes: List[str] = field(default_factory=list)
     frequency: Optional[float] = None
 
@@ -162,6 +163,7 @@ def expand_three_phase(parsed: ParsedCircuit, is_dc: bool = False,
     """Üç fazlı kaynak/yük ve wattmetreleri sıradan elemanlara açar (parsed değişmez)."""
     used_ids = {e.id.upper() for e in parsed.elements}
     used_nodes = {n for e in parsed.elements for n in element_nodes(e)}
+    used_student_nodes = set(used_nodes)
 
     def uniq_id(name: str) -> str:
         while name.upper() in used_ids:
@@ -191,6 +193,7 @@ def expand_three_phase(parsed: ParsedCircuit, is_dc: bool = False,
             for ph, v in phase_voltages(e).items():
                 aid = uniq_id(f"V_{e.id}_{ph}")
                 exp.src_arms[e.id][ph] = aid
+                exp.owner[aid] = e.id
                 amp = abs(v)
                 elems.append(ParsedElement(
                     id=aid, element_type=ElementType.AC_SOURCE_SINE,
@@ -206,10 +209,14 @@ def expand_three_phase(parsed: ParsedCircuit, is_dc: bool = False,
                     a, b = nodes[key], p["n_node"]
                 else:
                     a, b = nodes[key[0]], nodes[key[1]]
-                elems.extend(_arm_elements(e.id, key, z, a, b, freq, uniq_id, uniq_node))
+                arm = _arm_elements(e.id, key, z, a, b, freq, uniq_id, uniq_node)
+                for x in arm:
+                    exp.owner[x.id] = e.id
+                elems.extend(arm)
         elif t == ElementType.WATTMETER:
             mid = uniq_id(f"V_{e.id}")
             exp.meter_ids[e.id] = mid
+            exp.owner[mid] = e.id
             if is_dc:
                 elems.append(ParsedElement(id=mid, element_type=ElementType.DC_SOURCE,
                                            node_positive=e.node_positive,
@@ -248,7 +255,10 @@ def expand_three_phase(parsed: ParsedCircuit, is_dc: bool = False,
         pick = next((n for n in preferred if n in members), members[0])
         exp.rename[pick] = "0"
     if exp.rename:
-        names = ", ".join(("Düğüm " + n) for n in exp.rename)
+        # Üçgen kaynağın sanal yıldız noktası öğrencinin devresinde yok: iç adı (U1_n) yerine ne olduğu yazılır
+        virtual = {n: sid for sid, n in exp.src_neutral.items() if n not in used_student_nodes}
+        names = ", ".join((f"{virtual[n]} kaynağının eşdeğer yıldız noktası" if n in virtual else "Düğüm " + n)
+                          for n in exp.rename)
         exp.notes.append(
             f"Devre toprağa (GND) bağlı değil; çözüm için {names} referans (0 V) alındı. "
             "Gerilimler bu referansa göre verilir, akımlar ve güçler etkilenmez.")
@@ -265,6 +275,7 @@ def expand_three_phase(parsed: ParsedCircuit, is_dc: bool = False,
         warnings=list(parsed.warnings), errors=list(parsed.errors),
         node_positions=dict(parsed.node_positions), value_basis=basis)
     flat.node_count = len({n for e in elems for n in element_nodes(e)})
+    flat.internal_names = True   # eleman adları açılım içi (V_U1_R …); tanı metinlerinde kullanılmaz
     exp.flat = flat
     return exp
 
@@ -371,6 +382,10 @@ class ThreePhaseAnalysis:
     notes: List[str] = field(default_factory=list)
     others: List[str] = field(default_factory=list)
     v_nn: Optional[complex] = None
+    # Çözücünün yük uçlarındaki gerilimleri: yıldız yükte kol (R, S, T → N′), üçgende kol (RS, ST, TR)
+    v_load: Optional[Dict[str, complex]] = None
+    # Yıldız yükün yıldız noktası N′ ile kaynak nötrü N arasındaki gerilim V_N′N (yalnız Y kaynak + Y yük)
+    v_star_shift: Optional[complex] = None
 
     @property
     def uh_rms(self) -> float:
@@ -513,6 +528,7 @@ def analyze_three_phase(
         i_line=i_line, i_n=i_n, i_phase=i_phase, s_arms=s_arms, p=p, q=q, s=s, pf=pf,
         pf_type=_pf_type(p, q, s), aron=aron, guided=False, notes=list(exp.notes))
     an.meters = wattmeter_readings(results, exp, is_rms, False)
+    an.v_load, an.v_star_shift = _load_voltages(results, exp, src, load, uf)
 
     # ── Anlatım kalıbına uyuyor mu? (tek kaynak, tek yük, başka eleman yok) ──
     reason = ""
@@ -548,6 +564,73 @@ def analyze_three_phase(
 
 def _node_of(load: ParsedElement, ph: str) -> str:
     return {"R": load.node_positive, "S": load.node_negative, "T": load.params["t_node"]}[ph]
+
+
+def snap_zero(v: complex, ref: float, rel: float = 1e-9) -> complex:
+    """Sayısal gürültüyü sıfıra çeker: |v| ≤ rel·ref ise 0 (ör. dengeli yükte V_N′N ≈ 2·10⁻¹⁴ V)."""
+    return 0j if abs(v) <= rel * max(abs(ref), 1e-300) else v
+
+
+def _load_voltages(results, exp: Expansion, src: ParsedElement, load: Optional[ParsedElement],
+                   uf: float) -> Tuple[Optional[Dict[str, complex]], Optional[complex]]:
+    """Yükün kol gerilimleri (çözücüden) ve yıldız noktası kayması V_N′N (Y kaynak + Y yük)."""
+    if load is None:
+        return None, None
+    nv = {ph: node_voltage(results, exp, _node_of(load, ph)) for ph in PHASES}
+    if any(x is None for x in nv.values()):
+        return None, None
+    if load.params["connection"] == "D":
+        return {k: snap_zero(nv[a] - nv[b], uf) for k, a, b in DELTA_ARMS}, None
+    v_star = node_voltage(results, exp, load.params["n_node"])
+    if v_star is None:
+        return None, None
+    arms = {ph: snap_zero(nv[ph] - v_star, uf) for ph in PHASES}
+    shift = None
+    if src.params["connection"] == "Y":
+        v_n = node_voltage(results, exp, src.params["n_node"])
+        if v_n is not None:
+            shift = snap_zero(v_star - v_n, uf)
+    return arms, shift
+
+
+def node_display_labels(parsed: ParsedCircuit, exp: Expansion) -> Dict[str, str]:
+    """
+    Üç fazlı elemanların uçlarına bağlı düğümler için öğrencinin diliyle ad: "R fazı (U1)",
+    "N (U1 nötrü)", "N′ (Y1 yıldız noktası)". Düğüm 0 (GND) ve başka düğümler etiketlenmez.
+    """
+    roles: Dict[str, List[Tuple[str, str]]] = {}
+
+    def add(node: str, role: str, owner: str) -> None:
+        if node == "0":
+            return
+        lst = roles.setdefault(node, [])
+        if (role, owner) not in lst:
+            lst.append((role, owner))
+
+    for e in exp.sources + exp.loads:
+        for ph in PHASES:
+            add(_node_of(e, ph), ph, e.id)
+        if e.params["connection"] == "Y":
+            add(e.params["n_node"], "N" if e.element_type == ElementType.THREE_PHASE_SOURCE else "N′", e.id)
+
+    out: Dict[str, str] = {}
+    for node, lst in roles.items():
+        role_names = []
+        for role, _ in lst:
+            if role not in role_names:
+                role_names.append(role)
+        owners = ", ".join(o for _, o in lst)
+        if len(role_names) == 1 and role_names[0] in PHASES:
+            out[node] = f"{role_names[0]} fazı ({owners})"
+        elif role_names == ["N"]:
+            out[node] = f"N ({owners} nötrü)"
+        elif role_names == ["N′"]:
+            out[node] = f"N′ ({owners} yıldız noktası)"
+        elif set(role_names) == {"N", "N′"}:
+            out[node] = f"N (nötr: {owners})"
+        else:
+            out[node] = " / ".join(role_names) + f" ({owners})"
+    return out
 
 
 def _compensation(an: ThreePhaseAnalysis, target: float, verify, exp: Expansion, results) -> CompAnalysis:

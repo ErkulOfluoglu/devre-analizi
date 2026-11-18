@@ -10,9 +10,64 @@ namespace CircuitAnalyzer.WPF.Services
     /// </summary>
     public sealed class TourStep
     {
+        /// <summary>Açıklama kartının hedefe göre tercih edilen yanları (sırayla denenir); null: sağ, sol, alt, üst.</summary>
+        public IReadOnlyList<TourSide>? PreferredSides { get; init; }
+
         public Func<FrameworkElement?>? TargetAccessor { get; init; }
         public string Title { get; init; } = "";
         public string Body { get; init; } = "";
+    }
+
+    /// <summary>
+    /// Kartın hedefe göre yeri. <see cref="RightLow"/>: hedefin sağında ama pencerenin alt kısmında
+    /// (sol şerit gibi boyu uzun hedefler için; devre çizim alanının üst-solunda durur).
+    /// </summary>
+    public enum TourSide { Right, Left, Below, Above, RightLow }
+
+    /// <summary>Açıklama kartının konumunu hesaplar (saf işlev: birim testlenebilir).</summary>
+    public static class TourPlacement
+    {
+        public static readonly TourSide[] DefaultOrder = { TourSide.Right, TourSide.Left, TourSide.Below, TourSide.Above };
+
+        /// <summary><see cref="TourSide.RightLow"/> kartının pencere altından uzaklığı (araç çubuğu + durum satırı).</summary>
+        public const double RightLowBottomMargin = 96;
+
+        /// <summary>
+        /// Tercih sırasındaki ilk sığan yan seçilir; hiçbiri sığmazsa son çare olarak üst. Sonuç pencereye kelepçelenir.
+        /// </summary>
+        public static Point Place(Rect hole, double cardW, double cardH, double w, double h,
+                                  IReadOnlyList<TourSide>? order = null)
+        {
+            double x = 0, y = 0;
+            bool placed = false;
+            foreach (var side in order is { Count: > 0 } ? order : DefaultOrder)
+            {
+                switch (side)
+                {
+                    case TourSide.Right when hole.Right + 16 + cardW <= w:
+                        x = hole.Right + 16; y = hole.Top + (hole.Height - cardH) / 2; placed = true; break;
+                    case TourSide.Left when hole.Left - 16 - cardW >= 0:
+                        x = hole.Left - 16 - cardW; y = hole.Top + (hole.Height - cardH) / 2; placed = true; break;
+                    case TourSide.Below when hole.Bottom + 16 + cardH <= h:
+                        x = hole.Left + (hole.Width - cardW) / 2; y = hole.Bottom + 16; placed = true; break;
+                    case TourSide.Above when hole.Top - 16 - cardH >= 0:
+                        x = hole.Left + (hole.Width - cardW) / 2; y = hole.Top - 16 - cardH; placed = true; break;
+                    case TourSide.RightLow when hole.Right + 16 + cardW <= w:
+                        // Alttaki araç çubuğu ve durum satırı için pay bırak
+                        x = hole.Right + 16; y = h - cardH - RightLowBottomMargin; placed = true; break;
+                }
+                if (placed) break;
+            }
+            if (!placed)
+            {
+                x = hole.Left + (hole.Width - cardW) / 2;
+                y = Math.Max(16, hole.Top - 16 - cardH);
+            }
+
+            x = Math.Max(16, Math.Min(w - cardW - 16, x));
+            y = Math.Max(16, Math.Min(h - cardH - 16, y));
+            return new Point(x, y);
+        }
     }
 
     /// <summary>
@@ -30,9 +85,12 @@ namespace CircuitAnalyzer.WPF.Services
             {
                 new()
                 {
+                    // Şerit pencere boyunca uzanır; sağına ortalanan kart çizim alanının üst-solundaki
+                    // devreyi örter. Kart şeridin sağında, pencerenin alt kısmında durur.
+                    PreferredSides = new[] { TourSide.RightLow, TourSide.Right },
                     TargetAccessor = () => window?.ElementRail,
                     Title = "Elemanlar",
-                    Body = "Bir kategoriye tıklayın, açılan listeden elemanı seçin. Eklenen eleman çizim alanının ortasına gelir; sürükleyip yerleştirin."
+                    Body = "Bir kategoriye tıklayın, açılan listeden elemanı seçin. Eleman fareyi izler; çizim alanında istediğiniz yere tıklayıp bırakın. (R: döndür · Esc: vazgeç)"
                 },
                 new()
                 {
@@ -42,6 +100,8 @@ namespace CircuitAnalyzer.WPF.Services
                 },
                 new()
                 {
+                    // Sağ panelde: sola gelince yöntem kutusunu / devreyi örter; önce altına
+                    PreferredSides = new[] { TourSide.Below, TourSide.Left },
                     TargetAccessor = () => window?.AnalysisPanel.BtnSolve,
                     Title = "Çöz",
                     Body = "Yöntemi seçip buraya basın ya da F5'e basın. Çözüm saniyeler içinde gelir: anlatım bu panelde, değerler devrenin üzerinde görünür."

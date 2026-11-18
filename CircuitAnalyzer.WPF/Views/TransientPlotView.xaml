@@ -93,7 +93,8 @@
                 <sp:WpfPlot x:Name="PlotTop"
                             Grid.Row="1"
                             MouseMove="PlotTop_MouseMove"
-                            MouseLeave="PlotTop_MouseLeave"/>
+                            MouseLeave="PlotTop_MouseLeave"
+                            SizeChanged="PlotTop_SizeChanged"/>
             </Grid>
         </Border>
 
@@ -116,7 +117,8 @@
                 <sp:WpfPlot x:Name="PlotBottom"
                             Grid.Row="1"
                             MouseMove="PlotBottom_MouseMove"
-                            MouseLeave="PlotBottom_MouseLeave"/>
+                            MouseLeave="PlotBottom_MouseLeave"
+                            SizeChanged="PlotBottom_SizeChanged"/>
             </Grid>
         </Border>
     </Grid>

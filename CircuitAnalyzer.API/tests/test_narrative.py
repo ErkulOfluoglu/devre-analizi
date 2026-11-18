@@ -268,12 +268,19 @@ def test_supernode_narrative(solve):
     assert any("süperdüğüm" in t.lower() for t in kcl_texts)
     assert any("Kısıt (V2): V₂ − V₃ = 5" in t for t in kcl_texts)
 
-    # Denklemlerin çözümü "birlikte çözülünce" fallback metnini kullanmalı
+    # Çözüm adım adım: kısıttan V₂ = V₃ + 5 yazılır, süperdüğüm KCL'sinde yerine konur,
+    # tek bilinmeyen (V₃) bulunur, sonra V₂ geri yerine koymayla bulunur.
+    # El hesabı (mS, mA): 1,25·V₂ + 0,5·V₃ = 12 → 1,25·(V₃ + 5) + 0,5·V₃ = 12
+    #   → 1,75·V₃ = 5,75 → V₃ = 3,286 V → V₂ = 8,286 V
     sec_sol = section_by_title(explanation, "Denklemlerin Çözümü")
     assert sec_sol is not None
     sol_texts = section_texts(sec_sol)
-    assert any("birlikte çözülünce" in t for t in sol_texts)
-    assert any("V₂ = 8,286 V" in t for t in sol_texts)
+    assert not any("birlikte çözülünce" in t for t in sol_texts)
+    assert any("V₂ = V₃ + 5" in t for t in sol_texts)
+    assert any("1,25·(V₃ + 5) + 0,5·V₃ = 12" in t for t in sol_texts)
+    assert any("1,75·V₃ = 5,75" in t for t in sol_texts)
+    assert any("V₃ = 5,75 / 1,75 = 3,286 V" in t for t in sol_texts)
+    assert any("V₂ = V₃ + 5 = 3,286 + 5 = 8,286 V" in t for t in sol_texts)
 
 
 # ═══════════════════════════════════════════════════════

@@ -420,7 +420,7 @@ def test_ideal_narrative_adds_impedance_section_only_with_reactive_elements():
 def test_ideal_narrative_numbers_match_hand_calculation():
     d = _ok(IDEAL)
     assert "Z₁ = Z₂ / a² = 10 Ω / 0,5² = 40 Ω" in _text(d, "Yansıyan Empedans")
-    assert "I₁ = V / Z_top = 100 V / 40 Ω = 2,5 A" in _text(d, "Primere İndirgenmiş Devre")
+    assert "I₁ = V / Z₁ = 100 V / 40 Ω = 2,5 A" in _text(d, "Primere İndirgenmiş Devre")
     assert "V₂ = a · V₁ = 0,5 · 100 V = 50 V" in _text(d, "Sekonder Değerleri")
     assert "I₂ = I₁ / a = 2,5 A / 0,5 = 5 A" in _text(d, "Sekonder Değerleri")
     assert "P₁ = P₂ = 250 W" in _text(d, "Güç")

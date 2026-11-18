@@ -28,7 +28,7 @@ import math
 from dataclasses import dataclass, field
 from typing import List, Optional, Set, Tuple
 
-from explainer.formatting import MINUS, num
+from explainer.formatting import MINUS, node_name, node_pair, num
 
 from models.response import SolutionStep
 from parser.netlist_parser import (
@@ -291,7 +291,7 @@ def _delta_to_y(
             v = (u1 * u2) / denom
             f_lines.append(
                 f"{bname} = {m1}·{m2}/({sym_d}) = "
-                f"{_fmt(u1)}·{_fmt(u2)}/({num_d}) = {_fmt(v)} Ω (Düğüm {node}–{y_node})"
+                f"{_fmt(u1)}·{_fmt(u2)}/({num_d}) = {_fmt(v)} Ω ({node_pair(node, y_node)})"
             )
             l_lines.append(
                 f"{bname} = \\frac{{{m1} \\cdot {m2}}}{{{lsym_d}}} = "
@@ -324,7 +324,7 @@ def _delta_to_y(
             z = (adj1.z * adj2.z) / denom
             f_lines.append(
                 f"{bname} = {l1}·{l2}/({sym_d}) = "
-                f"{t1}·{t2}/({num_d}) = {_fmt_z(z)} Ω (Düğüm {node}–{y_node})"
+                f"{t1}·{t2}/({num_d}) = {_fmt_z(z)} Ω ({node_pair(node, y_node)})"
             )
             l_lines.append(
                 f"{bname} = \\frac{{{x1} \\cdot {x2}}}{{{lsym_d}}} = {_fmt_z(z)} \\text{{ Ω}}"
@@ -380,7 +380,7 @@ def _y_to_delta(
             v = prod_sum / opp.value
             f_lines.append(
                 f"{bname} = ({sym_num})/{opp.name} = "
-                f"({num_str})/{_fmt(opp.value)} = {_fmt(v)} Ω (Düğüm {pa}–{pb})"
+                f"({num_str})/{_fmt(opp.value)} = {_fmt(v)} Ω ({node_pair(pa, pb)})"
             )
             l_lines.append(
                 f"{bname} = \\frac{{{lsym_num}}}{{{opp.name}}} = "
@@ -411,7 +411,7 @@ def _y_to_delta(
             z = prod_sum / opp.z
             f_lines.append(
                 f"{bname} = ({sym_num})/{lo} = "
-                f"({num_str})/{to} = {_fmt_z(z)} Ω (Düğüm {pa}–{pb})"
+                f"({num_str})/{to} = {_fmt_z(z)} Ω ({node_pair(pa, pb)})"
             )
             l_lines.append(
                 f"{bname} = \\frac{{{lsym_num}}}{{{xo}}} = {_fmt_z(z)} \\text{{ Ω}}"
@@ -736,7 +736,7 @@ def generate_topology_step(
         elif r.kind == "parallel":
             a, b = r.elements
             equations.append(
-                f"{a} ∥ {b} (Düğüm {r.nodes[0]}–{r.nodes[1]} arası paralel) "
+                f"{a} ∥ {b} ({node_pair(r.nodes[0], r.nodes[1])} arası paralel) "
                 f"→ {r.formula}"
             )
         elif r.kind == "delta_y":
@@ -754,13 +754,14 @@ def generate_topology_step(
         "Seri bağlı elemanlar aynı akımı taşır (aralarındaki düğüme başka "
         "eleman bağlı değildir); paralel bağlı elemanlar aynı iki düğüm "
         "arasındadır ve aynı gerilimi görür.\n"
-        "Seri: Req = R1 + R2,  Paralel: Req = R1·R2/(R1+R2).\n"
-        "Kapasitörlerde kurallar terstir: seri Ceq = C1·C2/(C1+C2), "
-        "paralel Ceq = C1 + C2."
+        "Seri: Req = R1 + R2,  Paralel: Req = R1·R2/(R1+R2)."
     )
+    if not is_dc and any(e.element_type == ElementType.CAPACITOR for e in parsed.elements):
+        description += ("\nKondansatörlerde kurallar terstir: seri Ceq = C1·C2/(C1+C2), "
+                        "paralel Ceq = C1 + C2.")
     if open_caps:
         description += (
-            f"\n\nDC analizde kapasitörler ({', '.join(open_caps)}) açık "
+            f"\n\nDC analizde kondansatörler ({', '.join(open_caps)}) açık "
             "devredir — indirgemeye katılmaz."
         )
     if blockers:
@@ -784,7 +785,7 @@ def generate_topology_step(
             )
 
     final = [
-        f"{b.name}: Düğüm {b.a}–{b.b}"
+        f"{b.name}: {node_pair(b.a, b.b)}"
         + (f", Z = {_fmt_z(b.z)} Ω" if b.z is not None else "")
         for b in remaining if len(b.members) > 1
     ]
@@ -885,7 +886,7 @@ def reduce_port_impedance(
             union(e.node_positive, e.node_negative)
             result.zeroing_notes.append(
                 f"{e.id} gerilim kaynağı sıfırlanır → kısa devre (tel) olur: "
-                f"Düğüm {e.node_positive} ile Düğüm {e.node_negative} birleşir."
+                f"{node_name(e.node_positive)} ile {node_name(e.node_negative)} birleşir."
             )
         elif e.element_type in CURRENT_SOURCES:
             result.zeroing_notes.append(
@@ -894,8 +895,8 @@ def reduce_port_impedance(
         elif is_dc and e.element_type == ElementType.INDUCTOR:
             union(e.node_positive, e.node_negative)
             result.zeroing_notes.append(
-                f"{e.id} DC'de kısa devredir: Düğüm {e.node_positive} ile "
-                f"Düğüm {e.node_negative} birleşir."
+                f"{e.id} DC'de kısa devredir: {node_name(e.node_positive)} ile "
+                f"{node_name(e.node_negative)} birleşir."
             )
         elif is_dc and e.element_type == ElementType.CAPACITOR:
             result.zeroing_notes.append(
@@ -969,7 +970,7 @@ def reduce_port_impedance(
         for br in branches:
             if br.a == br.b:
                 branches.remove(br)
-                removed(br, f"iki ucu da aynı düğüme (Düğüm {br.a}) bağlandı "
+                removed(br, f"iki ucu da aynı düğüme ({node_name(br.a)}) bağlandı "
                             "(kısa devre edildi) → üzerinden akım geçmez, çıkarılır.")
                 conversions_since_sp = 0
                 changed = True
@@ -986,7 +987,7 @@ def reduce_port_impedance(
             dangling = [n for n in (br.a, br.b) if degree[n] == 1 and n not in pinned]
             if dangling:
                 branches.remove(br)
-                removed(br, f"bir ucu (Düğüm {dangling[0]}) boşta kaldı → "
+                removed(br, f"bir ucu ({node_name(dangling[0])}) boşta kaldı → "
                             "akım taşımaz, çıkarılır.")
                 conversions_since_sp = 0
                 changed = True

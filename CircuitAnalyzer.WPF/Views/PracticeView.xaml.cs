@@ -69,6 +69,7 @@ public partial class PracticeView : UserControl
     public void Load(IReadOnlyList<PracticeQuestionDto> questions, IReadOnlyList<ExplanationSectionDto> explanation)
     {
         Questions = questions ?? Array.Empty<PracticeQuestionDto>();
+        TxtFormatHint.Text = FormatHintText(Questions);
         _rows.Clear();
         ContainerMain.Children.Clear();
         ContainerExtra.Children.Clear();
@@ -254,17 +255,18 @@ public partial class PracticeView : UserControl
                 }
             }
 
-            TxtScore.Text = $"Doğru: {CorrectCount} / {Questions.Count}";
-            TxtScore.SetResourceReference(TextBlock.ForegroundProperty, (CorrectCount == Questions.Count)
-                ? "Brush.Success"
-                : "Brush.Text.Primary");
-            TxtScore.Visibility = Visibility.Visible;
-
             var mainQuestions = Questions
                 .Where(q => !string.Equals(q.Group, "extra", StringComparison.OrdinalIgnoreCase))
                 .ToList();
             bool allMainCorrect = mainQuestions.Count > 0 &&
                 mainQuestions.All(q => _rows.TryGetValue(q.Id, out var r) && r.IsCorrect);
+
+            // Asıl ve ek sorular ayrı sayılır: "Doğru: 1 / 4" ile "hepsi doğru" çelişmesin
+            TxtScore.Text = ScoreText(Questions, id => _rows.TryGetValue(id, out var r) && r.IsCorrect);
+            TxtScore.SetResourceReference(TextBlock.ForegroundProperty, allMainCorrect
+                ? "Brush.Success"
+                : "Brush.Text.Primary");
+            TxtScore.Visibility = Visibility.Visible;
             BannerCongrats.Visibility = allMainCorrect ? Visibility.Visible : Visibility.Collapsed;
         }
         catch (Exception ex)
@@ -278,6 +280,25 @@ public partial class PracticeView : UserControl
             BtnCheck.IsEnabled = true;
         }
     }
+
+    /// <summary>"Asıl sorular: 2 / 2 doğru · Ek sorular: 1 / 3" (ek soru yoksa yalnız ilk kısım).</summary>
+    internal static string ScoreText(IEnumerable<PracticeQuestionDto> questions, Func<string, bool> isCorrect)
+    {
+        var list = questions.ToList();
+        bool IsExtra(PracticeQuestionDto q) => string.Equals(q.Group, "extra", StringComparison.OrdinalIgnoreCase);
+        var main = list.Where(q => !IsExtra(q)).ToList();
+        var extra = list.Where(IsExtra).ToList();
+        string text = $"Asıl sorular: {main.Count(q => isCorrect(q.Id))} / {main.Count} doğru";
+        if (extra.Count > 0)
+            text += $" · Ek sorular: {extra.Count(q => isCorrect(q.Id))} / {extra.Count}";
+        return text;
+    }
+
+    /// <summary>Yazım örneği: AC sorusu yoksa fazör örneği gösterilmez.</summary>
+    internal static string FormatHintText(IEnumerable<PracticeQuestionDto> questions) =>
+        questions.Any(q => q.IsAc)
+            ? "Yazım: 4m · 4 mA · 0,004 · 2,5k   |   AC: 3,03∠-72,3 veya 0,92-j2,89"
+            : "Yazım: 4m · 4 mA · 0,004 · 2,5k · 1,5 (ondalık için virgül)";
 
     public void ShowNextHint()
     {

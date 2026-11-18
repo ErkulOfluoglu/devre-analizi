@@ -166,7 +166,7 @@ Akım ışığı teldeki gerçek akımı gösterir; süs değildir. İlk sürüm
 
 ## Bileşenler
 
-**Başlık çubuğu.** 48 px yüksek, zeminin üstünde. Solda program adı ve dosya adı (soluk), sağda Dosya, Örnekler, Yeni soru, ince bir ayraç, Yardım ve tema seçici. Tema seçici yazısızdır: üç simge yan yana (güneş: açık, ay: koyu, ekran: Windows'a uy); seçili olan dolgulu, her birinin ipucu ve erişilebilir adı vardır. Düğmeler kenarsızdır. Dosya menüsünde: Aç, Son açılanlar, Kaydet, Yazdır / PDF, Netlist oluştur, Temizle.
+**Başlık çubuğu.** 48 px yüksek, zeminin üstünde. Solda program adı ve dosya adı (soluk), sağda Dosya, Örnekler, Yeni soru, ince bir ayraç, Yardım ve tema seçici. Tema seçici yazısızdır: üç simge yan yana (güneş: açık, ay: koyu, ekran: Windows'a uy); seçili olan dolgulu, her birinin ipucu ve erişilebilir adı vardır. Düğmeler kenarsızdır. Dosya menüsünde: Yeni, Aç…, Kaydet, Farklı kaydet…, Yazdır / PDF, Son açılanlar (yalnız daha önce dosya açıldıysa), Netlist oluştur, Temizle.
 
 **Sol şerit.** 5 kategori: Pasif, Kaynak, Bağımlı, Anahtar, Ölçüm. Her öğede 22 px simge ve altında 12 px ad. Seçili öğenin hafif bir dolgusu ve solunda 3×16 px mavi çizgisi vardır. Seçili kategoriye yeniden tıklamak listeyi kapatır.
 
@@ -174,7 +174,7 @@ Akım ışığı teldeki gerçek akımı gösterir; süs değildir. İlk sürüm
 
 **Araç çubuğu.** Tuvalin alt ortasında: Tel çiz, ayraç, Geri al, Yinele, ayraç, uzaklaştır, yakınlaştırma oranı, yakınlaştır, sığdır. Tel çizme açıkken düğme hafif dolgulu olur. (Taslaktaki Seç, Döndür, Sil düğmeleri şimdilik yok; bunlar klavye ve sağ tıkla yapılıyor.)
 
-**Durum satırı.** Tuvalin altında, doğrudan zeminin üstünde, soluk renkte: "Çözüldü — 4 düğüm, 7 çözüm adımı".
+**Durum satırı.** Tuvalin altında, doğrudan zeminin üstünde, soluk renkte: "Çözüldü — 4 düğüm, 7 adım".
 
 **Okuma paneli.** Tek bir kâğıt kart. Üstte yöntem kutusu ile Çöz düğmesi yan yana; altında analiz türü ("DC analiz") ve çözücü durumu, gerekiyorsa terminal, frekans ve Etkin/Tepe seçimleri, en altta Alıştırma modu. İnce bir çizginin altında çözüm başlar: başarıda yalnız küçük yeşil bir "Çözüm başarılı" satırı (uyarı varsa sarı şerit), Anlatım / Sonuçlar seçimi, adım adım anlatım ve en sonda "Yapay zekâya sor". Denklemler kod bloğu içinde (paper-soft zemin, 8 px köşe, mono yazı). Grafikler kart içinde kart olmasın diye yalnız ince kenarlı kutularda durur.
 
@@ -184,10 +184,12 @@ Akım ışığı teldeki gerçek akımı gösterir; süs değildir. İlk sürüm
 
 ## Erişilebilirlik
 
-- Bütün kontroller klavyeyle ulaşılabilir; odak çerçevesi her zaman görünür (`Brush.Border.Focus`).
-- Tıklanan hedefler en az 32 px yüksekliğindedir.
-- Bilgi yalnız renkle verilmez: seçili eleman hem mavi olur hem de kartı açılır.
-- Yüksek karşıtlık modunda Windows'un kendi renkleri kullanılır.
+Bu maddelerin bir kısmı henüz hedeftir; her maddede bugünkü durum ayrıca yazılıdır.
+
+- **Klavye (hedef):** bütün kontroller klavyeyle ulaşılabilir olmalı; odak çerçevesi her zaman görünür (`Brush.Border.Focus`). *Bugün:* paneldeki, menülerdeki ve pencerelerdeki kontroller için odak çerçevesi stili vardır; çizim alanında eleman yerleştirmek ve tel çizmek fare ister (klavye kısayolları seçili elemanlar üzerinde çalışır).
+- **Hedef boyutu (hedef):** tıklanan hedefler en az 32 px yüksekliğinde olmalı. *Bugün bilinen istisnalar:* adım zincirindeki "Tümünü aç" ve model indirmedeki "İptal" düğmeleri 28 px'tir.
+- Bilgi yalnız renkle verilmez: seçili eleman hem mavi olur hem de (çözümden sonra) kartı açılır.
+- **Yüksek karşıtlık (hedef):** Windows'un yüksek karşıtlık modunda Windows'un kendi renkleri kullanılmalı. *Bugün:* bu modda yalnızca cam (bulanık) zemin kapanır; renkler programın kendi temasından gelir.
 
 ## WPF'de uygulama notları
 

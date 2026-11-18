@@ -25,7 +25,7 @@ import numpy as np
 from explainer.formatting import MINUS, node_v, num, paren
 from explainer.narrative import (
     _Ctx, _Section, _close, _cnum, _control_text, _group_terms, _join_terms,
-    _linear_term, _pnum, _system_blocks, _flow_text,
+    _linear_term, _pnum, _system_blocks, _flow_text, elem_name,
 )
 from explainer.step_generator import _source_value
 from parser.netlist_parser import (
@@ -174,7 +174,11 @@ def _make_control(ctx: _Ctx, e: ParsedElement) -> Union[Control, str]:
 
     if p["control_kind"] == "V":
         simp = _expr_text(diff)
-        line = f"{label} = {diff_sym}" + ("" if simp == diff_sym else f" = {simp}")
+        if not diff.c:
+            simp_shown = f"{simp} V"
+        else:
+            simp_shown = simp
+        line = f"{label} = {diff_sym}" + ("" if simp == diff_sym else f" = {simp_shown}")
         return Control(e, label, diff, paren(simp), [line])
 
     # ── Akım kontrolü ──
@@ -220,6 +224,26 @@ def _dep_term(e: ParsedElement, ctrl: Control, leaving: bool) -> Tuple[str, str,
     return (_coef_times(g, ctrl.label), _coef_times(g, ctrl.num), ctrl.expr.scale(g))
 
 
+def _and_join(items: List[str]) -> str:
+    """['1'] → '1', ['1', '2'] → '1 ve 2', ['1', '2', '3'] → '1, 2 ve 3'."""
+    items = list(items)
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} ve {items[-1]}"
+
+
+def _short_reason(ctx: _Ctx, el: ParsedElement) -> str:
+    """Kısıt elemanı kısa devre gibi davranıyorsa nedeni, değilse ''."""
+    role = el.params.get("port_role")
+    if role == "short":
+        return "terminalleri birleştirir"
+    if role == "zeroed":
+        return "sıfırlandı (kısa devre)"
+    if el.params.get("superposition_zeroed"):
+        return "bu adımda sıfırlandı (kısa devre)"
+    if ctx.is_dc and el.element_type == ElementType.INDUCTOR:
+        return "DC'de kısa devredir"
+    return ""
+
+
 def _kcl_row(ctx: _Ctx, members: List[str], controls: Dict[str, Control],
              inner: list) -> Row:
     mset = set(members)
@@ -246,15 +270,23 @@ def _kcl_row(ctx: _Ctx, members: List[str], controls: Dict[str, Control],
         lead = ""
     else:
         title = "Süperdüğüm {" + ", ".join(members) + "}"
-        if inner and all(el.element_type == ElementType.INDUCTOR for el, *_ in inner):
-            lead = (f"{', '.join(el.id for el, *_ in inner)} DC'de kısa devredir; Düğüm "
-                    f"{' ve '.join(members)} aynı gerilimdedir ve birlikte ele alınır "
-                    "(bobinin akımı bilinmediği için tek tek KCL yazılamaz).")
+        nodes_txt = _and_join(members)
+        ids = ", ".join(elem_name(el) for el, *_ in inner)
+        shorts = [el for el, *_ in inner if _short_reason(ctx, el)]
+        if inner and len(shorts) == len(inner):
+            reasons = "; ".join(f"{elem_name(el)} {_short_reason(ctx, el)}" for el in shorts)
+            if reasons.startswith("kısa devre teli"):      # cümle başı
+                reasons = "K" + reasons[1:]
+            lead = (f"{reasons}. Bu yüzden Düğüm {nodes_txt} aynı gerilimdedir ve birlikte ele "
+                    "alınır (kısa devreden geçen akım bilinmediği için tek tek KCL yazılamaz).")
+        elif len(inner) > 1:
+            lead = (f"Düğüm {nodes_txt} arasında gerilim kaynakları var ({ids}); kaynakların "
+                    "akımı bilinmediği için bu düğümler süperdüğüm olarak birlikte ele alınır: "
+                    "önce süperdüğümün KCL'si, sonra kaynakların kısıt denklemleri yazılır.")
         else:
-            lead = (f"Düğüm {' ve '.join(members)} arasında gerilim kaynağı var "
-                    f"({', '.join(el.id for el, *_ in inner)}); kaynağın akımı bilinmediği için bu "
-                    "düğümler süperdüğüm olarak birlikte ele alınır: önce süperdüğümün KCL'si, "
-                    "sonra kaynağın kısıt denklemi yazılır.")
+            lead = (f"Düğüm {nodes_txt} arasında gerilim kaynağı var ({ids}); kaynağın akımı "
+                    "bilinmediği için bu düğümler süperdüğüm olarak birlikte ele alınır: önce "
+                    "süperdüğümün KCL'si, sonra kaynağın kısıt denklemi yazılır.")
     return Row("kcl", title, _join_terms(sym) or "0", _join_terms(numeric) or "0", tot, lead)
 
 
@@ -269,7 +301,7 @@ def _constraint_row(ctx: _Ctx, edge, controls: Dict[str, Control], lead: str = "
         return Row("constraint", f"Kısıt ({elem.id})", sym, numeric,
                    lhs - ctrl.expr.scale(g), lead)
     numeric = f"{node_v(p)} {MINUS} {node_v(n)} = {ctx.v_num(value)}"
-    return Row("constraint", f"Kısıt ({elem.id})", "", numeric,
+    return Row("constraint", f"Kısıt ({elem_name(elem)})", "", numeric,
                lhs - LinExpr(k=value), lead)
 
 
@@ -448,10 +480,12 @@ def solve_section(ctx: _Ctx) -> List[_Section]:
     from explainer.formatting import polar, rect
     sysm: DepSystem = ctx.dep_system
     s = _Section("Denklemlerin Çözümü")
-    s.text("Bağımlı kaynağın kontrol büyüklüğü artık düğüm gerilimleriyle yazıldığı için denklemler "
-           "bilinmeyen terimleri sol, bilinen sayıları sağ tarafta toplanarak A·x = b biçimine gelir.")
+    if ctx.has_dependent:
+        s.text("Bağımlı kaynağın kontrol büyüklüğü artık düğüm gerilimleriyle yazıldığı için "
+               "denklemler bilinmeyen terimleri sol, bilinen sayıları sağ tarafta toplanarak "
+               "A·x = b biçimine gelir.")
     _system_blocks(ctx, s, sysm.unknown, sysm.A, sysm.b, sysm.x, sysm.kcl_mask,
-                   row_labels=[r.title for r in sysm.rows])
+                   row_labels=[r.title for r in sysm.rows], substitute=True)
     if not ctx.is_dc:
         for n in sysm.unknown:
             z = ctx.node_value(n)

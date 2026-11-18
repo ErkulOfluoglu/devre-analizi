@@ -39,6 +39,13 @@ namespace CircuitAnalyzer.WPF.Services
             set => Set("AcValueDisplay", value);
         }
 
+        /// <summary>Yapay zekânın çalıştığı yer: "auto" (varsayılan) | "gpu" | "cpu" | "npu"</summary>
+        public static string AiDevice
+        {
+            get => GetString("AiDevice") ?? AiDeviceIds.Auto;
+            set => Set("AiDevice", value);
+        }
+
         /// <summary>İlk açılış tanıtımı gösterildi mi (atlandıysa da true).</summary>
         public static bool OnboardingCompleted
         {
@@ -64,6 +71,55 @@ namespace CircuitAnalyzer.WPF.Services
         {
             get => GetDouble("AnalysisPanelWidth");
             set => Set("AnalysisPanelWidth", value.HasValue && double.IsFinite(value.Value) ? JsonValue.Create(value.Value) : null);
+        }
+
+        /// <summary>
+        /// Ana pencerenin son kapanıştaki yeri (normal dikdörtgen + büyütülmüş mü); yoksa ya da
+        /// bozuksa null. Tek anahtarda tek nesne: tek yazım, değişmediyse dosyaya dokunulmaz.
+        /// Ekrana sığdırmak okuyanın işidir (WindowPlacementRules.Fit).
+        /// </summary>
+        public static SavedWindowPlacement? MainWindowPlacement
+        {
+            get
+            {
+                lock (Gate)
+                {
+                    try
+                    {
+                        if (Load()["MainWindowPlacement"] is not JsonObject o)
+                            return null;
+                        return new SavedWindowPlacement(
+                            o["Left"]!.GetValue<double>(),
+                            o["Top"]!.GetValue<double>(),
+                            o["Width"]!.GetValue<double>(),
+                            o["Height"]!.GetValue<double>(),
+                            o["Maximized"]?.GetValue<bool>() ?? false);
+                    }
+                    catch (Exception)
+                    {
+                        return null;
+                    }
+                }
+            }
+            set
+            {
+                if (value == null ||
+                    !double.IsFinite(value.Left) || !double.IsFinite(value.Top) ||
+                    !double.IsFinite(value.Width) || !double.IsFinite(value.Height))
+                {
+                    Set("MainWindowPlacement", null);
+                    return;
+                }
+                // Yuvarla: piksel altı farklar her kapanışta dosyayı yeniden yazdırmasın
+                Set("MainWindowPlacement", new JsonObject
+                {
+                    ["Left"] = Math.Round(value.Left),
+                    ["Top"] = Math.Round(value.Top),
+                    ["Width"] = Math.Round(value.Width),
+                    ["Height"] = Math.Round(value.Height),
+                    ["Maximized"] = value.Maximized,
+                });
+            }
         }
 
         /// <summary>Son açılan dosyaların mutlak yolları (en fazla 8, en son açılan başta).</summary>
@@ -240,14 +296,35 @@ namespace CircuitAnalyzer.WPF.Services
             {
                 try
                 {
-                    var o = Load();
+                    JsonObject o;
+                    try
+                    {
+                        o = File.Exists(SettingsPath)
+                            ? JsonNode.Parse(File.ReadAllText(SettingsPath)) as JsonObject ?? new JsonObject()
+                            : new JsonObject();
+                    }
+                    catch (JsonException)
+                    {
+                        o = new JsonObject();   // bozuk dosya: yeni ayarlarla düzelir
+                    }
+                    // Okuma IO hatasıyla başarısızsa (başka bir pencere o anda yazıyor) buraya gelinmez:
+                    // boş ayarlarla üstüne yazıp tema, son dosyalar ve tanıtım bilgisi silinmesin.
+
+                    string? before = o[key]?.ToJsonString();
+                    string? after = value?.ToJsonString();
+                    if (before == after)
+                        return;   // değişmedi: dosyaya dokunma
+
                     o[key] = value;
                     Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-                    File.WriteAllText(SettingsPath, o.ToJsonString(JsonIndentOptions));
+                    // Önce geçici dosyaya yaz, sonra yer değiştir: yarım yazılmış dosya kalmasın
+                    string temp = SettingsPath + ".tmp";
+                    File.WriteAllText(temp, o.ToJsonString(JsonIndentOptions));
+                    File.Move(temp, SettingsPath, overwrite: true);
                 }
                 catch (Exception)
                 {
-                    // Yazılamıyorsa (salt okunur profil) ayar yalnız bu oturumda geçerli
+                    // Yazılamıyorsa (salt okunur profil, dosya kilitli) ayar yalnız bu oturumda geçerli
                 }
             }
         }

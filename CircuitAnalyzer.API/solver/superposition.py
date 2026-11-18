@@ -18,6 +18,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+from solver.error_text import turkish_error
 from parser.netlist_parser import (
     CURRENT_SOURCES, DC_SOURCES, DEPENDENT_SOURCES, SINE_SOURCES, VOLTAGE_SOURCES,
     ParsedCircuit, ParsedElement,
@@ -132,7 +133,7 @@ def solve_contributions(
                 c.element_currents[e.id] = complex(
                     lcapy_element_current(cct, e, sense, c.is_dc, c.frequency))
         except Exception as ex:   # pragma: no cover - lcapy hata ayrıntısı
-            c.error = f"{c.source.id} alt devresi çözülemedi: {ex}"
+            c.error = f"{c.source.id} alt devresi çözülemedi: {turkish_error(ex, 'süperpozisyon alt devresi')}"
     return contributions
 
 

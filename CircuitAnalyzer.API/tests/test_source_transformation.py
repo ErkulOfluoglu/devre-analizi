@@ -41,9 +41,9 @@ def test_ladder_two_voltage_sources(solve):
     assert any("Ia = V1 / R1 = 12 V / 1 kΩ = 12 mA" in x for x in t)
     assert any("Ib = V2 / R3 = 6 V / 3 kΩ = 2 mA" in x for x in t)
     assert any("= 14 mA" in x for x in t)
-    assert any("Vth = V_AB = V₄ " + MINUS + " V₀ = 7,636 V" in x for x in t)
+    assert any("Vth = V(Düğüm 4) " + MINUS + " V(GND) = 7,636 V" in x for x in t)
     assert any(x.startswith("Rth = 1,045 kΩ") for x in t)
-    assert any("Çözücünün Thevenin sonucuyla aynı" in x for x in t)
+    assert any("Doğrudan Thevenin hesabıyla aynı sonuç" in x for x in t)
     assert not any("uygulanamadı" in x for x in t)
 
 
@@ -58,7 +58,7 @@ def test_current_source_case(solve):
     assert_close(as_complex(th.zth).real, 2000 / 3)
     t = texts(results)
     assert any("Ib = I1 + Ia = 3 mA + 12 mA = 15 mA" in x for x in t)
-    assert any("Vth = V_AB = V₂ " + MINUS + " V₀ = 10 V" in x for x in t)
+    assert any("Vth = V(Düğüm 2) " + MINUS + " V(GND) = 10 V" in x for x in t)
 
 
 def test_opposing_series_voltage_sources_subtract(solve):
@@ -72,7 +72,7 @@ def test_opposing_series_voltage_sources_subtract(solve):
     assert_close(as_complex(th.zth).real, 2000 / 3)
     t = texts(results)
     assert any("Ea = V1 " + MINUS + " V2 = 10 V " + MINUS + " 4 V = 6 V" in x for x in t)
-    assert any("Vth = V_AB = V₃ " + MINUS + " V₀ = 4 V" in x for x in t)
+    assert any("Vth = V(Düğüm 3) " + MINUS + " V(GND) = 4 V" in x for x in t)
 
 
 def test_unbalanced_bridge_uses_delta_wye(solve):
@@ -90,9 +90,9 @@ def test_unbalanced_bridge_uses_delta_wye(solve):
     t = texts(results)
     assert any("üçgen (Δ) bağlı (Düğüm 2, 3, 4 arası) → yıldıza (Y) dönüştürelim" in x for x in t)
     assert any("Ry1 = R1·R2/(R1+R2+R3) = 200·300/(200+300+400) = 66,67 Ω (Düğüm 2–Y1)" in x for x in t)
-    assert any("Vth = V_AB = V₃ " + MINUS + " V₀ = 15,83 V" in x for x in t)
+    assert any("Vth = V(Düğüm 3) " + MINUS + " V(GND) = 15,83 V" in x for x in t)
     assert any(x.startswith("Rth = 220,8 Ω") for x in t)
-    assert any("Çözücünün Thevenin sonucuyla aynı" in x for x in t)
+    assert any("Doğrudan Thevenin hesabıyla aynı sonuç" in x for x in t)
     assert not any("uygulanamadı" in x for x in t)
 
 

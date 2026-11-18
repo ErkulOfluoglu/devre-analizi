@@ -78,7 +78,14 @@ Yapay zekâ yardımcısı isteğe bağlıdır. Aşağıdakiler kurulum paketinde
 |---|---|
 | Ollama | MIT — https://github.com/ollama/ollama/blob/main/LICENSE |
 | Gemma 4 modeli (gemma4:e4b / gemma4:e2b) | Apache 2.0 — https://ai.google.dev/gemma/terms |
+| FastFlowLM (yalnızca AMD Ryzen AI NPU'su için, isteğe bağlı) | Program ve komut satırı aracı: MIT. NPU çekirdekleri: FastFlowLM NPU Binary License (kaynak kodu kapalı, ücretsiz kullanılabilir; ticari kullanım koşulları lisans metnindedir) — https://github.com/ROCm/FastFlowLM |
 
 Program bu bileşenleri kendisi indirmez veya kurmaz: "Ollama'yı indir" düğmesi
 yalnızca resmi indirme sayfasını tarayıcıda açar; model, kullanıcı "Modeli indir"
 düğmesine bastığında Ollama'nın kendi indirme mekanizmasıyla indirilir.
+
+FastFlowLM'i ve onun NPU modellerini (ör. gemma4-it:e4b) kullanıcı kendisi kurar
+ve indirir; programda FastFlowLM için indirme düğmesi yoktur. Program yalnızca
+bilgisayarda kurulu FastFlowLM'i bulur, gerektiğinde yerel sunucusunu başlatır ve
+onunla yalnızca bu bilgisayar üzerinde (127.0.0.1) konuşur; kendi başlattığı
+FastFlowLM'i program kapanırken kapatır.

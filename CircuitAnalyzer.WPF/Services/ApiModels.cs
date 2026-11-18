@@ -349,6 +349,31 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("approx_size_gb")] public double ApproxSizeGb { get; set; }
         /// <summary>Belleğe göre Türkçe tavsiye cümlesi.</summary>
         [JsonPropertyName("advice_message")] public string AdviceMessage { get; set; } = "";
+        /// <summary>"Çalıştığı yer" seçenekleri (Otomatik, Ekran kartı, İşlemci, NPU).</summary>
+        [JsonPropertyName("device_options")] public List<LlmDeviceOptionDto> DeviceOptions { get; set; } = new();
+        /// <summary>Otomatik seçilince kullanılacak yer: AiDeviceIds.Npu / Gpu / Cpu.</summary>
+        [JsonPropertyName("auto_device")] public string AutoDevice { get; set; } = AiDeviceIds.Cpu;
+        /// <summary>Modelin şu an çalıştığı yer ("ekran kartında", "işlemcide"…); bilinmiyorsa null.</summary>
+        [JsonPropertyName("placement")] public string? Placement { get; set; }
+        /// <summary>Tümleşik ekran kartı var ama Ollama onu kullanacak ayarla açılmadı.</summary>
+        [JsonPropertyName("gpu_needs_restart")] public bool GpuNeedsRestart { get; set; }
+    }
+
+    public static class AiDeviceIds
+    {
+        public const string Auto = "auto";
+        public const string Gpu = "gpu";
+        public const string Cpu = "cpu";
+        public const string Npu = "npu";
+    }
+
+    public sealed class LlmDeviceOptionDto
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("label")] public string Label { get; set; } = "";
+        [JsonPropertyName("available")] public bool Available { get; set; }
+        /// <summary>Seçeneğin altındaki açıklama ya da kullanılamama sebebi.</summary>
+        [JsonPropertyName("note")] public string Note { get; set; } = "";
     }
 
     public static class LlmFits
@@ -393,6 +418,14 @@ namespace CircuitAnalyzer.WPF.Services
     {
         [JsonPropertyName("ok")] public bool Ok { get; set; }
         [JsonPropertyName("message")] public string Message { get; set; } = "";
+        /// <summary>Yalnız /llm/gpu/enable: ayar için kapatılan Ollama'yı geri açacak komut (kapalıysa null).</summary>
+        [JsonPropertyName("restore_command")] public List<string>? RestoreCommand { get; set; }
+    }
+
+    /// <summary>Ekran kartı ayarı sonucu: sunucunun Türkçe mesajı ve geri açma komutu.</summary>
+    public sealed record GpuEnableResult(bool Ok, string Message, IReadOnlyList<string>? RestoreCommand)
+    {
+        public const string DefaultFailure = "Ollama yeniden başlatılamadı. İşlemciyle devam edebilirsiniz.";
     }
 
     public static class ChatRoles
@@ -423,6 +456,8 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("question")] public string Question { get; set; } = "";
         /// <summary>Boşsa sunucu seçer (önerilen ya da ilk kurulu model).</summary>
         [JsonPropertyName("model")] public string? Model { get; set; }
+        /// <summary>Çalıştığı yer: AiDeviceIds sabitlerinden biri.</summary>
+        [JsonPropertyName("device")] public string Device { get; set; } = AiDeviceIds.Auto;
         /// <summary>Önceki soru-cevaplar, en eski önce (sunucu son 6'sını kullanır).</summary>
         [JsonPropertyName("history")] public List<ChatTurnDto> History { get; set; } = new();
         /// <summary>Alıştırma sürüyor mu: true → model sonuçları görmez, cevap sayıları gizlenir.</summary>
@@ -463,6 +498,10 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("numbers")] public List<LlmNumberCheckDto> Numbers { get; set; } = new();
         /// <summary>Doğrulanamayan / gizlenen sayılar için Türkçe uyarı (yoksa null).</summary>
         [JsonPropertyName("note")] public string? Note { get; set; }
+        /// <summary>Cevabın üretildiği yer: npu | gpu | cpu | ollama.</summary>
+        [JsonPropertyName("device")] public string Device { get; set; } = "ollama";
+        /// <summary>Cevaptan sonra modelin çalıştığı yer ("ekran kartında"…); bilinmiyorsa null.</summary>
+        [JsonPropertyName("placement")] public string? Placement { get; set; }
     }
 
     public sealed class TransientQuantityDto
@@ -583,6 +622,14 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("pf_type")] public string PfType { get; set; } = "unity";
         [JsonPropertyName("aron")] public ThreePhaseAronDto? Aron { get; set; }
         [JsonPropertyName("compensation")] public ThreePhaseCompensationDto? Compensation { get; set; }
+        /// <summary>Yıldız kaynağın faz gerilimleri V_RN, V_SN, V_TN (R, S, T); üçgen kaynakta null.</summary>
+        [JsonPropertyName("phase_voltages")] public Dictionary<string, ComplexNumberDto>? PhaseVoltages { get; set; }
+        /// <summary>Hat gerilimleri V_RS, V_ST, V_TR (RS, ST, TR).</summary>
+        [JsonPropertyName("line_voltages")] public Dictionary<string, ComplexNumberDto>? LineVoltages { get; set; }
+        /// <summary>Yükün kol gerilimleri: yıldızda R, S, T (→ N′), üçgende RS, ST, TR.</summary>
+        [JsonPropertyName("load_voltages")] public Dictionary<string, ComplexNumberDto>? LoadVoltages { get; set; }
+        /// <summary>3 iletkenli Y–Y'de yük yıldız noktası ile kaynak nötrü arası V_N′N; değilse null.</summary>
+        [JsonPropertyName("load_neutral_voltage")] public ComplexNumberDto? LoadNeutralVoltage { get; set; }
     }
 
     public sealed class WattmeterResultDto
@@ -668,7 +715,8 @@ namespace CircuitAnalyzer.WPF.Services
     }
 
     /// <summary>
-    /// Sayıları mühendislik notasyonunda gösterir: 0.004 A → "4 mA".
+    /// Sayıları mühendislik notasyonunda gösterir: 0.004 A → "4 mA", −0.004 A → "−4 mA" (Unicode eksi).
+    /// Yalnız gösterim içindir; çıktısı hiçbir yerde sayıya geri ayrıştırılmaz.
     /// </summary>
     public static class EngFormat
     {
@@ -711,10 +759,13 @@ namespace CircuitAnalyzer.WPF.Services
             return (1e-12, "p");
         }
 
+        /// <summary>Öğrencinin gördüğü sayı: ondalık virgülü, eksi işareti Unicode "−" (ekranda ve kâğıtta aynı).</summary>
         private static string Number(double x, int significant)
         {
             string s = x.ToString("G" + significant, TurkishNumber.Culture);
-            return s.Contains('E') ? x.ToString("0.###", TurkishNumber.Culture) : s;
+            if (s.Contains('E'))
+                s = x.ToString("0.###", TurkishNumber.Culture);
+            return TurkishNumber.DisplayMinus(s);
         }
     }
 

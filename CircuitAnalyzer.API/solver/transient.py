@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from explainer.formatting import ek
 from parser.netlist_parser import (
     CURRENT_SOURCES, DEPENDENT_SOURCES, PHASOR_SOURCES, SINE_SOURCES,
     ElementType, ParsedCircuit, ParsedElement,
@@ -37,6 +38,19 @@ _TINY = 1e-12        # mutlak taban (gerilim / akım / direnç için)
 
 class TransientNotApplicable(Exception):
     """Geçici durum bu devre için uygulanamaz; mesaj öğrenciye gösterilen Türkçe gerekçedir."""
+
+
+def _volts_text(v: float) -> str:
+    """Uyarı metni için kısa gerilim yazımı: 9 → '9 V', 0.0123 → '12,3 mV'."""
+    a = abs(v)
+    if a >= 1 or a == 0:
+        val, unit = v, "V"
+    elif a >= 1e-3:
+        val, unit = v * 1e3, "mV"
+    else:
+        val, unit = v * 1e6, "µV"
+    text = f"{val:.4g}".replace(".", ",").replace("-", "−")
+    return f"{text} {unit}"
 
 
 # ═══════════════════════════════════════════════════════
@@ -371,7 +385,9 @@ def analyze_transient(parsed: ParsedCircuit, is_dc: bool = True) -> TransientAna
             f"t > 0 konumunda {sa.id} bir tel (kapalı anahtar) ile kısa devre ediliyor; "
             "zaman sabiti sıfır olur ve değişim anında biter.")
     if not dc_connected(rest, pa[0], pa[1]):
-        what = ("kondansatör hiçbir direnç yoluyla devreye bağlı değil; gerilimi değişmez"
+        what = ("kondansatör hiçbir direnç yoluyla devreye bağlı değil; boşalacak yolu "
+                f"olmadığından t < 0'daki gerilimini korur: {sa.id} gerilimi "
+                f"{_volts_text(x_before)} kalır (devre üzerinde gösterilen değer bunu yansıtmaz)"
                 if kind == "C" else
                 "bobinin akım yolu kesiliyor (seri açık devre); bobin akımı bir anda sıfıra "
                 "düşmeye çalışır ve ideal modelde zaman sabiti tanımsız olur")
@@ -394,7 +410,7 @@ def analyze_transient(parsed: ParsedCircuit, is_dc: bool = True) -> TransientAna
     r_th = sol_r.vd(*pa)
     if r_th <= _TINY:
         raise TransientNotApplicable(
-            f"t > 0 konumunda {sa.id}'nin gördüğü direnç sıfır (R_th = 0); zaman sabiti "
+            f"t > 0 konumunda {ek(sa.id, 'in')} gördüğü direnç sıfır (R_th = 0); zaman sabiti "
             "sıfır olur ve değişim anında biter.")
     tau = r_th * sa.value if kind == "C" else sa.value / r_th
 
@@ -515,15 +531,17 @@ def verify_with_lcapy(a: TransientAnalysis) -> Optional[str]:
         ):
             span = max(abs(start - final), abs(start), abs(final), _TINY)
             if not _close(at(expr, 0), start, span):
-                return "lcapy denetimi: t = 0⁺ değeri hesaplanan değerle uyuşmadı."
+                return "Program denetimi: t = 0⁺ değeri hesaplanan değerle uyuşmadı."
             if not _close(at(expr, 60 * a.tau), final, span):
-                return "lcapy denetimi: t → ∞ değeri hesaplanan değerle uyuşmadı."
+                return "Program denetimi: t → ∞ değeri hesaplanan değerle uyuşmadı."
             if not _close(at(expr, a.tau), final + (start - final) * e_inv, span):
-                return "lcapy denetimi: zaman sabiti τ hesaplanan değerle uyuşmadı."
+                return "Program denetimi: zaman sabiti τ hesaplanan değerle uyuşmadı."
     except TransientNotApplicable:
         raise
     except Exception as exc:    # lcapy çözemedi → sonucu doğrulanmamış bırakma
-        return f"Sayılar bağımsız çözücüyle doğrulanamadı ({type(exc).__name__})."
+        from solver.error_text import log_raw
+        log_raw(exc, "doğrulama")
+        return "Sayılar bağımsız çözücüyle doğrulanamadı."
 
     if not a.uncharged:
         try:
@@ -541,5 +559,5 @@ def verify_with_lcapy(a: TransientAnalysis) -> Optional[str]:
         except Exception:
             return None          # t<0 devresi lcapy ile çözülemiyor (yüzen düğüm gibi) → atla
         if not _close(ref, a.x_before, max(abs(ref), abs(a.x_before), _TINY)):
-            return "lcapy denetimi: t = 0⁻ değeri hesaplanan değerle uyuşmadı."
+            return "Program denetimi: t = 0⁻ değeri hesaplanan değerle uyuşmadı."
     return None

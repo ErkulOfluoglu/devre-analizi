@@ -40,9 +40,10 @@ namespace CircuitAnalyzer.WPF
 
             TxtCardName.Text = readout.Name;
             TxtCardValue.Text = readout.Value ?? "";
-            TxtCardCurrent.Text = readout.Current;
+            // Kartta dar yerde fazör iki satıra bölünmesin (yalnız ekran; readout metni olduğu gibi kalır)
+            TxtCardCurrent.Text = PhasorText.KeepTogether(readout.Current);
             TxtCardDirection.Text = readout.Direction;
-            TxtCardVoltage.Text = readout.Voltage ?? "";
+            TxtCardVoltage.Text = PhasorText.KeepTogether(readout.Voltage ?? "");
             LblCardVoltage.Visibility = TxtCardVoltage.Visibility = readout.Voltage != null ? Visibility.Visible : Visibility.Collapsed;
             TxtCardPower.Text = readout.Power ?? "";
             LblCardPower.Visibility = TxtCardPower.Visibility = readout.Power != null ? Visibility.Visible : Visibility.Collapsed;
@@ -57,7 +58,7 @@ namespace CircuitAnalyzer.WPF
             PositionElementCard();
         }
 
-        /// <summary>Kartı elemanın sağına (sığmazsa soluna) koyar; kaydırma ve yakınlaştırmada izler.</summary>
+        /// <summary>Kartı elemanın yanına, komşuları en az örten tarafa koyar; kaydırma ve yakınlaştırmada izler.</summary>
         private void PositionElementCard()
         {
             if (ElementCardTarget is not { } element || ElementCard.Visibility != Visibility.Visible)
@@ -81,13 +82,28 @@ namespace CircuitAnalyzer.WPF
             double areaWidth = CanvasLayer.ActualWidth;
             double areaHeight = CanvasLayer.ActualHeight;
 
-            double left = bottomRight.X + CardGap;
-            if (left + width > areaWidth - 8)
-                left = topLeft.X - CardGap - width;
-            double top = topLeft.Y + (bottomRight.Y - topLeft.Y) / 2 - height / 2;
-            left = Math.Max(8, Math.Min(left, areaWidth - width - 8));
-            top = Math.Max(8, Math.Min(top, areaHeight - height - 8));
-            ElementCard.Margin = new Thickness(left, top, 0, 0);
+            // Komşu elemanların kutuları (kart bunların üstüne gelmesin)
+            var others = new List<Rect>();
+            try
+            {
+                foreach (var other in _elements)
+                {
+                    if (ReferenceEquals(other, element))
+                        continue;
+                    var ob = SelectionModel.GetElementBounds(other);
+                    others.Add(new Rect(CircuitCanvas.TranslatePoint(ob.TopLeft, CanvasLayer),
+                                        CircuitCanvas.TranslatePoint(ob.BottomRight, CanvasLayer)));
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                others.Clear();
+            }
+
+            var target = new Rect(topLeft, bottomRight);
+            var spot = ElementCardPlacement.Choose(target, new Size(width, height),
+                new Size(areaWidth, areaHeight), others, CardGap);
+            ElementCard.Margin = new Thickness(spot.X, spot.Y, 0, 0);
         }
     }
 }

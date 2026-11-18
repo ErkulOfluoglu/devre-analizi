@@ -54,6 +54,28 @@ namespace CircuitAnalyzer.WPF.Views
 
         public CurrentFlowLayer Flow => _flow;
 
+        /// <summary>Görünen sonuç etiketlerinin tuval koordinatlarındaki kutuları ("sığdır" bunları da katar).</summary>
+        public IReadOnlyList<Rect> ItemBounds()
+        {
+            var list = new List<Rect>();
+            foreach (var item in _items)
+            {
+                if (item is not FrameworkElement fe)
+                    continue;
+                double left = Canvas.GetLeft(fe);
+                double top = Canvas.GetTop(fe);
+                if (double.IsNaN(left) || double.IsNaN(top))
+                    continue;
+                if (!fe.IsMeasureValid)
+                    fe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                var size = fe.DesiredSize;
+                if (size.Width <= 0 || size.Height <= 0)
+                    continue;
+                list.Add(new Rect(left, top, size.Width, size.Height));
+            }
+            return list;
+        }
+
         public void Clear()
         {
             _flow.Clear();
@@ -269,13 +291,15 @@ namespace CircuitAnalyzer.WPF.Views
             }
         }
 
-        private static Point BelowOrRight(CircuitElement element)
+        internal static Point BelowOrRight(CircuitElement element)
         {
             double cx = element.Position.X + element.VisualWidth / 2;
             double cy = element.Position.Y + element.VisualHeight / 2;
             bool vertical = Math.Abs(element.Rotation % 180 - 90) < 1;
+            // Dikey elemanda değer yazısı ("200Ω") gövdenin sağında, ortada durur: akım etiketi
+            // aynı yere konunca yazıyı örtüyordu ("200C"). Etiket sağda ama yazının altına iner.
             return vertical
-                ? new Point(cx + element.VisualHeight / 2 + 14, cy - 8)
+                ? new Point(cx + 12, cy + 12)
                 : new Point(cx - element.VisualWidth / 2, cy + element.VisualHeight / 2 + 2);
         }
 

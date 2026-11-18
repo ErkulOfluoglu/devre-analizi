@@ -41,7 +41,7 @@ public class ApiModelsTests
     [InlineData(2000.0 / 3, "Ω", "666,7 Ω")]
     [InlineData(4700.0, "Ω", "4,7 kΩ")]
     [InlineData(1e-6, "F", "1 µF")]
-    [InlineData(-0.048, "W", "-48 mW")]
+    [InlineData(-0.048, "W", "−48 mW")]
     [InlineData(0.0, "V", "0 V")]
     [InlineData(0.99996, "A", "1 A")]
     public void EngFormat_Real(double value, string unit, string expected)

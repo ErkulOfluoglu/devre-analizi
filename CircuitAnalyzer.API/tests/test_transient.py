@@ -169,7 +169,7 @@ def test_rc_nonzero_initial_voltage_and_reduced_rth(solve):
     assert any("Req2 = R3·Req1/(R3+Req1)" in x and "= 400 Ω" in x for x in t)
     assert "R_th = 400 Ω" in t
     assert any("V_C1(0⁻) = V₂ − V₀ = 8 − 0 = 8 V" in x for x in t)
-    assert any("V_C1(t) = 4,8 V + (3,2 V) · e^(−t/τ)" in x for x in t)       # genel biçim (kısa biçim yok)
+    assert any("V_C1(t) = 4,8 V + 3,2 V · e^(−t/τ)" in x for x in t)       # genel biçim (kısa biçim yok)
     assert not any("kısa biçim" in x for x in t)
     assert any("W(0⁺) = ½ · 100 µF · (8 V)² = 3,2 mJ" in x for x in t)
     assert any("W(∞) = ½ · 100 µF · (4,8 V)² = 1,152 mJ" in x for x in t)
@@ -312,7 +312,7 @@ def test_transient_fallbacks(solve, name, net, mode, reason):
 
 def test_fallback_on_lcapy_mismatch(solve, monkeypatch):
     monkeypatch.setattr(transient_mod, "verify_with_lcapy",
-                        lambda a: "lcapy denetimi: zaman sabiti τ hesaplanan değerle uyuşmadı.")
+                        lambda a: "Program denetimi: zaman sabiti τ hesaplanan değerle uyuşmadı.")
     results, _, errors = solve(RC_CHARGE, "DC", analysis_type="TRANSIENT")
     assert results.transient is None
     assert "uyuşmadı" in results.explanation[0].blocks[0].text

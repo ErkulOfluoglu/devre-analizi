@@ -280,7 +280,7 @@ def test_reversed_current_control(mesh_case):
     d = ma.dependents["F1"]
     assert d.ctrl_value.real == pytest.approx(-5.0)               # çizilen yönde I_R2
     t = texts_of(build_mesh_sections(ctx, ma))
-    assert any("I_R2: R2 elemanından Düğüm 0 → Düğüm 2 yönünde geçen akım" in x for x in t)
+    assert any("I_R2: R2 elemanından GND → Düğüm 2 yönünde geçen akım" in x for x in t)
 
 
 def test_control_is_independent_voltage_source_current(mesh_case):

@@ -12,8 +12,21 @@ namespace CircuitAnalyzer.WPF.Services
     /// </summary>
     public sealed class BackendUnavailableException : Exception
     {
+        /// <summary>Hatanın türü (kullanıcıya gösterilecek metni seçer); bilinmiyorsa null.</summary>
+        public BackendFailure? Failure { get; }
+
+        /// <summary>Yalnız geliştirici için ayrıntı (çözücü çıktısı); kullanıcı mesajına konmaz.</summary>
+        public string? Detail { get; }
+
         public BackendUnavailableException(string message, Exception? inner = null)
             : base(message, inner) { }
+
+        public BackendUnavailableException(BackendFailure failure, string message, string? detail = null, Exception? inner = null)
+            : base(message, inner)
+        {
+            Failure = failure;
+            Detail = detail;
+        }
     }
 
     /// <summary>
@@ -54,18 +67,23 @@ namespace CircuitAnalyzer.WPF.Services
 
         public AnalysisApiClient(Uri baseAddress, TimeSpan? timeout = null)
         {
-            _http = new HttpClient
+            _http = new HttpClient(CreateHandler())
             {
                 BaseAddress = baseAddress,
                 // Büyük AC devrelerinde sembolik çözüm birkaç saniye sürebilir
                 Timeout = timeout ?? TimeSpan.FromSeconds(120),
             };
-            _httpLong = new HttpClient
+            _httpLong = new HttpClient(CreateHandler())
             {
                 BaseAddress = baseAddress,
                 Timeout = LlmTimeout,
             };
         }
+
+        /// <summary>
+        /// Çözücü bu bilgisayarda (127.0.0.1) çalışır; sistem proxy'si (okul/şirket ağı) araya girmesin.
+        /// </summary>
+        internal static HttpClientHandler CreateHandler() => new() { UseProxy = false };
 
         /// <summary>
         /// Sunucu çalışıyor ve gerçekten bizim çözücümüz mü? (Hata fırlatmaz.)
@@ -115,6 +133,45 @@ namespace CircuitAnalyzer.WPF.Services
                                          or NotSupportedException)
             {
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// Ollama'yı tümleşik ekran kartı ayarıyla yeniden başlatır (yalnız bu oturum).
+        /// Hata fırlatmaz: başarısızsa Ok = false ve sunucunun (ya da yedek) Türkçe mesajı.
+        /// </summary>
+        public async Task<GpuEnableResult> EnableGpuAsync(CancellationToken ct = default)
+        {
+            try
+            {
+                var r = await PostAsync<object, LlmActionResultDto>("/llm/gpu/enable", new { }, ct);
+                return new GpuEnableResult(r.Ok, r.Message, r.RestoreCommand);
+            }
+            catch (AnalysisRequestException ex)
+            {
+                return new GpuEnableResult(false, ex.Message, null);
+            }
+            catch (BackendUnavailableException)
+            {
+                return new GpuEnableResult(false, GpuEnableResult.DefaultFailure, null);
+            }
+        }
+
+        /// <summary>
+        /// Ekran kartı ayarlı Ollama'yı kapatıp eskisini geri açtırır (/llm/gpu/release).
+        /// Hata fırlatmaz: çözücü ölmüş / zaman aşımı / hata ise false.
+        /// </summary>
+        public async Task<bool> ReleaseGpuAsync(CancellationToken ct = default)
+        {
+            try
+            {
+                var r = await PostAsync<object, LlmActionResultDto>("/llm/gpu/release", new { }, ct);
+                return r.Ok;
+            }
+            catch (Exception ex) when (ex is AnalysisRequestException or BackendUnavailableException
+                                          or OperationCanceledException)
+            {
+                return false;
             }
         }
 
@@ -190,14 +247,14 @@ namespace CircuitAnalyzer.WPF.Services
             }
             catch (HttpRequestException ex)
             {
-                throw new BackendUnavailableException(
-                    "Çözücüye bağlanılamadı. Çözücü kapanmış olabilir.", ex);
+                throw new BackendUnavailableException(BackendFailure.Unreachable,
+                    "Çözücüye bağlanılamadı. Çözücü kapanmış olabilir.", inner: ex);
             }
             catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
             {
-                throw new BackendUnavailableException(
+                throw new BackendUnavailableException(BackendFailure.Timeout,
                     timeoutMessage ?? "Çözücü zamanında yanıt vermedi (zaman aşımı). " +
-                    "Devre çok büyük olabilir.", ex);
+                    "Devre çok büyük olabilir.", inner: ex);
             }
 
             using (response)

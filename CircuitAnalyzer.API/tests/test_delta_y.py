@@ -148,7 +148,7 @@ def test_balanced_wheatstone_bridge(solve):
     assert_close(as_complex(results.norton.z_n), 100.0 / 3.0)
     assert_close(as_complex(results.norton.i_n), 0.3)
 
-    rn_sec = section_by_title(results.explanation, "2. Adım — Rn")
+    rn_sec = section_by_title(results.explanation, "1. Adım — Rn")   # önce Rn, sonra In = Vth/Rn
     assert rn_sec is not None
     assert any("üçgen (Δ) bağlı" in t for t in section_texts(rn_sec))
 
@@ -189,11 +189,11 @@ def test_y_to_delta_star_node_conversion():
     ) in yd.formula
     assert (
         "Rd2 = (R1·R2 + R2·R3 + R3·R1)/R1 = "
-        "(20·30 + 30·60 + 60·20)/20 = 180 Ω (Düğüm 2–0)"
+        "(20·30 + 30·60 + 60·20)/20 = 180 Ω (Düğüm 2–GND)"
     ) in yd.formula
     assert (
         "Rd3 = (R1·R2 + R2·R3 + R3·R1)/R2 = "
-        "(20·30 + 30·60 + 60·20)/30 = 120 Ω (Düğüm 1–0)"
+        "(20·30 + 30·60 + 60·20)/30 = 120 Ω (Düğüm 1–GND)"
     ) in yd.formula
     assert len(rem) == 3
 

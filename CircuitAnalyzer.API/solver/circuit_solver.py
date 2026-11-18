@@ -26,7 +26,7 @@ import traceback
 from typing import Dict, Tuple, List, Optional, Union
 
 import sympy
-from explainer.formatting import MINUS, eng, num
+from explainer.formatting import MINUS, eng, ek, node_name, node_pair, num
 
 from models.response import (
     AnalysisResults, SolutionStep, ComplexNumber,
@@ -51,7 +51,7 @@ from parser.netlist_parser import (
 )
 from explainer.step_generator import generate_solution_steps
 from explainer.topology import generate_topology_step
-from explainer.narrative import PortExtras, build_explanation, port_is_dead
+from explainer.narrative import PortCircuit, PortExtras, build_explanation, port_is_dead
 from solver.frequency_check import check_source_frequencies
 from solver.mesh import analyze_meshes
 from solver.resonance import ResonanceNotApplicable, analyze_resonance, verify_with_lcapy
@@ -66,6 +66,10 @@ from practice.questions import build_questions
 from practice.transient_questions import build_transient_questions
 from explainer.transient_narrative import build_transient_explanation
 from solver.transient import TransientNotApplicable, analyze_transient
+from solver.error_text import turkish_error, is_singular_error
+from solver.topology_check import (
+    blocking_reason as topology_blocking_reason, dangling_warnings, fault_reasons,
+)
 
 
 # ═══════════════════════════════════════════════════════
@@ -471,6 +475,12 @@ def _evaluate_impedance(
 #  ANA ÇÖZÜCÜ
 # ═══════════════════════════════════════════════════════
 
+# Sonuçlar sekmesindeki KVL/KCL "düğüm tarifi" adımlarının doğru olduğu yöntemler:
+# düğüm gerilimiyle çözülenler (Thevenin/Norton Vth'yi düğüm gerilimlerinden bulur)
+_NODAL_RECIPE_METHODS = (AnalysisType.NODAL, AnalysisType.POWER,
+                         AnalysisType.THEVENIN, AnalysisType.NORTON)
+
+
 def solve_circuit(
     parsed: ParsedCircuit,
     mode: AnalysisMode,
@@ -565,30 +575,44 @@ def _solve_three_phase(
     try:
         an = analyze_three_phase(parsed, exp, results, freq, power_factor_target, verify)
     except Exception as e:      # beklenmeyen hata: yanlış sonuç yerine dürüst yedek
-        errors.append(f"ℹ Üç faz büyüklükleri hesaplanamadı: {type(e).__name__}: {e}")
-        return results, steps, errors
+        errors.append(f"ℹ Üç faz büyüklükleri hesaplanamadı: {turkish_error(e, 'üç faz')}")
+        _hide_expansion_ids(results, parsed, exp)
+        return results, [], errors
     if an is None:
         errors.append("ℹ Üç fazlı kaynağın hat akımları okunamadı; üç faz özeti verilemedi.")
-        return results, steps, errors
+        _hide_expansion_ids(results, parsed, exp)
+        return results, [], errors
     results.three_phase = _three_phase_summary(an)
     from explainer.three_phase_narrative import build_three_phase_sections
     try:
         results.explanation = [s.build() for s in build_three_phase_sections(
             an, analysis_type, transformer=bool(results.transformer)) if s.blocks]
     except Exception as e:
-        errors.append(f"ℹ Anlatım oluşturulamadı: {str(e)}")
+        errors.append(f"ℹ Anlatım oluşturulamadı: {turkish_error(e, 'anlatım')}")
     try:
         from practice.questions import build_three_phase_questions
         results.practice = build_three_phase_questions(an, make_complex_number)
     except Exception as e:
-        errors.append(f"ℹ Alıştırma soruları oluşturulamadı: {str(e)}")
+        errors.append(f"ℹ Alıştırma soruları oluşturulamadı: {turkish_error(e, 'alıştırma')}")
     _hide_expansion_ids(results, parsed, exp)
     # Genel çözüm adımları açılmış devreyi anlatır (V_U1_R, Y1_R_m …); üç faz anlatımı onların yerini tutar
     return results, [], errors
 
 
 def _hide_expansion_ids(results, parsed: ParsedCircuit, exp) -> None:
-    """Açılımın iç elemanlarını ve düğümlerini sonuçlardan çıkarır: öğrencinin devresinde yoklar."""
+    """
+    Açılımın iç elemanlarını ve düğümlerini sonuçlardan çıkarır: öğrencinin devresinde yoklar.
+
+    • Eleman akımları ve düğüm gerilimleri: iç kimlikler/düğümler (V_U1_R, Y1_R_m, U1_n) silinir.
+    • Güç tablosu: iç elemanların güçleri çizilen elemanda (U1, Y1) toplanır; wattmetrenin 0 V'luk
+      ölçüm kaynağı (güç 0) tablodan çıkar.
+    • Seri/paralel indirgemeler: iç eleman ya da düğüm geçen adımlar gösterilmez (öğrencinin
+      çizdiği devrede böyle bir bağlantı yok).
+    • Üç fazlı elemanların uçlarındaki düğümlere faz adı verilir (label: "R fazı (U1)"), sayısal
+      gürültü (dengeli yükte yıldız noktası ≈ 2·10⁻¹⁴ V) sıfır gösterilir.
+    """
+    from solver.three_phase import node_display_labels, snap_zero
+
     real_ids = {e.id for e in parsed.elements}
     hidden_ids = {e.id for e in exp.flat.elements} - real_ids
     results.element_currents = {k: v for k, v in results.element_currents.items() if k not in hidden_ids}
@@ -596,6 +620,55 @@ def _hide_expansion_ids(results, parsed: ParsedCircuit, exp) -> None:
     real_nodes = {n for e in parsed.elements for n in element_nodes(e)}
     hidden_nodes = {n for e in exp.flat.elements for n in element_nodes(e)} - real_nodes - {"0"}
     results.node_voltages = {k: v for k, v in results.node_voltages.items() if k not in hidden_nodes}
+
+    if exp.sources or exp.loads:
+        def mag(nv) -> float:
+            v = nv.value
+            return abs(v) if isinstance(v, (int, float)) else float(v.magnitude)
+
+        ref = max((mag(nv) for nv in results.node_voltages.values()), default=0.0)
+        labels = node_display_labels(parsed, exp)
+        for k, nv in results.node_voltages.items():
+            if k != "0" and ref > 0 and snap_zero(mag(nv), ref) == 0:
+                nv.value = 0.0
+            if k in labels:
+                nv.label = labels[k]
+
+    if results.power is not None:
+        results.power.elements = _group_powers_by_owner(results.power.elements, exp.owner, exp.meter_ids)
+
+    hidden_all = hidden_ids | hidden_nodes
+    results.reductions = [r for r in results.reductions
+                          if not (set(r.elements) | set(r.original_elements) | set(r.nodes)) & hidden_all]
+
+
+def _group_powers_by_owner(elements: Dict[str, ElementPower], owner: Dict[str, str],
+                           meter_ids: Dict[str, str]) -> Dict[str, ElementPower]:
+    """İç elemanların (V_U1_R, R_Y1_R, L_Y1_R …) güçlerini çizilen elemanda (U1, Y1) toplar."""
+    meter_internal = set(meter_ids.values())
+    grouped: Dict[str, Tuple[str, complex]] = {}
+    out: Dict[str, ElementPower] = {}
+    for eid, ep in elements.items():
+        if eid in meter_internal:
+            continue                                    # ölçü aleti: güç çekmez, tabloda yer almaz
+        if eid not in owner:
+            out[eid] = ep
+            continue
+        oid = owner[eid]
+        s = complex(ep.complex_power.real, ep.complex_power.imaginary)
+        role, acc = grouped.get(oid, (ep.role, 0j))
+        grouped[oid] = (role, acc + s)
+        out.setdefault(oid, ep)                         # sıra korunur; değer aşağıda yazılır
+    for oid, (role, s) in grouped.items():
+        tiny = 1e-12 * abs(s)
+        s = complex(0.0 if abs(s.real) < tiny else s.real, 0.0 if abs(s.imag) < tiny else s.imag)
+        p, q, s_mag = s.real, s.imag, abs(s)
+        pf, pf_type = _power_factor(p, q, s_mag, -q if role == "source" else q)
+        out[oid] = ElementPower(
+            element_id=oid, role=role, complex_power=make_complex_number(s),
+            active_power=sig_round(p), reactive_power=sig_round(q), apparent_power=sig_round(s_mag),
+            power_factor=pf, power_factor_type=pf_type)
+    return out
 
 
 def _add_wattmeter_section(results, exp, readings, is_rms: bool, is_dc: bool) -> None:
@@ -626,7 +699,15 @@ def _three_phase_summary(an) -> ThreePhaseSummary:
         pf_type=an.pf_type,
         aron=(ThreePhaseAron(p_a=sig_round(an.aron[0]), p_b=sig_round(an.aron[1]))
               if an.aron is not None else None),
-        compensation=comp)
+        compensation=comp,
+        phase_voltages=({k: make_complex_number(v) for k, v in an.v_ph.items()}
+                        if an.conn_s == "Y" else None),
+        line_voltages={k: make_complex_number(v) for k, v in an.v_line.items()},
+        load_voltages=({k: make_complex_number(v) for k, v in an.v_load.items()}
+                       if an.v_load else None),
+        # 4 iletkenli devrede N′ ile N aynı düğümdür (V_N′N = 0 kendiliğinden); yalnız 3 iletkende anlamlı
+        load_neutral_voltage=(make_complex_number(an.v_star_shift)
+                              if an.v_star_shift is not None and an.wires == 3 else None))
 
 
 def _solve_transient(
@@ -652,11 +733,15 @@ def _solve_transient(
     try:
         analysis = analyze_transient(parsed, mode == AnalysisMode.DC)
     except TransientNotApplicable as e:
-        reason = str(e)
+        reason = turkish_error(e, "geçici durum")
     except Exception as e:      # beklenmeyen hata: yanlış sonuç yerine dürüst yedek
-        reason = f"Geçici durum hesaplanırken beklenmeyen bir hata oluştu ({type(e).__name__})."
+        turkish_error(e, "geçici durum")    # ham hata stderr'e yazılır
+        reason = "Geçici durum hesaplanırken beklenmeyen bir hata oluştu."
 
     if analysis is None:
+        # Yeşil "Çözüm başarılı" yanıltır: öğrenci geçici durum sonucunu görmüyor
+        errors.append(f"⚠ Geçici durum uygulanamadı: {reason} Gösterilen sonuçlar "
+                      "anahtarların t > 0 konumundaki kararlı hâldir.")
         fb = ExplanationSection(title="Geçici Durum (Anahtar)", blocks=[ExplanationBlock(
             kind="note",
             text=(f"Bu devrede geçici durum analizi uygulanamadı: {reason} "
@@ -773,7 +858,7 @@ def _solve_core(
             f"Devrede {len(parsed.elements)} eleman ve "
             f"{parsed.node_count} düğüm tespit edildi.\n"
             f"Elemanlar: {elem_summary}\n"
-            f"Referans: {'Node 0 (GND) ✓' if parsed.has_ground else 'GND YOK ✕'}"
+            f"Referans: {'Düğüm 0 (GND) ✓' if parsed.has_ground else 'GND YOK ✕'}"
         ),
         equations=[],
         result_snapshot={"element_count": len(parsed.elements),
@@ -794,11 +879,10 @@ def _solve_core(
             try:
                 resonance_analysis = analyze_resonance(parsed, frequency)
             except ResonanceNotApplicable as e:
-                resonance_inapplicable_reason = str(e)
+                resonance_inapplicable_reason = turkish_error(e, "rezonans")
             except Exception as e:      # beklenmeyen hata: yanlış sonuç yerine dürüst yedek
-                resonance_inapplicable_reason = (
-                    "Rezonans hesaplanırken beklenmeyen bir hata oluştu "
-                    f"({type(e).__name__}).")
+                turkish_error(e, "rezonans")    # ham hata stderr'e yazılır
+                resonance_inapplicable_reason = "Rezonans hesaplanırken beklenmeyen bir hata oluştu."
 
     # ── Adım 1.5: Kaynak frekansı denetimi (süperpozisyon uyarısı) ──
     if resonance_analysis is not None:
@@ -825,31 +909,29 @@ def _solve_core(
         model_note = ""
         if lcapy_sense_map(parsed):
             model_note = (
-                "\nBağımlı kaynaklar için 0 V'luk iç ölçüm kaynakları (Vsense_…) ve "
-                "gizli düğümler (_s_…) eklendi; bunlar yalnızca çözücünün iç modelidir "
-                "ve sonuçlarda görünmez."
+                "\nBağımlı kaynakların kontrol akımlarını ölçmek için çözücünün içinde 0 V'luk "
+                "yardımcı ölçüm kaynakları kullanıldı; bunlar sonuçlarda görünmez."
             )
         if trafo:
             model_note += (
-                "\nTransformatör için her uca 0 V'luk iç ölçüm kaynağı (Vsense_…) ve gizli düğümler "
-                "(_tp_…, _ts_…) eklendi; ideal transformatör lcapy'nin TF elemanıyla, kuplajlı "
-                "transformatör iki bobin ve bir K (kuplaj) satırıyla modellendi."
+                "\nTransformatör çözücüde ideal transformatör ya da kuplajlı iki bobin olarak "
+                "modellendi; uçlarına sonuçlarda görünmeyen 0 V'luk ölçüm kaynakları eklendi."
             )
             if transformer_floating_ties(parsed):
                 model_note += (
-                    "\nSekonder (ya da primer) toprağa bağlı değil: lcapy ayrık devre grafını "
-                    "çözemediği için o tarafın alt ucu YALNIZCA bu çözüm netlistinde 0 düğümüne "
-                    "bağlandı; sonuçları etkilemez, gerilimler o tarafın alt ucuna göre verilir."
+                    "\nSekonder (ya da primer) toprağa bağlı değil: yalnızca çözüm için o tarafın "
+                    "alt ucu GND'ye bağlandı; sonuçları etkilemez, gerilimler o tarafın alt ucuna "
+                    "göre verilir."
                 )
 
         steps.append(SolutionStep(
             step_number=2,
             title="Devre Modeli Oluşturma",
             description=(
-                "Netlist lcapy formatına dönüştürüldü ve "
-                "sembolik devre modeli oluşturuldu." + model_note
+                "Devre, çözücünün okuyacağı biçime çevrildi ve sembolik devre modeli "
+                "oluşturuldu." + model_note
             ),
-            equations=lcapy_text.split("\n"),
+            equations=[],
             result_snapshot={"lcapy_netlist": lcapy_text}
         ))
 
@@ -859,18 +941,21 @@ def _solve_core(
             parsed, mode == AnalysisMode.DC or analysis_type == AnalysisType.RESONANCE,
             frequency, lcapy_text)
 
-    except ImportError:
+    except ImportError as e:
+        turkish_error(e, "çözücü bileşeni")
         errors.append(
-            "lcapy kütüphanesi bulunamadı. "
-            "Kurulum: pip install lcapy"
+            UNSOLVABLE_PREFIX + "Devre çözücünün gerekli bir bileşeni bulunamadı. "
+            "Programı yeniden kurmayı deneyin."
         )
         return results, steps, errors
     except Exception as e:
+        # Devre modeli kurulamadıysa sonuç yoktur: "başarılı" görünmesin, /analyze 422 döndürsün
         errors.append(
-            f"Devre modeli oluşturulurken hata: {str(e)}\n"
+            UNSOLVABLE_PREFIX + f"Devre modeli oluşturulamadı: {turkish_error(e, 'devre modeli')}\n\n"
             "Olası nedenler:\n"
-            "  • Netlist formatı hatalı olabilir\n"
-            "  • Desteklenmeyen eleman tipi olabilir"
+            "• Devrede hatalı ya da eksik bir bağlantı olabilir.\n"
+            "• Devrede desteklenmeyen bir eleman olabilir.\n"
+            "• Bir eleman değeri okunamamış olabilir."
         )
         return results, steps, errors
 
@@ -914,7 +999,7 @@ def _solve_core(
                 for r in reductions
             ]
         except Exception as e:
-            errors.append(f"ℹ Seri/paralel analizi yapılamadı: {str(e)}")
+            errors.append(f"ℹ Seri/paralel analizi yapılamadı: {turkish_error(e, 'seri/paralel')}")
 
         # ── Adım 2.5: Eğitici adımlar (Empedans / KVL / KCL) ──
         try:
@@ -923,6 +1008,10 @@ def _solve_core(
                 frequency=frequency,
                 is_dc=is_dc
             )
+            if analysis_type not in _NODAL_RECIPE_METHODS:
+                # Çevre, süperpozisyon, Millman, kaynak dönüşümü… kendi adımlarını
+                # “Anlatım” sekmesinde verir; burada düğüm tarifi yanıltıcı olur
+                edu_steps = [s for s in edu_steps if s.title == "Empedans Hesaplama"]
             if edu_steps:
                 # Adım numaralarını mevcut adımların devamı olarak ata
                 base_num = len(steps)
@@ -930,7 +1019,7 @@ def _solve_core(
                     es.step_number = base_num + i + 1
                 steps.extend(edu_steps)
         except Exception as e:
-            errors.append(f"ℹ Eğitici adımlar oluşturulamadı: {str(e)}")
+            errors.append(f"ℹ Eğitici adımlar oluşturulamadı: {turkish_error(e, 'eğitici adımlar')}")
 
     # ── Adım 3: Düğüm gerilimleri ──
     raw_nodes = {"0": 0.0}
@@ -938,6 +1027,11 @@ def _solve_core(
         cct, parsed, is_dc, frequency, steps, errors, raw_nodes
     )
     results.node_voltages = node_voltages
+    if analysis_type not in _NODAL_RECIPE_METHODS:
+        for st in steps:
+            if st.title == "Düğüm Gerilimleri (Çözüm)":
+                st.description = ("Düğüm gerilimleri bulundu. Seçtiğiniz yöntemin adımları "
+                                  "“Anlatım” sekmesindedir.")
 
     # ── Adım 4: Eleman akımları ──
     raw_currents = {}
@@ -1005,7 +1099,7 @@ def _solve_core(
             port_cct = NumericCircuit(parsed, frequency)
         except NumericAcUnsupported as e:
             errors.append(f"ℹ Transformatörlü devrede {requested_type.value} eşdeğeri "
-                          f"hesaplanamadı: {e}")
+                          f"hesaplanamadı: {turkish_error(e, 'transformatör eşdeğeri')}")
         else:
             if requested_type == AnalysisType.THEVENIN:
                 results.thevenin = _solve_thevenin(
@@ -1034,7 +1128,7 @@ def _solve_core(
             else:
                 errors.append(f"ℹ Çevre akımları yöntemi uygulanamadı: {mesh_analysis.reason}")
         except Exception as e:
-            errors.append(f"ℹ Çevre akımları analizi yapılamadı: {str(e)}")
+            errors.append(f"ℹ Çevre akımları analizi yapılamadı: {turkish_error(e, 'çevre akımları')}")
 
     # ── Adım 6.6: Süperpozisyon ──
     contributions = None
@@ -1067,7 +1161,7 @@ def _solve_core(
                 if sup_power is not None:
                     results.power = sup_power
         except Exception as e:
-            errors.append(f"ℹ Süperpozisyon analizi yapılamadı: {str(e)}")
+            errors.append(f"ℹ Süperpozisyon analizi yapılamadı: {turkish_error(e, 'süperpozisyon')}")
 
     # ── Adım 6.65: Güç ve Güç Katsayısı (POWER yöntemi) ──
     power_inapplicable_reason: Optional[str] = None
@@ -1101,7 +1195,7 @@ def _solve_core(
             port_extras = _solve_port_extras(
                 parsed, thevenin_terminals, is_dc, frequency, raw_nodes, raw_currents)
         except Exception as e:
-            errors.append(f"ℹ Kısa devre/test kaynağı hesabı yapılamadı: {str(e)}")
+            errors.append(f"ℹ Kısa devre/test kaynağı hesabı yapılamadı: {turkish_error(e, 'kısa devre/test kaynağı')}")
 
     # ── Adım 6.8: Transformatör (TRANSFORMER yöntemi) — sonuç özeti ve elle türetme ──
     transformer_analysis = None
@@ -1114,7 +1208,7 @@ def _solve_core(
                 parsed, omega, getattr(parsed, "value_basis", "PEAK") == "RMS",
                 raw_currents, *first[1:], transformer_floating_ties(parsed))
         except Exception as e:      # beklenmeyen hata: yanlış sonuç yerine dürüst yedek
-            errors.append(f"ℹ Transformatör türetmesi hazırlanamadı: {type(e).__name__}: {e}")
+            errors.append(f"ℹ Transformatör türetmesi hazırlanamadı: {turkish_error(e, 'transformatör türetmesi')}")
 
     # ── Adım 7: Öğrenci için Türkçe anlatım (kalıp tabanlı) ──
     try:
@@ -1128,7 +1222,7 @@ def _solve_core(
             requested_type=requested_type,
         )
     except Exception as e:
-        errors.append(f"ℹ Anlatım oluşturulamadı: {str(e)}")
+        errors.append(f"ℹ Anlatım oluşturulamadı: {turkish_error(e, 'anlatım')}")
 
     # ── Adım 7.5: Alıştırma modu soruları ──
     try:
@@ -1138,7 +1232,7 @@ def _solve_core(
             mesh_analysis, contributions,
         )
     except Exception as e:
-        errors.append(f"ℹ Alıştırma soruları oluşturulamadı: {str(e)}")
+        errors.append(f"ℹ Alıştırma soruları oluşturulamadı: {turkish_error(e, 'alıştırma')}")
 
     # ── Son adım: Doğrulama ──
     if node_voltages:
@@ -1267,9 +1361,13 @@ def _unsolvable_reason(cct, parsed: ParsedCircuit, is_dc: bool,
         _extract_numeric(cct[nodes[0]].V, is_dc, frequency)
         return None
     except Exception as e:
-        msg = str(e).lower()
-        if "invertible" not in msg and "singular" not in msg:
+        if not is_singular_error(e):
             return None   # başka tür hata: olağan akış kendi mesajını üretir
+
+    # Hatalı elemanı adıyla söyleyebiliyorsak genel "olası nedenler" listesi yerine onu veririz
+    specific = fault_reasons(parsed, is_dc)
+    if specific:
+        return specific
 
     lines = ["Bu devrenin tek bir çözümü yok: devre denklemleri birbiriyle çelişiyor "
              "ya da bilinmeyenleri bulmaya yetmiyor (tekil sistem).", "", "Olası nedenler:"]
@@ -1288,6 +1386,49 @@ def _unsolvable_reason(cct, parsed: ParsedCircuit, is_dc: bool,
         lines.append("• DC analizde bobin kısa devre, kondansatör açık devre sayılır; "
                      "bu da yukarıdaki durumlardan birini oluşturabilir.")
     return "\n".join(lines)
+
+
+def _ignored_sine_warnings(parsed: ParsedCircuit) -> List[str]:
+    """SINE kaynağında gecikme ya da sönüm sıfır değilse: çözücü bunları hesaba katmaz, sessiz kalma."""
+    out: List[str] = []
+    for e in parsed.elements:
+        if e.element_type not in SINE_SOURCES:
+            continue
+        if abs(e.params.get("delay", 0.0)) > 0 or abs(e.params.get("damping", 0.0)) > 0:
+            out.append(f"⚠ {ek(e.id, 'in')} gecikme ve sönüm değerleri hesaba katılmadı; kaynak "
+                       "t = 0'dan itibaren sönümsüz bir sinüs olarak alındı.")
+    return out
+
+
+def topology_gate(
+    parsed: ParsedCircuit,
+    mode: AnalysisMode,
+    analysis_type: AnalysisType,
+    ignore_nodes=(),
+) -> Tuple[Optional[str], List[str]]:
+    """
+    Çözümden ÖNCE hızlı yapı denetimi (main.py çağırır): (engelleyen_neden | None, uyarılar).
+
+    • Engel: devrede yalnızca R, L, C ve bağımsız kaynaklar varken (hata kesin) kısa devre edilmiş
+      gerilim kaynağı, yalnız kaynaklardan oluşan halka ya da GND'ye bağlı olmayan bölüm.
+      DC'de çözücünün zaten bildiği kararlı hâli olmayan durumlar önce söylenir (daha özel).
+      Geçici durumda (anahtarlı, t < 0 ve t > 0 ayrı çözülür) engellenmez.
+    • Uyarı: bir ucu boşta kalan eleman; SINE kaynağında hesaba katılmayan gecikme/sönüm (⚠, engellemez).
+    Ayrıştırma hatası ya da boş devrede bir şey yapmaz (onları çağıran taraf bildirir).
+    """
+    if parsed.errors or not parsed.elements:
+        return None, []
+    warns = dangling_warnings(parsed, ignore_nodes) + _ignored_sine_warnings(parsed)
+    if analysis_type == AnalysisType.TRANSIENT:
+        return None, warns
+    is_dc = mode == AnalysisMode.DC
+    after = circuit_at_time(parsed, "after")
+    reason = None
+    if is_dc:
+        reason = _dc_no_steady_state_reason(after)
+    if reason is None:
+        reason = topology_blocking_reason(parsed, is_dc)
+    return reason, warns
 
 
 def _solve_node_voltages(
@@ -1344,8 +1485,8 @@ def _solve_node_voltages(
             err_msg = str(e).lower()
             if "singular" in err_msg:
                 errors.append(
-                    f"⚠ Düğüm {node}: Tekil matris hatası.\n"
-                    "Bu genellikle devrede açık devre (floating node) "
+                    f"⚠ Düğüm {node}: devre denklemleri tek bir çözüme varmıyor (tekil sistem).\n"
+                    "Bu genellikle devrede boşta kalan bir düğüm (açık devre) "
                     "veya kısa devre olduğunu gösterir.\n"
                     "Lütfen tüm düğümlerin GND'ye bir yol ile "
                     "bağlı olduğundan emin olun."
@@ -1353,12 +1494,12 @@ def _solve_node_voltages(
             elif "not connected" in err_msg or "floating" in err_msg:
                 errors.append(
                     f"⚠ Düğüm {node}: Bu düğüm devrenin geri kalanına "
-                    "bağlı değil (floating node).\n"
+                    "bağlı değil (boşta kalan düğüm).\n"
                     "Lütfen tüm elemanların tel ile bağlandığından emin olun."
                 )
             else:
                 errors.append(
-                    f"⚠ Düğüm {node} gerilimi hesaplanamadı: {str(e)}"
+                    f"⚠ Düğüm {node} gerilimi hesaplanamadı: {turkish_error(e, 'düğüm gerilimi')}"
                 )
 
     # Çözüm adımı
@@ -1442,7 +1583,7 @@ def _solve_element_currents(
         except Exception as e:
             # Akım hesaplanamayan elemanlar için uyarı
             errors.append(
-                f"ℹ {elem.id} akımı hesaplanamadı: {str(e)}"
+                f"ℹ {elem.id} akımı hesaplanamadı: {turkish_error(e, 'eleman akımı')}"
             )
 
     return element_currents
@@ -1551,9 +1692,9 @@ def _solve_thevenin(
 
     steps.append(SolutionStep(
         step_number=len(steps) + 1,
-        title=f"Thevenin Eşdeğeri (Node {node_pos} – Node {node_neg})",
+        title=f"Thevenin Eşdeğeri ({node_name(node_pos)} – {node_name(node_neg)})",
         description=(
-            f"Düğüm {node_pos} ve Düğüm {node_neg} arasındaki "
+            f"{node_name(node_pos)} ve {node_name(node_neg)} arasındaki "
             "Thevenin eşdeğer devresi hesaplanıyor.\n\n"
             "Adım A: Açık devre gerilimi (Vth) — terminaller "
             "arasında yük bağlamadan gerilimi ölç.\n"
@@ -1594,6 +1735,8 @@ def _solve_thevenin(
             step_number=len(steps) + 1,
             title="Thevenin Sonuçları",
             description=(
+                f"Vth = {vth_complex.rectangular_str} V\nRth = {zth_complex.rectangular_str} Ω"
+                if is_dc else
                 f"Vth = {vth_complex.rectangular_str} V "
                 f"({vth_complex.polar_str} V)\n"
                 f"Zth = {zth_complex.rectangular_str} Ω "
@@ -1616,10 +1759,10 @@ def _solve_thevenin(
 
     except InfiniteImpedanceError:
         errors.append(
-            f"⚠ Thevenin hesaplanamadı (Düğüm {node_pos}–{node_neg}): "
+            f"⚠ Thevenin hesaplanamadı ({node_pair(node_pos, node_neg)}): "
             "Zth sonsuz.\n"
             "Terminallerden bakıldığında devre açık görünüyor — ör: DC "
-            "analizde seri bağlı bir kapasitör akımı keser.\n"
+            "analizde seri bağlı bir kondansatör akımı keser.\n"
             "Bu port için Thevenin eşdeğeri tanımsızdır."
         )
         return None
@@ -1627,22 +1770,21 @@ def _solve_thevenin(
         err_str = str(e).lower()
         if "singular" in err_str:
             errors.append(
-                f"⚠ Thevenin hesaplanamadı (Düğüm {node_pos}–{node_neg}):\n"
-                "Tekil matris hatası — bu genellikle seçilen terminaller "
+                f"⚠ Thevenin hesaplanamadı ({node_pair(node_pos, node_neg)}):\n"
+                "Devre denklemleri tek bir çözüme varmıyor (tekil sistem) — bu genellikle seçilen terminaller "
                 "arasında geçerli bir devre yolu olmadığı anlamına gelir.\n"
                 "Lütfen terminal düğümlerinin doğru seçildiğinden "
                 "emin olun."
             )
         elif "not found" in err_str or "unknown" in err_str:
             errors.append(
-                f"⚠ Düğüm {node_pos} veya {node_neg} devrede bulunamadı.\n"
+                f"⚠ {node_name(node_pos)} veya {node_name(node_neg)} devrede bulunamadı.\n"
                 "Lütfen Thevenin terminal düğümlerinin devredeki "
                 "geçerli düğüm numaraları olduğunu kontrol edin."
             )
         else:
             errors.append(
-                f"⚠ Thevenin hesaplama hatası: {str(e)}\n"
-                f"Detay: {traceback.format_exc()}"
+                f"⚠ Thevenin hesaplanamadı: {turkish_error(e, 'thevenin')}"
             )
         return None
 
@@ -1678,9 +1820,9 @@ def _solve_norton(
 
     steps.append(SolutionStep(
         step_number=len(steps) + 1,
-        title=f"Norton Eşdeğeri (Node {node_pos} – Node {node_neg})",
+        title=f"Norton Eşdeğeri ({node_name(node_pos)} – {node_name(node_neg)})",
         description=(
-            f"Düğüm {node_pos} ve Düğüm {node_neg} arasındaki "
+            f"{node_name(node_pos)} ve {node_name(node_neg)} arasındaki "
             "Norton eşdeğer devresi hesaplanıyor.\n\n"
             "Adım A: Kısa devre akımı (In) — terminalleri bir tel ile "
             "kısa devre et, telden geçen akımı bul.\n"
@@ -1752,6 +1894,8 @@ def _solve_norton(
             step_number=len(steps) + 1,
             title="Norton Sonuçları",
             description=(
+                f"In = {in_c.rectangular_str} A\nRn = {zn_str}"
+                if is_dc else
                 f"In = {in_c.rectangular_str} A ({in_c.polar_str} A)\n"
                 f"Zn = {zn_str} ({zn_polar})"
             ),
@@ -1773,7 +1917,7 @@ def _solve_norton(
         err_str = str(e).lower()
         if "not invertible" in err_str or "singular" in err_str:
             errors.append(
-                f"⚠ Norton hesaplanamadı (Düğüm {node_pos}–{node_neg}): "
+                f"⚠ Norton hesaplanamadı ({node_pair(node_pos, node_neg)}): "
                 "terminaller kısa devre edildiğinde bir gerilim kaynağı "
                 "da kısa devre oluyor.\n"
                 "Port doğrudan ideal bir gerilim kaynağına paralel → "
@@ -1783,14 +1927,13 @@ def _solve_norton(
             )
         elif "not found" in err_str or "unknown" in err_str:
             errors.append(
-                f"⚠ Düğüm {node_pos} veya {node_neg} devrede bulunamadı.\n"
+                f"⚠ {node_name(node_pos)} veya {node_name(node_neg)} devrede bulunamadı.\n"
                 "Lütfen Norton terminal düğümlerinin devredeki "
                 "geçerli düğüm numaraları olduğunu kontrol edin."
             )
         else:
             errors.append(
-                f"⚠ Norton hesaplama hatası: {str(e)}\n"
-                f"Detay: {traceback.format_exc()}"
+                f"⚠ Norton hesaplanamadı: {turkish_error(e, 'norton')}"
             )
         return None
 
@@ -1826,18 +1969,37 @@ def _solve_port_extras(
     a, b = terminals.node_positive, terminals.node_negative
     extras = PortExtras()
 
-    def solve_with(base: ParsedCircuit, src: ParsedElement) -> complex:
+    def solve_with(base: ParsedCircuit, src: ParsedElement, keep):
         sub = copy.deepcopy(base)
         sub.probes = []
         sub.elements.append(src)
         cct = make_circuit(sub, is_dc, frequency, to_lcapy_netlist(sub, frequency))
-        return complex(lcapy_element_current(
-            cct, src, lcapy_sense_map(sub), is_dc, frequency))
+        sense = lcapy_sense_map(sub)
+        current = complex(lcapy_element_current(cct, src, sense, is_dc, frequency))
+        # Anlatım için değiştirilmiş devrenin düğüm gerilimleri ve eleman akımları
+        # (süperpozisyon alt devreleriyle aynı yol); alınamazsa anlatım eski metne döner
+        try:
+            nodes = {n for e in sub.elements for n in (e.node_positive, e.node_negative)}
+            v = {"0": 0j}
+            for n in nodes - {"0"}:
+                v[n] = complex(_extract_numeric(cct[n].V, is_dc, frequency))
+            i = {e.id: complex(lcapy_element_current(cct, e, sense, is_dc, frequency))
+                 for e in sub.elements}
+            keep(PortCircuit(parsed=sub, source_id=src.id, node_voltages=v, element_currents=i))
+        except Exception:
+            pass
+        return current
+
+    def keep_sc(pc):
+        extras.sc_circuit = pc
+
+    def keep_test(pc):
+        extras.test_circuit = pc
 
     short = ParsedElement(id=_fresh_id(parsed, "Vsc_port"), element_type=ElementType.DC_SOURCE,
                           node_positive=a, node_negative=b, value=0.0)
     try:
-        extras.isc = solve_with(parsed, short)
+        extras.isc = solve_with(parsed, short, keep_sc)
     except Exception:
         extras.isc = None
 
@@ -1861,7 +2023,7 @@ def _solve_port_extras(
                              node_positive=a, node_negative=b, value=1.0,
                              params={"amplitude": 1.0, "phase": 0.0})
     try:
-        extras.i_test = -solve_with(zeroed, test)
+        extras.i_test = -solve_with(zeroed, test, keep_test)
     except Exception:
         extras.i_test = None
     return extras
@@ -1958,9 +2120,12 @@ def _compute_power(
         )
 
         if is_dc:
+            def _q(x: float, unit: str) -> str:
+                t = eng(x, unit)
+                return f"({t})" if x < 0 else t
             equations.append(
-                f"P_{elem.id} = V·I = ({num(v.real)})·({num(i.real)}) "
-                f"= {num(p)} W"
+                f"P_{elem.id} = V·I = {_q(v.real, 'V')} · {_q(i.real, 'A')} "
+                f"= {eng(p, 'W')}"
                 + ("  (güç verir)" if is_source and p < 0 else "")
             )
         else:
@@ -1992,8 +2157,8 @@ def _compute_power(
     if is_dc:
         convention = "DC: P = V·I (pasif işaret kuralı, emilen güç)"
         equations.append(
-            f"Denge: ΣP_kaynak = {num(supplied.real)} W = "
-            f"ΣP_yük = {num(absorbed.real)} W"
+            f"Denge: ΣP_kaynak = {eng(supplied.real, 'W')} = "
+            f"ΣP_yük = {eng(absorbed.real, 'W')}"
         )
         latex_parts.append(
             "P = V \\cdot I \\quad , \\quad "
@@ -2337,7 +2502,7 @@ def _solve_transformer_ports(
             i_p = complex(_extract_numeric(cct[names["vp"]].I, is_dc, frequency))
             i_s = complex(_extract_numeric(cct[names["vs"]].I, is_dc, frequency))
         except Exception as e:
-            errors.append(f"ℹ {t.id} akımları hesaplanamadı: {str(e)}")
+            errors.append(f"ℹ {t.id} akımları hesaplanamadı: {turkish_error(e, 'transformatör akımları')}")
             continue
         vals = [raw_nodes.get(n) for n in (t.node_positive, t.node_negative, s_pos, s_neg)]
         if any(v is None for v in vals):

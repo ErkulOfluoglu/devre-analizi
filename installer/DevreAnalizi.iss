@@ -3,15 +3,17 @@
 ;
 ;  Doğrudan derlemeyin; installer\build.ps1 önce uygulamayı ve
 ;  çözücüyü hazırlar, sonra bu dosyayı ISCC ile derler:
-;    ISCC /DAppVersion=1.0.0 /DSourceDir=<hazırlanan klasör> DevreAnalizi.iss
+;    ISCC /DAppVersion=2.1.0 /DSourceDir=<hazırlanan klasör> DevreAnalizi.iss
 ;
 ;  Kurulum yönetici izni İSTEMEZ (okul bilgisayarları için):
-;  varsayılan olarak yalnızca o kullanıcıya, %LOCALAPPDATA%\Programs
-;  altına kurulur. İsteyen "tüm kullanıcılar" seçeneğini seçebilir.
+;  yalnızca o kullanıcıya, %LOCALAPPDATA%\Programs altına kurulur.
+;  "Yalnızca ben / tüm kullanıcılar" sorusu sorulmaz. Bilgi işlem
+;  sorumlusu tüm kullanıcılara kurmak isterse komut satırından
+;  /ALLUSERS ile çalıştırabilir (yönetici izni ister).
 ; ════════════════════════════════════════════════════════════════
 
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "2.1.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\build\app"
@@ -34,7 +36,7 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
+PrivilegesRequiredOverridesAllowed=commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0

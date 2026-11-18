@@ -48,7 +48,7 @@ def _format_complex_latex(z: complex, unit: str = "") -> str:
 
     Örnekler:
         (50+30j), "Ω"  → "50 + j30 \\; \\Omega"
-        (-2.5j), "V"   → "-j2.5 \\; \\text{V}"
+        (-2.5j), "V"   → "−j2.5 \\; \\text{V}"
         (8.0), "V"     → "8 \\; \\text{V}"
     """
     unit_tex = f" \\; \\text{{{unit}}}" if unit else ""
@@ -64,11 +64,11 @@ def _format_complex_latex(z: complex, unit: str = "") -> str:
         if abs(i - 1) < 1e-10:
             return f"j{unit_tex}"
         elif abs(i + 1) < 1e-10:
-            return f"-j{unit_tex}"
-        sign = "-" if i < 0 else ""
+            return f"{MINUS}j{unit_tex}"
+        sign = MINUS if i < 0 else ""
         return f"{sign}j{num(abs(i))}{unit_tex}"
     else:
-        sign = "+" if i >= 0 else "-"
+        sign = "+" if i >= 0 else MINUS
         return f"{num(r)} {sign} j{num(abs(i))}{unit_tex}"
 
 
@@ -216,15 +216,15 @@ def _format_complex_text(z) -> str:
     """
     Sayıyı düz metin denklem formatına çevirir (4 anlamlı basamak, virgül).
 
-    Örnekler: 12 → "12", -31.83j → "-j31,83", 14.14+14.14j → "14,14+j14,14"
+    Örnekler: 12 → "12", -31.83j → "−j31,83", 14.14+14.14j → "14,14+j14,14"
     """
     z = complex(z)
     r, i = z.real, z.imag
     if abs(i) < 1e-12 * max(abs(r), 1.0):
         return num(r)
     if abs(r) < 1e-12 * max(abs(i), 1.0):
-        return f"{'-' if i < 0 else ''}j{num(abs(i))}"
-    sign = "+" if i >= 0 else "-"
+        return f"{MINUS if i < 0 else ''}j{num(abs(i))}"
+    sign = "+" if i >= 0 else MINUS
     return f"{num(r)}{sign}j{num(abs(i))}"
 
 

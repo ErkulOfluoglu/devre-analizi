@@ -65,6 +65,7 @@ namespace CircuitAnalyzer.WPF
                 });
             }
             InitializeComponent();
+            RestoreWindowPlacement();
             ThemeManager.ApplyTitleBar(this);
             // Ekran testleri pencereyi kendisi boyar; Mica yalnız gerçek açılışta
             if (!HasAnySelfTest(Environment.GetCommandLineArgs()))
@@ -83,10 +84,16 @@ namespace CircuitAnalyzer.WPF
             Closed += (_, _) => ThemeManager.ThemeChanged -= onThemeChanged;
             _undoHistory.Changed += (_, _) => Dispatcher.Invoke(UpdateUndoRedoButtons);
             _selection.Changed += (_, _) => UpdateSelectionHighlight();
+            Deactivated += (_, _) => ResetSpaceCursor();
+            LostKeyboardFocus += (_, args) =>
+            {
+                if (args.NewFocus == null)
+                    ResetSpaceCursor();
+            };
             InitializeAnalysisPanelLayout();
             InitializePlacementInput(); // bağlam menüsünden önce: yerleştirirken sağ tık menü açmak yerine vazgeçer
             InitializeCanvasContextMenu();
-            _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
+            ResetHistoryAsSaved();
             Loaded += MainWindow_Loaded;
             UpdateThemeButton();
         }
@@ -98,14 +105,12 @@ namespace CircuitAnalyzer.WPF
             UpdateTitle();
             UpdateUndoRedoButtons();
             UpdateZoomDisplay();
-            _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
+            ResetHistoryAsSaved();
 
             var args = Environment.GetCommandLineArgs();
             if (!HasAnySelfTest(args))
             {
-                string? fileToOpen = args.Skip(1).FirstOrDefault(a =>
-                    !a.StartsWith("--", StringComparison.Ordinal) &&
-                    (a.EndsWith(".devre", StringComparison.OrdinalIgnoreCase) || System.IO.File.Exists(a)));
+                string? fileToOpen = StartupArgs.FindFileArgument(args.Skip(1));
 
                 if (!string.IsNullOrEmpty(fileToOpen))
                 {
@@ -120,6 +125,13 @@ namespace CircuitAnalyzer.WPF
                             ShowOnboarding(0);
                         }
                     });
+                }
+
+                // Pencere hazır olmadan ikinci açılıştan gelen istekler
+                if (Application.Current is App app)
+                {
+                    foreach (string? path in app.TakePendingActivations())
+                        HandleSecondInstance(path);
                 }
             }
         }
@@ -154,8 +166,12 @@ namespace CircuitAnalyzer.WPF
 
                 if (result == OnboardingResult.StartExample)
                 {
-                    LoadExample(ExampleCircuits.All[0]());
-                    _ = SolveAsync();
+                    // Tanıtım menüden yeniden açıldıysa tuvalde kaydedilmemiş bir devre olabilir
+                    if (PromptSaveIfDirty())
+                    {
+                        LoadExample(ExampleCircuits.All[0]());
+                        _ = SolveAsync();
+                    }
                 }
                 else if (result == OnboardingResult.StartTour)
                 {
@@ -231,6 +247,13 @@ namespace CircuitAnalyzer.WPF
             if (e.Key == Key.F5)
             {
                 AnalysisPanel.RequestSolve();
+                e.Handled = true;
+                return;
+            }
+
+            // ── Esc: açık eleman listesini kapatır (önce bu; HandleKeyDown ile aynı sıra) ──
+            if (e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None && CloseElementDrawer())
+            {
                 e.Handled = true;
                 return;
             }
@@ -377,7 +400,7 @@ namespace CircuitAnalyzer.WPF
             // ── Space tuşu: Pan imleci ──
             if (e.Key == Key.Space && !e.IsRepeat && !_isPanning)
             {
-                Mouse.OverrideCursor = Cursors.Hand;
+                ShowSpaceCursor();
             }
 
             // ── Escape: Tel çizimini iptal et veya seçimi temizle ──
@@ -468,8 +491,29 @@ namespace CircuitAnalyzer.WPF
             base.OnPreviewKeyUp(e);
             if (e.Key == Key.Space && !_isPanning)
             {
-                Mouse.OverrideCursor = null;
+                ResetSpaceCursor();
             }
+        }
+
+        private bool _spaceCursorActive;
+
+        /// <summary>Space basılıyken "el" imleci (kaydırma ipucu).</summary>
+        internal void ShowSpaceCursor()
+        {
+            _spaceCursorActive = true;
+            Mouse.OverrideCursor = Cursors.Hand;
+        }
+
+        /// <summary>
+        /// "El" imlecini kaldırır. Space bırakılınca, pencere etkinliğini kaybedince (Alt+Tab)
+        /// ya da klavye odağı pencereden çıkınca çağrılır; yoksa imleç el olarak takılı kalırdı.
+        /// </summary>
+        internal void ResetSpaceCursor()
+        {
+            if (!_spaceCursorActive)
+                return;
+            _spaceCursorActive = false;
+            Mouse.OverrideCursor = null;
         }
     }
 }

@@ -17,7 +17,7 @@ ve narrative.py düğüm gerilimi anlatımına döner.
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-from explainer.formatting import MINUS, eng, node_v, num, paren
+from explainer.formatting import MINUS, ek, eng, node_ek, node_name, node_v, num, paren, shown_digits
 from parser.netlist_parser import ElementType, ParsedElement
 
 _ALLOWED = (ElementType.RESISTOR, ElementType.DC_SOURCE, ElementType.CURRENT_DC)
@@ -27,6 +27,7 @@ _ALLOWED = (ElementType.RESISTOR, ElementType.DC_SOURCE, ElementType.CURRENT_DC)
 class _Branch:
     index: int
     elements: List[ParsedElement]          # B → A yönünde sıralı
+    path: List[Tuple[ParsedElement, str, str]] = field(default_factory=list)
     resistors: List[ParsedElement] = field(default_factory=list)
     volt_terms: List[Tuple[ParsedElement, int]] = field(default_factory=list)  # (kaynak, ±1)
     cur_source: Optional[ParsedElement] = None
@@ -42,6 +43,36 @@ class _Branch:
         return self.cur_source is not None
 
 
+def _is_single_loop(adj: Dict[str, List[ParsedElement]]) -> bool:
+    """Her düğümde tam iki eleman ve toprak çevrenin üzerinde: devre tek bir çevre."""
+    return "0" in adj and all(len(lst) == 2 for lst in adj.values())
+
+
+def _single_loop_top(adj: Dict[str, List[ParsedElement]], n_elements: int) -> Optional[str]:
+    """
+    Tek çevrede A düğümü: B = 0'dan A'ya giden iki yolun (kolun) ikisinde de direnç ya da
+    akım kaynağı bulunmalı (1/R tanımlı olsun). Uygun birden çok düğüm varsa en büyük numaralı.
+    """
+    seq: List[Tuple[ParsedElement, str]] = []      # (eleman, ulaşılan düğüm), 0'dan başlayarak
+    prev, e = "0", adj["0"][0]
+    for _ in range(n_elements + 1):
+        nxt = e.node_negative if e.node_positive == prev else e.node_positive
+        seq.append((e, nxt))
+        if nxt == "0":
+            break
+        e = next(x for x in adj[nxt] if x is not e)
+        prev = nxt
+    else:
+        return None
+
+    def usable(elems: List[ParsedElement]) -> bool:
+        return any(x.element_type != ElementType.DC_SOURCE for x in elems)
+
+    tops = [node for i, (_, node) in enumerate(seq[:-1])
+            if usable([x for x, _ in seq[:i + 1]]) and usable([x for x, _ in seq[i + 1:]])]
+    return max(tops, key=lambda n: (len(n), n)) if tops else None
+
+
 def _walk_branches(ctx) -> Tuple[Optional[Tuple[str, str, List[_Branch]]], str]:
     """(A, B, kollar) ya da (None, sebep)."""
     adj: Dict[str, List[ParsedElement]] = {}
@@ -54,8 +85,17 @@ def _walk_branches(ctx) -> Tuple[Optional[Tuple[str, str, List[_Branch]]], str]:
     essential = [n for n, lst in adj.items() if len(lst) >= 3]
     dangling = [n for n, lst in adj.items() if len(lst) == 1]
     if dangling:
-        return None, (f"Düğüm {dangling[0]}'da bir eleman açıkta kalıyor (akım taşımaz); "
+        return None, (f"{node_ek(dangling[0], 'de')} bir eleman açıkta kalıyor (akım taşımaz); "
                       "Millman formülü kapalı paralel kollar ister.")
+    if not essential and _is_single_loop(adj):
+        # Tek çevre (ör. paralel bağlı iki akü): bir düğüm A seçilip devre B = 0 ile
+        # A arasında iki paralel kol olarak ele alınır.
+        top = _single_loop_top(adj, len(ctx.elements))
+        if top is None:
+            return None, ("Devre tek bir çevreden oluşuyor ama hiçbir düğüm onu, iki kolunda da "
+                          "direnç (ya da akım kaynağı) kalacak şekilde ikiye ayırmıyor; Millman "
+                          "formülü uygulanamaz.")
+        essential = ["0", top]
     if len(essential) != 2:
         return None, (f"Seri elemanları birleştirdikten sonra {len(essential)} ana düğüm "
                       "(üç veya daha fazla elemanın birleştiği düğüm) kalıyor; Millman teoremi "
@@ -84,7 +124,7 @@ def _walk_branches(ctx) -> Tuple[Optional[Tuple[str, str, List[_Branch]]], str]:
             return None, "Kollar izlenirken döngüye girildi."
         if path[-1][2] != a:
             return None, "Bir kol aynı ana düğüme geri dönüyor; paralel kol yapısı değil."
-        br = _Branch(index=len(branches) + 1, elements=[p[0] for p in path])
+        br = _Branch(index=len(branches) + 1, elements=[p[0] for p in path], path=list(path))
         for el, frm, to in path:
             br.entered_at_p[el.id] = (frm == el.node_positive)
             if el.element_type == ElementType.RESISTOR:
@@ -157,15 +197,28 @@ def build_millman(ctx) -> Tuple[Optional[list], str]:
     v_ab = (sum(br.e / br.r for br in branches if not br.is_current)
             + sum(br.i_src for br in branches if br.is_current)) / g
     ki = lambda br: str(br.index).translate(str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"))
-    b_txt = "Düğüm 0 (GND, referans)" if b == "0" else f"Düğüm {b} (referans olarak alıyoruz)"
+    b_txt = "GND (referans)" if b == "0" else f"Düğüm {b} (referans olarak alıyoruz)"
 
     # ── 1. Kolları çıkaralım ──
     s1 = _Section("Millman Teoremi — Kolları Belirleyelim")
-    s1.text(f"Devre, iki ana düğüm arasına paralel bağlı {len(branches)} koldan oluşuyor. "
-            "Bir koldaki seri elemanlar tek elemanmış gibi birleştirilir: seri dirençler toplanır, "
-            "seri gerilim kaynakları işaretlerine göre toplanır.")
-    s1.text(f"Ana düğümler: A = Düğüm {a}, B = {b_txt}. Bir koldaki gerilim kaynağının + ucu A düğümüne "
-            "bakıyorsa E pozitif, B düğümüne bakıyorsa negatif yazılır.")
+    adj: Dict[str, List[ParsedElement]] = {}
+    for e in ctx.elements:
+        adj.setdefault(e.node_positive, []).append(e)
+        adj.setdefault(e.node_negative, []).append(e)
+    merge = ("Bir koldaki seri elemanlar tek elemanmış gibi birleştirilir: seri dirençler toplanır, "
+             "seri gerilim kaynakları işaretlerine göre toplanır.")
+    sign_rule = ("Bir koldaki gerilim kaynağının + ucu A düğümüne bakıyorsa E pozitif, B düğümüne "
+                 "bakıyorsa negatif yazılır.")
+    if _is_single_loop(adj):
+        s1.text("Devre tek bir çevreden oluşuyor: üç ya da daha fazla elemanın birleştiği bir ana "
+                f"düğüm yok. Çevre üzerinde iki düğüm seçip (A = {node_name(a)}, B = {b_txt}) bu iki "
+                "düğüm arasındaki iki yolu, paralel bağlı iki kol gibi ele alacağız. " + merge)
+        s1.text(f"A düğümü, iki kolda da direnç (ya da akım kaynağı) kalacak şekilde seçildi; "
+                f"aksi hâlde o kolun 1/R değeri tanımsız olurdu. {sign_rule}")
+    else:
+        s1.text(f"Devre, iki ana düğüm arasına paralel bağlı {len(branches)} koldan oluşuyor. "
+                + merge)
+        s1.text(f"Ana düğümler: A = {node_name(a)}, B = {b_txt}. {sign_rule}")
     for br in branches:
         names = ", ".join(e.id for e in br.elements)
         if br.is_current:
@@ -245,4 +298,97 @@ def build_millman(ctx) -> Tuple[Optional[list], str]:
     terms = " + ".join(paren(eng(i, 'A')) for i in currents)
     if abs(total) <= 1e-9 * max(scale, 1e-12):
         s3.check(f"KCL, A düğümü: I toplamı = {terms} = 0 ✓")
-    return [s1, s2, s3], ""
+
+    sections = [s1, s2, s3]
+    s4 = _inner_node_section(ctx, a, b, branches, currents)
+    if s4 is not None:
+        sections.append(s4)
+    return sections, ""
+
+
+def _inner_node_section(ctx, a: str, b: str, branches: List[_Branch], currents: List[float]):
+    """Kolların içindeki ara düğüm gerilimlerini ana düğüm gerilimi ve kol akımından türetir."""
+    from explainer.narrative import EXTRA_DIGITS_NOTE, _Section, _close
+
+    ki = lambda br: str(br.index).translate(str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"))
+    lines = []
+    results_lines = []
+    extra_digits = False
+
+    def derive_segment(br: _Branch, i_k: float, seg: List[Tuple[ParsedElement, str, str]],
+                       start_node: str, dir_sign: int) -> None:
+        nonlocal extra_digits
+        v_cur = ctx.node_value(start_node).real
+        cur_node = start_node
+        for el, frm, to in seg[:-1]:
+            if to in ("0", a, b):
+                cur_node = to
+                v_cur = ctx.node_value(to).real
+                continue
+            target = ctx.node_value(to).real
+            if el.element_type == ElementType.DC_SOURCE:
+                s_v = 1 if (frm == el.node_negative and to == el.node_positive) else -1
+                v_next = v_cur + s_v * el.value
+                if not _close(v_next, target, 1e-4):
+                    return
+                if cur_node == "0":
+                    lines.append(f"{node_v(to)} = {'' if s_v > 0 else MINUS}{el.id} = {eng(v_next, 'V')}")
+                else:
+                    op = "+" if s_v > 0 else MINUS
+                    d = shown_digits([v_cur, el.value], lambda xs: xs[0] + s_v * xs[1], v_next)
+                    extra_digits = extra_digits or d > 4
+                    lines.append(f"{node_v(to)} = {node_v(cur_node)} {op} {el.id} = "
+                                 f"{eng(v_cur, 'V', d)} {op} {eng(el.value, 'V', d)} = {eng(v_next, 'V')}")
+            elif el.element_type == ElementType.RESISTOR:
+                i_flow = dir_sign * i_k
+                v_next = v_cur - i_flow * el.value
+                if not _close(v_next, target, 1e-4):
+                    return
+                if cur_node == "0":
+                    d = shown_digits([abs(i_k)], lambda xs: xs[0] * el.value, abs(v_next))
+                    extra_digits = extra_digits or d > 4
+                    i_sym = f"{MINUS}I{ki(br)}" if dir_sign > 0 else f"I{ki(br)}"
+                    # Kol akımını işaretiyle yerine koy: −I₃ = −(−2,182 mA) adımı görünsün
+                    i_val = paren(eng(i_k, 'A', d))
+                    i_txt = f"{MINUS}{i_val}" if dir_sign > 0 and abs(i_k) > 1e-15 else i_val
+                    lines.append(f"{node_v(to)} = {i_sym} · {el.id} = "
+                                 f"{i_txt} · {eng(el.value, 'Ω')} = {eng(v_next, 'V')}")
+                else:
+                    d = shown_digits([v_cur, i_k], lambda xs: xs[0] - dir_sign * xs[1] * el.value, v_next)
+                    extra_digits = extra_digits or d > 4
+                    op = MINUS if dir_sign > 0 else "+"
+                    lines.append(f"{node_v(to)} = {node_v(cur_node)} {op} I{ki(br)} · {el.id} = "
+                                 f"{eng(v_cur, 'V', d)} {op} {paren(eng(i_k, 'A', d))} · {eng(el.value, 'Ω')} = "
+                                 f"{eng(v_next, 'V')}")
+            else:
+                return
+            if to != "0":
+                results_lines.append((to, f"{node_v(to)} = {eng(v_next, 'V')}"))
+            cur_node = to
+            v_cur = v_next
+
+    for br, i_k in zip(branches, currents):
+        if len(br.path) < 2:
+            continue
+        if not br.is_current:
+            derive_segment(br, i_k, br.path, b, +1)
+        else:
+            cs_idx = next(idx for idx, (el, _, _) in enumerate(br.path) if el is br.cur_source)
+            if cs_idx >= 1:
+                derive_segment(br, i_k, br.path[:cs_idx + 1], b, +1)
+            if cs_idx < len(br.path) - 1:
+                rev = [(el, to, frm) for el, frm, to in reversed(br.path[cs_idx:])]
+                derive_segment(br, i_k, rev, a, -1)
+
+    if not lines:
+        return None
+    s4 = _Section("Ara Düğüm Gerilimleri")
+    s4.text("Kolların içindeki ara düğümlerin gerilimleri, ana düğüm gerilimi ve kol akımından "
+            "(dirençlerdeki gerilim düşümü ya da seri kaynak gerilimi eklenerek) bulunur:")
+    for ln in lines:
+        s4.math(ln)
+    if extra_digits:
+        s4.note(EXTRA_DIGITS_NOTE)
+    for _, rln in sorted(results_lines, key=lambda kv: (len(kv[0]), kv[0])):
+        s4.result(rln)
+    return s4

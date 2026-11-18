@@ -147,7 +147,7 @@ public class CurrentDisplayTests
         };
         var (valP, dirP) = CurrentDisplay.Format("R1", currentPassive);
         Assert.Equal(malformedDirection, dirP);
-        Assert.Equal("-4 mA", valP);
+        Assert.Equal("−4 mA", valP);
 
         var currentSource = new ElementCurrentDto
         {
@@ -157,7 +157,7 @@ public class CurrentDisplayTests
         };
         var (valS, dirS) = CurrentDisplay.Format("V1", currentSource);
         Assert.Equal(malformedDirection, dirS);
-        Assert.Equal("-6 mA", valS);
+        Assert.Equal("−6 mA", valS);
 
         var currentAcSource = new ElementCurrentDto
         {

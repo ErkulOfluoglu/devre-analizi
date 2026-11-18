@@ -159,7 +159,7 @@
                                     <TextBlock Text="Eleman ekle" FontWeight="SemiBold" FontSize="14"
                                                Foreground="{DynamicResource Brush.Text.Primary}"/>
                                 </StackPanel>
-                                <TextBlock Text="Soldaki listeden tıklayın, sonra sürükleyip yerleştirin."
+                                <TextBlock Text="Soldaki şeritten seçin, sonra çizim alanında yerine tıklayın."
                                            Style="{DynamicResource Text.Caption}"/>
                             </StackPanel>
                         </Border>
@@ -308,7 +308,7 @@
                         </Border>
                     </StackPanel>
 
-                    <TextBlock Text="Yöntemler: düğüm gerilimleri, çevre akımları, Thevenin, Norton, süperpozisyon. DC ve AC devreler."
+                    <TextBlock Text="Yöntemler: düğüm gerilimleri, çevre akımları, Thevenin, Norton, süperpozisyon, Millman, kaynak dönüşümü, geçici durum, güç ve güç katsayısı, rezonans, transformatör, üç faz. DC ve AC devreler."
                                Style="{DynamicResource Text.Caption}"/>
                 </StackPanel>
             </Grid>

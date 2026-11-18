@@ -82,15 +82,15 @@ def test_check_dc_voltage():
     assert v.status == "wrong"
     assert v.message == q.sign_hint
 
-    # "8000" yanlış, mesaj "1.000 katı büyük" içerir
+    # "8000" yanlış, mesaj "bin katı büyük" içerir
     v = check_answer(q, "8000")
     assert v.status == "wrong"
-    assert "1.000 katı büyük" in v.message
+    assert "bin katı büyük" in v.message
 
-    # "8m" yanlış, "1.000 katı küçük" içerir
+    # "8m" yanlış, "bin katı küçük" içerir
     v = check_answer(q, "8m")
     assert v.status == "wrong"
-    assert "1.000 katı küçük" in v.message
+    assert "bin katı küçük" in v.message
 
     # "8 A" kısmi (birim yanlış), mesaj "birim" içerir
     v = check_answer(q, "8 A")
@@ -123,15 +123,15 @@ def test_check_dc_current():
     v = check_answer(q, "0.004")
     assert v.status == "correct"
 
-    # "4" yanlış (önek, "1.000 katı büyük")
+    # "4" yanlış (önek, "bin katı büyük")
     v = check_answer(q, "4")
     assert v.status == "wrong"
-    assert "1.000 katı büyük" in v.message
+    assert "bin katı büyük" in v.message
 
-    # "-4" yanlış ve mesaj hem "1.000" hem sign_hint metnini içerir
+    # "-4" yanlış ve mesaj hem "bin katı" hem sign_hint metnini içerir
     v = check_answer(q, "-4")
     assert v.status == "wrong"
-    assert "1.000" in v.message
+    assert "bin katı" in v.message
     assert q.sign_hint in v.message
 
     # "4 µA" yanlış ("katı küçük")

@@ -86,6 +86,7 @@ public partial class AnalysisPanel : UserControl
     public Func<CancellationToken, Task<LlmStatusDto?>>? LlmStatusProvider { get; set; }
     public Func<LlmAskRequestDto, CancellationToken, Task<LlmAnswerDto>>? LlmAsker { get; set; }
     public Func<CancellationToken, Task<bool>>? LlmStartOllama { get; set; }
+    public Func<CancellationToken, Task<(bool Ok, string Message)>>? LlmEnableGpu { get; set; }
     public Func<string?, CancellationToken, Task<LlmPullStatusDto>>? LlmStartPull { get; set; }
     public Func<CancellationToken, Task<LlmPullStatusDto?>>? LlmGetPull { get; set; }
     public Func<CancellationToken, Task<bool>>? LlmCancelPull { get; set; }
@@ -202,7 +203,7 @@ public partial class AnalysisPanel : UserControl
         _hasAcSource = hasAcSource;
         _needsFrequency = needsFrequency;
 
-        TxtModeLabel.Text = hasAcSource ? "AC (fazör) analiz" : "DC analiz";
+        UpdateModeLabel();
         RowFrequency.Visibility = hasAcSource ? Visibility.Visible : Visibility.Collapsed;
         RowValueDisplay.Visibility = hasAcSource ? Visibility.Visible : Visibility.Collapsed;
         TxtFrequencyLabel.Text = needsFrequency
@@ -389,7 +390,10 @@ public partial class AnalysisPanel : UserControl
         if (BtnDisplayRms != null) BtnDisplayRms.IsChecked = !isPeak;
         if (BtnDisplayPeak != null) BtnDisplayPeak.IsChecked = isPeak;
 
-        AppSettings.AcValueDisplay = normalized;
+        // Varsayılan yalnız öğrencinin kendi seçimiyle değişir (notify = düğmeye tıklandı).
+        // Tepe değerle kaydedilmiş bir dosyayı açmak sonraki devrelerin ayarını değiştirmez.
+        if (notify)
+            AppSettings.AcValueDisplay = normalized;
 
         if (notify && changed)
         {
@@ -401,6 +405,22 @@ public partial class AnalysisPanel : UserControl
     {
         UpdateTerminalsVisibility();
         UpdatePowerFactorTargetVisibility();
+        UpdateModeLabel();
+    }
+
+    /// <summary>Çözücü durumunun altındaki mod yazısı: "Geçici durum" yöntemde, yoksa AC / DC.</summary>
+    internal static string ModeLabelText(bool hasAcSource, string analysisType) =>
+        string.Equals(analysisType, AnalysisTypes.Transient, StringComparison.OrdinalIgnoreCase)
+            ? "Geçici durum"
+            : hasAcSource ? "AC (fazör) analiz" : "DC analiz";
+
+    private void UpdateModeLabel()
+    {
+        if (TxtModeLabel == null || CmbAnalysisType == null) return;
+        string selectedText = (CmbAnalysisType.SelectedItem as ComboBoxItem)?.Content as string
+            ?? CmbAnalysisType.SelectedItem as string
+            ?? "";
+        TxtModeLabel.Text = ModeLabelText(_hasAcSource, AnalysisTypeFromText(selectedText));
     }
 
     private void UpdateTerminalsVisibility()
@@ -454,6 +474,37 @@ public partial class AnalysisPanel : UserControl
         if (selectedText.Contains("Üç Faz", StringComparison.OrdinalIgnoreCase))
             return AnalysisTypes.ThreePhase;
         return AnalysisTypes.Nodal;
+    }
+
+    /// <summary>
+    /// Yöntem listesindeki yazılardan, verilen analiz türüne karşılık gelen ilkini bulur
+    /// (eşleme <see cref="AnalysisTypeFromText"/> ile; ayrı bir ad listesi tutulmaz). Yoksa null.
+    /// </summary>
+    internal static string? MethodLabelFor(IEnumerable<string> selectorLabels, string? analysisType)
+    {
+        if (string.IsNullOrWhiteSpace(analysisType))
+            return null;
+        return selectorLabels.FirstOrDefault(label =>
+            string.Equals(AnalysisTypeFromText(label), analysisType, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Yöntem seçicisinin gösterdiği yazılar (sırasıyla).</summary>
+    public IReadOnlyList<string> MethodLabels => CmbAnalysisType.Items
+        .Cast<object>()
+        .Select(i => (i as ComboBoxItem)?.Content as string ?? i as string ?? "")
+        .Where(s => s.Length > 0)
+        .ToList();
+
+    /// <summary>
+    /// Analiz türünün öğrenciye gösterilen adı, yöntem seçicisinde yazdığı gibi
+    /// ("THREE_PHASE" → "Üç Faz"). Bilinmeyen türde listedeki ilk yöntemin adı (iç ad asla).
+    /// </summary>
+    public string MethodDisplayName(string? analysisType)
+    {
+        var labels = MethodLabels;
+        return MethodLabelFor(labels, analysisType)
+            ?? MethodLabelFor(labels, AnalysisTypes.Nodal)
+            ?? "";
     }
 
     /// <summary>Bu yöntem terminal çifti (+ ve −) ister mi?</summary>
@@ -528,7 +579,9 @@ public partial class AnalysisPanel : UserControl
         }
 
         double? powerFactorTarget = null;
-        if (string.Equals(analysisType, AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase))
+        // Kutu Güç ve Üç Faz yöntemlerinde görünür; ikisinde de çözücüye gönderilir
+        if (string.Equals(analysisType, AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(analysisType, AnalysisTypes.ThreePhase, StringComparison.OrdinalIgnoreCase))
         {
             string pfText = TxtPowerFactorTarget?.Text?.Trim() ?? "";
             if (!string.IsNullOrEmpty(pfText))
@@ -622,6 +675,7 @@ public partial class AnalysisPanel : UserControl
                 StatusProvider = LlmStatusProvider,
                 Asker = LlmAsker,
                 StartOllama = LlmStartOllama,
+                EnableGpu = LlmEnableGpu,
                 StartPull = LlmStartPull,
                 GetPull = LlmGetPull,
                 CancelPull = LlmCancelPull
@@ -679,12 +733,6 @@ public partial class AnalysisPanel : UserControl
                 AddMessageCard(msg);
             }
 
-            // Yapay zekâ asistanı
-            if (CurrentAssistantView != null)
-            {
-                ResultsContainer.Children.Add(CurrentAssistantView);
-            }
-
             // 3. PracticeView oluştur
             var practiceView = new PracticeView
             {
@@ -696,6 +744,12 @@ public partial class AnalysisPanel : UserControl
             CurrentPracticeView = practiceView;
 
             ResultsContainer.Children.Add(practiceView);
+
+            // Yapay zekâ asistanı soruların altında (önce öğrenci kendisi denesin)
+            if (CurrentAssistantView != null)
+            {
+                ResultsContainer.Children.Add(CurrentAssistantView);
+            }
         }
         else
         {
@@ -1107,9 +1161,10 @@ public partial class AnalysisPanel : UserControl
         SubscriptText.Apply(lbl);
         sp.Children.Add(lbl);
 
+        // Değerler arka uçtan da gelebilir ("3.033∠-72.34°"): eksi işareti ekranda Unicode "−"
         var val = new TextBlock
         {
-            Text = primaryValue,
+            Text = PhasorText.KeepTogether(TurkishNumber.DisplayMinus(primaryValue)),
             FontSize = 15,
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 2, 0, 0)
@@ -1122,7 +1177,7 @@ public partial class AnalysisPanel : UserControl
         {
             var sec = new TextBlock
             {
-                Text = secondaryValue,
+                Text = PhasorText.KeepTogether(TurkishNumber.DisplayMinus(secondaryValue)),
                 Margin = new Thickness(0, 2, 0, 0)
             };
             sec.SetResourceReference(StyleProperty, "Text.Caption");
@@ -1163,9 +1218,67 @@ public partial class AnalysisPanel : UserControl
         return grid;
     }
 
+    /// <summary>
+    /// Düğüm kutucuğunun başlığı: "V4", üç fazlı elemanın ucundaysa API'nin verdiği adla
+    /// "V4 · R fazı (Y1)"; düğüm 0 her zaman "0 (GND)".
+    /// </summary>
+    internal static string NodeTileTitle(string key, string? label)
+    {
+        if (key == "0")
+            return "0 (GND)";
+        return string.IsNullOrWhiteSpace(label) || label == "GND" ? $"V{key}" : $"V{key} · {label}";
+    }
+
+    /// <summary>
+    /// Üç faz sonuçları, anlatımdaki adlarla (V_RN, V_RS, I_R, I_N, V_N′N, I_RS) bölüm bölüm.
+    /// Değerler kutupsal (büyüklük∠açı), önekli birimle.
+    /// </summary>
+    internal static List<(string Header, List<(string Title, string Value)> Items)> ThreePhaseSections(ThreePhaseResultDto tp)
+    {
+        static string V(ComplexNumberDto c, string unit) => EngFormat.Format(ResultValue.FromComplex(c), unit);
+        static List<(string, string)> Tiles(Dictionary<string, ComplexNumberDto> d, Func<string, string> title, string unit) =>
+            d.Select(kv => (title(kv.Key), V(kv.Value, unit))).ToList();
+
+        var sections = new List<(string, List<(string, string)>)>();
+        if (tp.PhaseVoltages is { Count: > 0 } pv)
+            sections.Add(("Kaynağın faz gerilimleri", Tiles(pv, k => $"V_{k}N", "V")));
+        if (tp.LineVoltages is { Count: > 0 } lv)
+            sections.Add(("Hat gerilimleri", Tiles(lv, k => $"V_{k}", "V")));
+        if (tp.LineCurrents is { Count: > 0 } lc)
+        {
+            var tiles = Tiles(lc, k => $"I_{k}", "A");
+            if (tp.NeutralCurrent != null)
+                tiles.Add(("I_N", V(tp.NeutralCurrent, "A")));
+            sections.Add(("Hat akımları", tiles));
+        }
+        if (tp.LoadVoltages is { Count: > 0 } ldv)
+        {
+            bool delta = string.Equals(tp.Load, "D", StringComparison.OrdinalIgnoreCase);
+            var tiles = Tiles(ldv, k => delta ? $"V_{k}" : $"V_{k}N′", "V");
+            if (tp.LoadNeutralVoltage != null)
+                tiles.Add(("V_N′N", V(tp.LoadNeutralVoltage, "V")));
+            sections.Add((delta ? "Üçgen yükün kol gerilimleri" : "Yıldız yükün kol gerilimleri", tiles));
+        }
+        if (tp.LoadPhaseCurrents is { Count: > 0 } phc)
+            sections.Add(("Üçgen yükün faz akımları", Tiles(phc, k => $"I_{k}", "A")));
+        return sections;
+    }
+
     private StackPanel BuildResultsPanel(AnalysisResponseDto response)
     {
         var panel = new StackPanel();
+
+        // Üç faz: kaynak ve yükün faz/hat gerilimleri ve akımları (anlatımdaki adlarla) en başta
+        if (response.ThreePhaseResult is { } threePhase)
+        {
+            foreach (var (header, items) in ThreePhaseSections(threePhase))
+            {
+                AddSectionHeader(panel, header);
+                panel.Children.Add(CreateTwoColumnGrid(items
+                    .Select(t => CreateValueTile(t.Title, t.Value))
+                    .ToList<UIElement>()));
+            }
+        }
 
         // 3. Düğüm Gerilimleri
         if (response.Results?.NodeVoltages != null && response.Results.NodeVoltages.Count > 0)
@@ -1179,7 +1292,7 @@ public partial class AnalysisPanel : UserControl
             var tiles = new List<UIElement>();
             foreach (var kvp in sortedNodes)
             {
-                string nodeName = kvp.Key == "0" ? "0 (GND)" : $"V{kvp.Key}";
+                string nodeName = NodeTileTitle(kvp.Key, kvp.Value.Label);
                 string formattedVal = EngFormat.Format(kvp.Value.Value, kvp.Value.Unit ?? "V");
                 string? secVal = null;
                 if (kvp.Value.Value.IsComplex && !string.IsNullOrWhiteSpace(kvp.Value.Value.RectangularStr))
@@ -1191,27 +1304,6 @@ public partial class AnalysisPanel : UserControl
             panel.Children.Add(CreateTwoColumnGrid(tiles));
         }
 
-        // Üç faz: hat ve faz akımları, wattmetre okumaları
-        if (response.ThreePhaseResult is { } threePhase)
-        {
-            if (threePhase.LineCurrents is { Count: > 0 } lineCurrents)
-            {
-                AddSectionHeader(panel, "Hat akımları");
-                var tiles = lineCurrents
-                    .Select(kv => CreateValueTile($"I_{kv.Key}", EngFormat.Format(ResultValue.FromComplex(kv.Value), "A")))
-                    .ToList<UIElement>();
-                if (threePhase.NeutralCurrent != null)
-                    tiles.Add(CreateValueTile("I_N", EngFormat.Format(ResultValue.FromComplex(threePhase.NeutralCurrent), "A")));
-                panel.Children.Add(CreateTwoColumnGrid(tiles));
-            }
-            if (threePhase.LoadPhaseCurrents is { Count: > 0 } phaseCurrents)
-            {
-                AddSectionHeader(panel, "Üçgen yükün faz akımları");
-                panel.Children.Add(CreateTwoColumnGrid(phaseCurrents
-                    .Select(kv => CreateValueTile($"I_{kv.Key}", EngFormat.Format(ResultValue.FromComplex(kv.Value), "A")))
-                    .ToList<UIElement>()));
-            }
-        }
         if (response.WattmeterResults is { Count: > 0 } wattmeters)
         {
             AddSectionHeader(panel, "Wattmetre okumaları");
@@ -1494,8 +1586,40 @@ public partial class AnalysisPanel : UserControl
         return panel;
     }
 
+    /// <summary>Son hata kartındaki eylem düğmesi (ör. "Yeniden dene"); yoksa null. Testler için.</summary>
+    public Button? ErrorActionButton { get; private set; }
+
+    /// <summary>
+    /// Hata kartı gösterir. actionText ve action verilirse kartın altında ikincil bir düğme
+    /// (ör. "Yeniden dene") olur; basılınca düğme kapanır ve action çalışır.
+    /// </summary>
+    public void ShowError(string title, string message, string? actionText, Action? action)
+    {
+        ShowError(title, message);
+        if (actionText == null || action == null || ResultsContainer.Children.Count == 0 ||
+            ResultsContainer.Children[^1] is not Border { Child: StackPanel stack })
+            return;
+
+        var button = new Button
+        {
+            Content = actionText,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            MinHeight = 32,
+            Margin = new Thickness(0, 10, 0, 0),
+        };
+        button.SetResourceReference(StyleProperty, "Button.Secondary");
+        button.Click += (_, _) =>
+        {
+            button.IsEnabled = false;   // çift tıklama iki kez başlatmasın
+            action();
+        };
+        stack.Children.Add(button);
+        ErrorActionButton = button;
+    }
+
     public void ShowError(string title, string message)
     {
+        ErrorActionButton = null;
         if (CurrentAssistantView is { IsBusy: true } av)
             av.Cancel();
         CurrentAssistantView = null;
@@ -1546,6 +1670,7 @@ public partial class AnalysisPanel : UserControl
 
     private void ClearResultsContent()
     {
+        ErrorActionButton = null;
         BannerStale.Visibility = Visibility.Collapsed;
         ResultsScrollViewer.Opacity = 1.0;
         ResultsContainer.Children.Clear();

@@ -15,7 +15,7 @@ U gösterimi bir notla belirtilir.
 import math
 from typing import List
 
-from explainer.formatting import MINUS, eng, num, polar, rect
+from explainer.formatting import MINUS, eng, num, paren, polar, rect
 from explainer.narrative import _Section
 from explainer.transformer_narrative import _c, _cn, _zeq
 from models.request import AnalysisType
@@ -35,8 +35,8 @@ def _basis(an) -> str:
 
 
 def _pf_text(an) -> str:
-    return {"lagging": "geri (endüktif)", "leading": "ileri (kapasitif)",
-            "unity": "birim"}[an.pf_type]
+    return {"lagging": "geri, endüktif", "leading": "ileri, kapasitif",
+            "unity": "birim, rezistif"}[an.pf_type]
 
 
 def _arm_keys(an):
@@ -97,7 +97,10 @@ def _intro(an: ThreePhaseAnalysis, requested_type) -> _Section:
         s.note("Üçgen kaynakta sargı gerilimi hat gerilimine eşittir ve ideal üçgen gerilim çevrimi "
                "çözücü için tekildir; bu yüzden kaynak içeride eşdeğer yıldıza çevrilir "
                "(yüzer sanal nötr, her fazda U_f = U_h/√3). Hat gerilimleri ve hat akımları değişmez.")
-    s.text("Amaç: faz ve hat akımlarını, nötr akımını ve gücü (P, Q, S, cos φ) bulmak.")
+    if an.i_n is not None:
+        s.text("Amaç: faz ve hat akımlarını, nötr akımını ve gücü (P, Q, S, cos φ) bulmak.")
+    else:
+        s.text("Amaç: faz ve hat akımlarını ve gücü (P, Q, S, cos φ) bulmak.")
     for n in an.notes:
         s.note(n)
     s.note(U_NOTE)
@@ -115,8 +118,9 @@ def _voltage_section(an: ThreePhaseAnalysis) -> List[_Section]:
            f"(faz sırası {an.sequence}):")
     for ph in PHASES:
         s.math(f"V_{ph}N = {_c(an.v_ph[ph], 'V')}")
+    lead = "öndedir" if an.sequence == "RST" else "geridedir"
     s.text("Hat gerilimi iki faz geriliminin farkıdır; büyüklüğü faz geriliminin √3 katıdır "
-           "ve fazı 30° kayar:")
+           f"ve faz sırası {an.sequence} olduğundan V_RS, V_RN'den 30° {lead}:")
     vl = line_voltages(an.v_ph)
     s.math(f"V_RS = V_RN {MINUS} V_SN = {_c(vl['RS'], 'V')}")
     s.math(f"V_ST = V_SN {MINUS} V_TN = {_c(vl['ST'], 'V')}")
@@ -147,8 +151,10 @@ def _balanced_sections(an: ThreePhaseAnalysis) -> List[_Section]:
         s.text("Yıldız bağlantıda hat akımı faz akımına eşittir: I_h = I_f.")
         s.math(f"I_f = V_RN / Z = {_c(an.v_ph['R'], 'V')} / {_z(z0)} = {_c(h['i_line']['R'], 'A')}")
     else:
-        s.text("Üçgen yükte her kol hat gerilimini görür: U_f = U_h. Hat akımı faz akımının "
-               "√3 katıdır ve 30° geridedir.")
+        # U_f yukarıda kaynağın faz gerilimi (U_h/√3) olarak kullanıldı; üçgen yükün kolu için ayrı ad
+        lag = "geridedir" if an.sequence == "RST" else "öndedir"
+        s.text("Üçgen yükte her kol hat gerilimini görür: kol gerilimi U_kol = U_h. Hat akımı kol "
+               f"akımının √3 katıdır ve faz sırası {an.sequence} olduğundan kol akımından 30° {lag}.")
         vl = line_voltages(an.v_ph)
         s.math(f"I_RS = V_RS / Z = {_c(vl['RS'], 'V')} / {_z(z0)} = {_c(h['i_phase']['RS'], 'A')}")
         s.math(f"I_ST = {_c(h['i_phase']['ST'], 'A')},  I_TR = {_c(h['i_phase']['TR'], 'A')}")
@@ -233,13 +239,15 @@ def _power_section(an: ThreePhaseAnalysis) -> List[_Section]:
         sinphi = abs(z0.imag) / abs(z0)
         s.math(f"cos φ = Re(Z) / |Z| = {num(z0.real)} / {num(abs(z0))} = {num(cosphi)}  "
                f"(φ = {num(math.degrees(math.atan2(z0.imag, z0.real)))}°)")
-        s.math(f"P = √3 · U_h · I_h · cos φ = √3 · {num(uh_r)} · {num(ih_r)} · {num(cosphi)} = "
+        s.math(f"P = √3 · U_h · I_h · cos φ = √3 · {num(uh_r)} · {num(ih_r)} · {paren(num(cosphi))} = "
                f"{eng(an.p, 'W')}")
         if an.conn_l == "Y":
             uf_r, if_r = an.to_rms(an.uf), ih_r
+            arm = "U_f · I_f"
         else:
             uf_r, if_r = uh_r, an.to_rms(abs(h["i_phase"]["RS"]))
-        s.math(f"P = 3 · U_f · I_f · cos φ = 3 · {num(uf_r)} · {num(if_r)} · {num(cosphi)} = "
+            arm = "U_kol · I_kol"
+        s.math(f"P = 3 · {arm} · cos φ = 3 · {num(uf_r)} · {num(if_r)} · {paren(num(cosphi))} = "
                f"{eng(3 * uf_r * if_r * cosphi, 'W')}")
         sgn = "" if z0.imag >= 0 else MINUS
         s.math(f"Q = √3 · U_h · I_h · sin φ = {sgn}{eng(SQRT3 * uh_r * ih_r * sinphi, 'VAR')}")
@@ -247,21 +255,41 @@ def _power_section(an: ThreePhaseAnalysis) -> List[_Section]:
     else:
         s.text("Dengesiz devrede güç, kolların karmaşık güçlerinin toplamıdır "
                f"(S = {f_txt} her kol için; P = Re, Q = Im):")
-        for k in _arm_keys(an):
+        keys = _arm_keys(an)
+        for k in keys:
             if an.conn_l == "Y":
                 arm_v, arm_i = h["arm_v"][k], h["i_line"][k]
             else:
                 arm_v, arm_i = h["arm_v"][k], h["i_phase"][k]
             sk = an.f * arm_v * arm_i.conjugate()
             s.math(f"S_{k} = {f_txt} = {rect(sk, 'VA')}")
-        tot = complex(an.p, an.q)
-        s.math(f"P = ΣP_k = {eng(an.p, 'W')},  Q = ΣQ_k = {eng(an.q, 'VAR')},  "
+        p_sum = " + ".join(f"P_{k}" for k in keys)
+        q_sum = " + ".join(f"Q_{k}" for k in keys)
+        s.math(f"P = {p_sum} = {eng(an.p, 'W')},  Q = {q_sum} = {eng(an.q, 'VAR')},  "
                f"S = √(P² + Q²) = {eng(an.s, 'VA')}")
     s.math(f"cos φ = P / S = {num(an.pf)}  →  {_pf_text(an)}")
+    arm_kinds = {}
+    if an.z:
+        for k in _arm_keys(an):
+            zk = an.z[k]
+            arm_kinds[k] = ("endüktif" if zk.imag > 1e-12 * abs(zk)
+                            else "kapasitif" if zk.imag < -1e-12 * abs(zk)
+                            else "rezistif")
+    mixed = len(set(arm_kinds.values())) > 1
+    arm_detail = (", ".join(f"{_arm_name(an, k)} {arm_kinds[k]}" for k in _arm_keys(an))
+                  if mixed else "")
     if an.pf_type == "lagging":
-        s.note("Q > 0: yük endüktiftir, akım gerilimin gerisindedir (geri güç katsayısı).")
+        if mixed:
+            s.note("Toplam reaktif güç pozitif (Q > 0) olduğundan yük bir bütün olarak endüktif "
+                   f"davranır (geri güç katsayısı); kolların karakteri ise farklıdır ({arm_detail}).")
+        else:
+            s.note("Toplam reaktif güç Q > 0: yük endüktiftir, akım gerilimin gerisindedir (geri güç katsayısı).")
     elif an.pf_type == "leading":
-        s.note("Q < 0: yük kapasitiftir, akım gerilimin ilerisindedir (ileri güç katsayısı).")
+        if mixed:
+            s.note("Toplam reaktif güç negatif (Q < 0) olduğundan yük bir bütün olarak kapasitif "
+                   f"davranır (ileri güç katsayısı); kolların karakteri ise farklıdır ({arm_detail}).")
+        else:
+            s.note("Toplam reaktif güç Q < 0: yük kapasitiftir, akım gerilimin ilerisindedir (ileri güç katsayısı).")
     return [s]
 
 
@@ -282,7 +310,11 @@ def _aron_section(an: ThreePhaseAnalysis) -> List[_Section]:
     s.math(f"P_B = {f_txt}Re(V_TS · I_T*) = {eng(pb, 'W')}")
     s.math(f"P = P_A + P_B = {eng(pa + pb, 'W')}")
     if abs(pa + pb - an.p) <= 1e-5 * max(abs(an.p), 1e-9) + 1e-6:
-        s.check(f"P_A + P_B = {eng(pa + pb, 'W')}, kolların toplam gücüne ({eng(an.p, 'W')}) eşit.")
+        if an.others or not an.guided:
+            s.check(f"P_A + P_B = {eng(pa + pb, 'W')}, wattmetre noktalarından giren "
+                    f"(kaynağın verdiği) toplam güce ({eng(an.p, 'W')}) eşit; hat kayıpları dahildir.")
+        else:
+            s.check(f"P_A + P_B = {eng(pa + pb, 'W')}, yük kollarının toplam gücüne ({eng(an.p, 'W')}) eşit.")
     if an.guided and an.balanced:
         phi = math.degrees(math.atan2(an.q, an.p))
         sign = "+" if an.sequence == "RST" else MINUS
@@ -319,11 +351,12 @@ def _compensation_section(an: ThreePhaseAnalysis) -> List[_Section]:
            f"{num(math.tan(c.phi2))}) = {eng(c.q_c, 'VAR')}")
     s.text("Q_C üç kola eşit paylaştırılır: her kola düşen Q_C/3 = " + eng(c.q_per_arm, 'VAR') + ".")
     uh = an.uh_rms
-    s.text("Yıldız bağlı kondansatörde her kol faz gerilimini (U_f = U_h/√3), üçgen bağlıda hat "
-           "gerilimini görür:")
+    s.text("Yıldız bağlı kondansatörde her kondansatör faz gerilimini (U_f = U_h/√3), üçgen bağlıda "
+           "hat gerilimini (U_h) görür:")
+    s.math("Q_C = 3·ω·C_Y·U_f² = ω·C_Y·U_h²  (U_h² = 3·U_f²)   →   C_Y = Q_C / (ω·U_h²)")
     s.math(f"C_Y = Q_C / (ω · U_h²) = {eng(c.q_c, 'VAR')} / ({num(an.omega)} · {num(uh)}²) = "
            f"{eng(c.c_y, 'F')}")
-    s.math(f"C_Δ = C_Y / 3 = {eng(c.c_delta, 'F')}")
+    s.math(f"Q_C = 3·ω·C_Δ·U_h²   →   C_Δ = Q_C / (3·ω·U_h²) = C_Y / 3 = {eng(c.c_delta, 'F')}")
     s.math(f"I_h' = P / (√3 · U_h · cos φ₂) = {eng(an.p, 'W')} / (√3 · {num(uh)} · {num(c.target)}) = "
            f"{eng(an.to_rms(c.i_after), 'A')}  (etkin; kompanzasyondan önce {eng(an.to_rms(c.i_before), 'A')})")
     s.check("Kondansatörler devreye eklenip çözücüyle yeniden çözüldü: cos φ₂ = "
@@ -347,7 +380,7 @@ def _meter_section(readings, is_rms: bool, is_dc: bool) -> _Section:
         sym = "Re(V · I*)" if is_rms else "½ · Re(V · I*)"
         s.text("İdeal wattmetrenin akım bobini devreye seri (kısa devre), gerilim bobini paraleldir "
                f"(açık devre); okuma P = {sym}. V = V(V+) {MINUS} V(V{MINUS}), I akım bobininde "
-               "I+ → I− yönündedir. Çözücüde akım bobini 0 V'luk bir ölçüm kaynağıyla modellenir.")
+               "I+ → I− yönünde geçen akımdır.")
     for wid, p, v, i in readings:
         if is_dc:
             s.math(f"{wid}: V = {eng(v.real, 'V')}, I = {eng(i.real, 'A')}  →  P = {eng(p, 'W')}")
@@ -383,7 +416,7 @@ def _short_sections(an: ThreePhaseAnalysis, transformer: bool) -> List[_Section]
 
 def _check_section(an: ThreePhaseAnalysis) -> _Section:
     s = _Section("Kontrol")
-    s.check("Elle türetilen hat akımları çözücünün (lcapy) sonuçlarıyla uyuşuyor.")
+    s.check("Elle türetilen hat akımları programın çözücüsünün sonuçlarıyla uyuşuyor.")
     if an.i_n is not None:
         s.check(f"Nötr akımı I_N = {eng(abs(an.i_n), 'A')}.")
     s.check("Toplam güç, kaynağın verdiği güçle aynı: "

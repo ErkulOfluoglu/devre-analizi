@@ -11,15 +11,19 @@
 #        → SymPy (sembolik matematik motoru)
 #      → NumPy (sayısal hesaplama)
 #      → uvicorn (ASGI sunucu)
+#
+#  Sürümler sabittir: testler ve kurulum dosyası tam bu sürümlerle
+#  denendi. Yükseltirken önce testleri çalıştırın (lcapy/SymPy
+#  sürümü çözüm metinlerini değiştirebilir).
 
 # ── Web Framework ──
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-pydantic>=2.5.0
+fastapi==0.128.0
+uvicorn[standard]==0.40.0
+pydantic==2.12.5
 
 # ── Devre Analizi ──
-lcapy>=1.10
-sympy>=1.12
+lcapy==1.26
+sympy==1.14.0
 
 # ── Sayısal Hesaplama ──
-numpy>=1.24.0
+numpy==2.2.6

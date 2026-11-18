@@ -264,37 +264,15 @@ namespace CircuitAnalyzer.WPF.Views
 
             // Açıklama kartı konumu hesaplama
             double cardW = 340;
+            // DesiredSize kenar boşluğunu (önceki konumu) da içerir; ölçmeden önce sıfırla,
+            // yoksa her yeniden hesapta kart yüksekliği şişer ve konum kayar
+            _calloutCard.Margin = new Thickness(0);
             _calloutCard.Measure(new Size(cardW, double.PositiveInfinity));
             double cardH = _calloutCard.DesiredSize.Height > 0 ? _calloutCard.DesiredSize.Height : 200;
 
-            double x, y;
-            // Hedefin sağına veya soluna yerleştir; sığmazsa altına veya üstüne
-            if (holeRect.Right + 16 + cardW <= w)
-            {
-                x = holeRect.Right + 16;
-                y = holeRect.Top + (holeRect.Height - cardH) / 2;
-            }
-            else if (holeRect.Left - 16 - cardW >= 0)
-            {
-                x = holeRect.Left - 16 - cardW;
-                y = holeRect.Top + (holeRect.Height - cardH) / 2;
-            }
-            else if (holeRect.Bottom + 16 + cardH <= h)
-            {
-                x = holeRect.Left + (holeRect.Width - cardW) / 2;
-                y = holeRect.Bottom + 16;
-            }
-            else
-            {
-                x = holeRect.Left + (holeRect.Width - cardW) / 2;
-                y = Math.Max(16, holeRect.Top - 16 - cardH);
-            }
-
-            // Ekran sınırlarına kelepçele
-            x = Math.Max(16, Math.Min(w - cardW - 16, x));
-            y = Math.Max(16, Math.Min(h - cardH - 16, y));
-
-            _calloutCard.Margin = new Thickness(x, y, 0, 0);
+            // Adımın tercih ettiği yan (yoksa sağ, sol, alt, üst); ekran sınırlarına kelepçeli
+            var spot = TourPlacement.Place(holeRect, cardW, cardH, w, h, currentStep.PreferredSides);
+            _calloutCard.Margin = new Thickness(spot.X, spot.Y, 0, 0);
         }
     }
 }

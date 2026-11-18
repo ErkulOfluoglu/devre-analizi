@@ -217,6 +217,8 @@
                             <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="Transparent"/>
                         </ScrollViewer.Resources>
                         <Canvas x:Name="CircuitCanvas"
+                                Focusable="True"
+                                FocusVisualStyle="{x:Null}"
                                 Width="4000" Height="3000"
                                 Background="{DynamicResource Brush.Canvas.Grid}"
                                 MouseLeftButtonDown="CircuitCanvas_MouseLeftButtonDown"
@@ -543,7 +545,7 @@
                             <Button x:Name="BtnDrawWire"
                                     Style="{DynamicResource Button.Ghost}"
                                     Height="32"
-                                    ToolTip="Tel çiz (W)"
+                                    ToolTip="Tel çiz"
                                     Click="BtnDrawWire_Click">
                                 <StackPanel Orientation="Horizontal">
                                     <controls:Icon Data="{DynamicResource Icon.Wire}" Width="16" Height="16" Margin="0,0,8,0"/>

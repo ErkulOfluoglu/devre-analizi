@@ -17,7 +17,7 @@ from explainer.formatting import MINUS
 from tests.conftest import as_complex
 
 GND = "\n* GND1 — Referans toprak (Node 0)"
-STEP_TITLE = "Kesirlerden Kurtulalım"
+STEP_TITLE = "Kesirlerden kurtulalım"
 
 
 # ═══════════════════════════════════════════════════════
@@ -274,3 +274,24 @@ def test_dependent_mesh_system_is_scaled(solve):
     assert "I₁ = Δ₁/Δ = 180 / 80 = 2,25 A" in joined
     i1, i2 = (m.current.real for m in res.meshes)
     assert (i1, i2) == pytest.approx((2.25, 0.75), abs=1e-6)
+
+
+def test_dependent_mesh_constraint_row_with_milliamp_rhs_is_not_scaled_by_500(solve):
+    """
+    Bağımsız akım kaynağı kısıtı (−I₂ = 0,002) sol tarafı zaten tam sayı olduğundan
+    sağdaki 2 mA'yı tam sayı yapmak için ×500 ile çarpılmaz; sade hâliyle kalır.
+    """
+    net = ("V1 1 0 DC 10\nR1 1 2 1000\nR2 2 4 2000\nE1 4 0 V(R1) 2\nR3 2 3 1000\n"
+           "I1 0 3 DC 0.002\n* NODEPOS 0 300 270\n* NODEPOS 1 170 150\n"
+           "* NODEPOS 2 340 140\n* NODEPOS 3 510 150\n* NODEPOS 4 340 200" + GND)
+    res, _, errors = solve(net, analysis_type="MESH")
+    assert not any("⚠" in e for e in errors)
+    joined = "\n".join(solution_texts(res))
+    assert "500 ile çarpalım" not in joined
+    assert f"{MINUS}I₂ = 0,002" in joined
+    assert f"Δ = 5000·({MINUS}1) {MINUS} ({MINUS}2000)·0 = {MINUS}5000" in joined
+    lines = result_lines(res)
+    assert lines["I₁"].endswith("= 1,2 mA")
+    assert lines["I₂"].endswith(f"= {MINUS}2 mA")
+    i1, i2 = (m.current.real for m in res.meshes)
+    assert (i1, i2) == pytest.approx((0.0012, -0.002), abs=1e-7)

@@ -73,7 +73,8 @@
                 <sp:WpfPlot x:Name="PlotResonance"
                             Grid.Row="1"
                             MouseMove="PlotResonance_MouseMove"
-                            MouseLeave="PlotResonance_MouseLeave"/>
+                            MouseLeave="PlotResonance_MouseLeave"
+                            SizeChanged="PlotResonance_SizeChanged"/>
             </Grid>
         </Border>
     </Grid>

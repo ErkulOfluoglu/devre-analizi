@@ -43,8 +43,8 @@ _PREFIXES = {
 
 # Küçük harfe çevrilmiş birim yazımı → standart birim ("Ω".lower() == "ω")
 _UNITS = {
-    "v": "V", "volt": "V",
-    "a": "A", "amper": "A", "amp": "A",
+    "v": "V", "volt": "V", "vp": "V", "vrms": "V", "veff": "V",
+    "a": "A", "amper": "A", "amp": "A", "ap": "A", "arms": "A", "aeff": "A",
     "ω": "Ω", "ohm": "Ω", "ohms": "Ω",
     "w": "W", "watt": "W",
     "va": "VA",
@@ -70,11 +70,21 @@ _RECT_TERM_RE = re.compile(
     r"([+-]?)([ji])?((?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)?([ji])?"
 )
 
+# Önek yazıyla: "milivolt", "kiloohm", "mikrofarad"
+_WORD_PREFIXES = {
+    "piko": 1e-12, "nano": 1e-9, "mikro": 1e-6, "mili": 1e-3,
+    "kilo": 1e3, "mega": 1e6, "giga": 1e9,
+}
+
 EXAMPLES = "Örnek yazımlar: 4m, 4 mA, 0,004, 2,5k, 3,03∠-72,3, 0,92-j2,89"
 
 
 def _normalize(text: str) -> str:
     s = unicodedata.normalize("NFKC", text).strip()
+    # "= 8,25 V", "V2 = 8,25 V", "≈ 8,25": eşittir işaretinden sonrası cevaptır
+    for eq in ("=", "≈"):
+        if eq in s:
+            s = s.rsplit(eq, 1)[1].strip()
     for dash in ("−", "–", "—"):
         s = s.replace(dash, "-")
     s = s.replace(",", ".")
@@ -98,6 +108,10 @@ def _parse_suffix(suffix: str) -> Tuple[float, Optional[str]]:
         return _PREFIXES[s], None
     if s[0] in _PREFIXES and s[1:].lower() in _UNITS:
         return _PREFIXES[s[0]], _UNITS[s[1:].lower()]
+    low = s.lower()
+    for word, factor in _WORD_PREFIXES.items():
+        if low.startswith(word) and low[len(word):] in _UNITS:
+            return factor, _UNITS[low[len(word):]]
     raise AnswerParseError(f"“{suffix.strip()}” birimini tanıyamadım. {EXAMPLES}")
 
 

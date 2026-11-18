@@ -17,6 +17,7 @@ Toleranslar: ±%1 doğru, ±%5 "çok yakın" (ara sonuçların yuvarlanması).
 
 import cmath
 import math
+import re
 from typing import List, Optional
 
 from explainer.formatting import eng, num, polar, rect
@@ -66,6 +67,19 @@ _PREFIX_EXAMPLE = {
     "Hz": "2,5 kHz için “2,5k” ya da “2,5 kHz” (M = mega, m = mili)",
     "": "0,8 için “0,8”",
 }
+
+
+# "1.500", "12.000", "1.500.000": Türkçede binlik ayırıcı; program noktayı ondalık okur
+_THOUSANDS_RE = re.compile(r"(?<![\d.,])[1-9]\d{0,2}(?:\.\d{3})+(?![\d.,])")
+
+_TIMES_WORD = {3: "bin", 6: "bir milyon", 9: "bir milyar"}
+
+
+def _thousands_reading(answer: str) -> Optional[str]:
+    """'1.500 Ω' → '1500 Ω' (noktalar binlik ayırıcı sayılırsa); böyle sayı yoksa None."""
+    if "," in answer or not _THOUSANDS_RE.search(answer):
+        return None
+    return _THOUSANDS_RE.sub(lambda m: m.group(0).replace(".", ""), answer)
 
 
 def _expected(q: PracticeQuestion) -> complex:
@@ -157,7 +171,7 @@ def _diagnose(q: PracticeQuestion, p: ParsedAnswer, exp: complex) -> Optional[st
     for k in (3, 6, 9):
         for direction in (1, -1):
             if _near(r_mag, 10.0 ** (direction * k)):
-                factor = f"{10 ** k:,}".replace(",", ".")
+                factor = _TIMES_WORD[k]   # "1.000" yazılmaz: program noktayı ondalık okur
                 bigger = "büyük" if direction > 0 else "küçük"
                 msg = (f"Cevabınız doğru sonucun {factor} katı {bigger}. Birim önekini kontrol edin "
                        "(mA ile A, kΩ ile Ω arasında 1000 kat fark var). Değeri önekle bulduysanız "
@@ -213,6 +227,20 @@ def check_answer(q: PracticeQuestion, answer: str) -> AnswerVerdict:
             return _verdict(q, "partial", "Sayı doğru ama birim yanlış. " + unit_msg, understood)
         return _verdict(q, "correct", "Doğru! ✓", understood)
 
+    # "1.500" 1,5 okundu ve yanlış; nokta binlik ayırıcı sayılınca (1500) doğruysa söyle
+    thousands = _thousands_reading(answer)
+    if thousands is not None:
+        try:
+            p_thousands = parse_answer(thousands)
+        except AnswerParseError:
+            p_thousands = None
+        if p_thousands is not None and _rel_err(p_thousands.value, exp, floor) <= REL_OK:
+            return _verdict(
+                q, "partial",
+                f"“{answer.strip()}” yazımında noktayı ondalık ayırıcı olarak okudum ({understood}). "
+                f"“{thousands.strip()}” demek istediyseniz doğru; binlik ayırıcı (nokta) kullanmayın, "
+                "ondalık için virgül yazın (ör. 1500 ya da 1,5k).", understood)
+
     # Kabul edilen eşdeğer doğru biçim (ör. f₁ için tam yarım güç değeri)
     for alt in q.alternatives:
         if alt.accepted and _rel_err(
@@ -228,9 +256,14 @@ def check_answer(q: PracticeQuestion, answer: str) -> AnswerVerdict:
                         "(ör. 5∠30 ya da 4,33+j2,5).", understood)
 
     if err <= REL_CLOSE:
-        pct = f"{100 * err:.1f}".replace(".", ",")
-        msg = (f"Çok yakın! Fark yaklaşık %{pct}. Ara sonuçları erken yuvarlamış olabilirsiniz; "
-               "hesapta en az 4 anlamlı basamak kullanın.")
+        if abs(exp) <= floor:
+            # Beklenen ≈ 0: yüzde fark anlamsız (sıfıra göre yüzde olmaz)
+            msg = ("Çok yakın! Ara sonuçları erken yuvarlamış olabilirsiniz; hesapta en az "
+                   "4 anlamlı basamak kullanın.")
+        else:
+            pct = f"{100 * err:.1f}".replace(".", ",")
+            msg = (f"Çok yakın! Fark yaklaşık %{pct}. Ara sonuçları erken yuvarlamış olabilirsiniz; "
+                   "hesapta en az 4 anlamlı basamak kullanın.")
         if unit_msg:
             msg += " " + unit_msg
         return _verdict(q, "close", msg, understood)

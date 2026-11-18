@@ -14,7 +14,7 @@ Gerilim sembolü V'dir; kitaplardaki U gösterimi bir notla belirtilir.
 import math
 from typing import List
 
-from explainer.formatting import MINUS, eng, num
+from explainer.formatting import MINUS, eng, node_ek, node_name, num
 from explainer.narrative import _Section, _intro
 
 U_NOTE = "Kitaplarda gerilim U ile de gösterilir (U = V)."
@@ -56,7 +56,7 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
     elif tank:
         s.text(
             f"Bu devrede {src_id} gerilim kaynağına seri bağlı {', '.join(r_ids)} direnci ve "
-            f"Düğüm {a.x_node} ile Düğüm {a.b_node} arasında paralel bağlı {l_id} ve {c_id} var "
+            f"{node_name(a.x_node)} ile {node_name(a.b_node)} arasında paralel bağlı {l_id} ve {c_id} var "
             "(seri R + paralel LC)."
         )
         if len(r_ids) > 1:
@@ -121,7 +121,7 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
         s.math("Kaynak akımı: I = 0   (R üzerindeki gerilim V_R = I · R = 0)")
         s.math(f"V_x = V {MINUS} V_R = V = {eng(a.v0, 'V')}")
         s.text(f"Yani rezonansta kaynaktan görülen empedans sonsuza gider (kaynak akımı 0); "
-               f"Düğüm {a.x_node}'deki V_x gerilimi kaynak gerilimine eşit olur. Aşağıdaki grafikte "
+               f"{node_ek(a.x_node, 'de')}ki V_x gerilimi kaynak gerilimine eşit olur. Aşağıdaki grafikte "
                "ise dönüştürülmüş devrenin empedansı |R‖Z_L‖Z_C| gösterilir; tepe değeri R'dir.")
     elif series:
         s = _Section("Rezonansta Empedans ve Akım")
@@ -169,8 +169,8 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
           "arasındaki aralıktır."
     )
     s.math(f"BW = f₀ / Q = {eng(a.f0, 'Hz')} / {num(a.q)} = {eng(a.bw, 'Hz')}")
-    s.math(f"f₁ = f₀ {MINUS} BW/2 = {eng(a.f0, 'Hz')} {MINUS} {eng(a.bw / 2, 'Hz')} = {eng(a.f1, 'Hz')}")
-    s.math(f"f₂ = f₀ + BW/2 = {eng(a.f0, 'Hz')} + {eng(a.bw / 2, 'Hz')} = {eng(a.f2, 'Hz')}")
+    s.math(f"f₁ ≈ f₀ {MINUS} BW/2 = {eng(a.f0, 'Hz')} {MINUS} {eng(a.bw / 2, 'Hz')} ≈ {eng(a.f1, 'Hz')}")
+    s.math(f"f₂ ≈ f₀ + BW/2 = {eng(a.f0, 'Hz')} + {eng(a.bw / 2, 'Hz')} ≈ {eng(a.f2, 'Hz')}")
     if a.low_q:
         s.note(
             "Q küçük olduğundan kitaptaki f₀ ∓ BW/2 yaklaşıktır; tam değerler "
@@ -179,7 +179,7 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
         if a.f1 <= 0:
             s.text("Bu Q değerinde f₀ − BW/2 sıfırın altına düşüyor; yaklaşık biçim anlamını yitirir, "
                    "tam değerleri kullanın.")
-    s.result(f"BW = {eng(a.bw, 'Hz')}, f₁ = {eng(a.f1, 'Hz')}, f₂ = {eng(a.f2, 'Hz')}")
+    s.result(f"BW = {eng(a.bw, 'Hz')}, f₁ ≈ {eng(a.f1, 'Hz')}, f₂ ≈ {eng(a.f2, 'Hz')}")
     sections.append(s)
 
     # ── Eleman Gerilimleri / Akımları ──
@@ -232,7 +232,7 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
                 "akım ≈ 0 ✓")
         s.check(f"Çözücüde f₀'daki |V_x| = {eng(chk.vx_f0, 'V')} = V ✓")
         s.check(f"Çözücüde |I_L| = |I_C| = {eng(chk.elem_f0, 'A')} = V/X ✓")
-        s.check(f"Tam yarım güç frekanslarında f₁ = {eng(a.f1_exact, 'Hz')} ve "
+        s.check(f"Tam yarım güç frekanslarında (f₀ ∓ BW/2 bunların yaklaşığıdır) f₁ = {eng(a.f1_exact, 'Hz')} ve "
                 f"f₂ = {eng(a.f2_exact, 'Hz')} çözücüde |V_x| = {eng(chk.main_f1, 'V')} ve "
                 f"{eng(chk.main_f2, 'V')}; V/√2 = {eng(a.v0 / math.sqrt(2.0), 'V')} ✓")
         s.check(f"f₂ {MINUS} f₁ = {eng(a.f2_exact - a.f1_exact, 'Hz')} = BW ✓")
@@ -250,12 +250,12 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
             s.check(f"Çözücüde |I_L| = |I_C| = {eng(chk.elem_f0, 'A')} = Q·I_R ✓")
         if series:
             half = a.i0 / math.sqrt(2.0)
-            s.check(f"Tam yarım güç frekanslarında f₁ = {eng(a.f1_exact, 'Hz')} ve "
+            s.check(f"Tam yarım güç frekanslarında (f₀ ∓ BW/2 bunların yaklaşığıdır) f₁ = {eng(a.f1_exact, 'Hz')} ve "
                     f"f₂ = {eng(a.f2_exact, 'Hz')} çözücüde |I| = {eng(chk.main_f1, 'A')} ve "
                     f"{eng(chk.main_f2, 'A')}; I_max/√2 = {eng(half, 'A')} ✓")
         else:
             half = a.r / math.sqrt(2.0)
-            s.check(f"Tam yarım güç frekanslarında f₁ = {eng(a.f1_exact, 'Hz')} ve "
+            s.check(f"Tam yarım güç frekanslarında (f₀ ∓ BW/2 bunların yaklaşığıdır) f₁ = {eng(a.f1_exact, 'Hz')} ve "
                     f"f₂ = {eng(a.f2_exact, 'Hz')} çözücüde |Z| = {eng(chk.main_f1, 'Ω')} ve "
                     f"{eng(chk.main_f2, 'Ω')}; R/√2 = {eng(half, 'Ω')} ✓")
         s.check(f"f₂ {MINUS} f₁ = {eng(a.f2_exact - a.f1_exact, 'Hz')} = BW ✓")
@@ -264,7 +264,7 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
     # ── Sonuç ──
     s = _Section("Sonuç")
     s.result(f"f₀ = {eng(a.f0, 'Hz')}, ω₀ = {num(a.w0)} rad/s, X = {eng(a.x, 'Ω')}")
-    s.result(f"Q = {num(a.q)}, BW = {eng(a.bw, 'Hz')}, f₁ = {eng(a.f1, 'Hz')}, f₂ = {eng(a.f2, 'Hz')}")
+    s.result(f"Q = {num(a.q)}, BW = {eng(a.bw, 'Hz')}, f₁ ≈ {eng(a.f1, 'Hz')}, f₂ ≈ {eng(a.f2, 'Hz')}")
     if series:
         s.result(f"Z₀ = {eng(a.z0, 'Ω')}, I_max = {eng(a.i0, 'A')}, V_L = V_C = {eng(a.v0, 'V')}")
     elif tank:

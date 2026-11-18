@@ -258,6 +258,8 @@ namespace CircuitAnalyzer.WPF.Services
                     throw new CircuitFileException("Dosyada kimliği olmayan bir eleman var.");
                 if (byId.ContainsKey(d.Id))
                     throw new CircuitFileException($"Dosyada aynı kimlik iki kez geçiyor: {d.Id}");
+                if (!double.IsFinite(d.X) || !double.IsFinite(d.Y) || !double.IsFinite(d.Rotation))
+                    throw new CircuitFileException($"{d.Id}: konum değeri geçersiz.");
                 var e = FromData(d);
                 e.Id = d.Id;
                 e.Position = new Point(d.X, d.Y);

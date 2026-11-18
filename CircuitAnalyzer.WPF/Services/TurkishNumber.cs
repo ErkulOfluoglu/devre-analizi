@@ -32,16 +32,31 @@ namespace CircuitAnalyzer.WPF.Services
                 : value.ToString(format, Culture);
         }
 
+        private static readonly Regex AsciiMinusRegex = new(@"-(?=(?:\d|j\b|j\d))", RegexOptions.Compiled);
+
         /// <summary>
-        /// Sayısal metin içerisindeki iki basamak arasındaki ondalık noktalarını virgüle çevirir.
-        /// Örnek: "10.09 V" -> "10,09 V", "3.5-j4.5" -> "3,5-j4,5".
+        /// Öğrencinin gördüğü sayıların önündeki ASCII '-' işaretini Unicode eksiye ("−") çevirir:
+        /// "1∠-90° A" → "1∠−90° A", "3,5-j4,5" → "3,5−j4,5". Yalnız gösterim içindir; ayrıştırıcılar
+        /// (<see cref="TryParse"/>, <see cref="TryParseSpice"/>) iki işareti de kabul eder.
+        /// </summary>
+        public static string DisplayMinus(string? text) =>
+            string.IsNullOrEmpty(text) ? text ?? string.Empty : AsciiMinusRegex.Replace(text, "−");
+
+        /// <summary><see cref="Format"/> gibi, ama ekranda gösterilecek: eksi işareti Unicode "−".</summary>
+        public static string FormatDisplay(double value, string? format = null) =>
+            DisplayMinus(Format(value, format));
+
+        /// <summary>
+        /// Sayısal metin içerisindeki iki basamak arasındaki ondalık noktalarını virgüle,
+        /// sayıların ve sanal kısmın önündeki ASCII '-' işaretini Unicode eksiye ("−") çevirir.
+        /// Örnek: "10.09 V" -> "10,09 V", "3.5-j4.5" -> "3,5−j4,5".
         /// </summary>
         public static string NormalizeForDisplay(string? text)
         {
             if (string.IsNullOrEmpty(text))
                 return text ?? string.Empty;
 
-            return DecimalDotRegex.Replace(text, ",");
+            return DisplayMinus(DecimalDotRegex.Replace(text, ","));
         }
 
         /// <summary>
@@ -68,7 +83,12 @@ namespace CircuitAnalyzer.WPF.Services
                 return false;
 
             string normalized = trimmed.Replace(',', '.');
-            return double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+            // "NaN", "Infinity" ya da "1e999" gibi sonlu olmayan değerler kabul edilmez
+            if (double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
+                double.IsFinite(value))
+                return true;
+            value = 0;
+            return false;
         }
 
         /// <summary>
@@ -87,7 +107,8 @@ namespace CircuitAnalyzer.WPF.Services
                 return false;
 
             string numPart = match.Groups[1].Value.Replace(',', '.');
-            if (!double.TryParse(numPart, NumberStyles.Float, CultureInfo.InvariantCulture, out double num))
+            if (!double.TryParse(numPart, NumberStyles.Float, CultureInfo.InvariantCulture, out double num) ||
+                !double.IsFinite(num))
                 return false;
 
             string suffix = match.Groups[2].Value.ToLowerInvariant();
@@ -101,7 +122,10 @@ namespace CircuitAnalyzer.WPF.Services
             bool upperM = match.Groups[2].Value.StartsWith('M') && !suffix.StartsWith("mil");
 
             double multiplier = 1.0;
-            if (suffix.StartsWith("meg") || upperM) multiplier = 1e6;
+            // Tek başına "F" farad birimidir ("10 F" = 10 farad); femto yalnızca ardından
+            // birim gelirse ("10 fF"). "°" açı birimidir ("30°" = 30).
+            if (suffix == "f" || suffix.StartsWith("farad") || suffix == "°") multiplier = 1.0;
+            else if (suffix.StartsWith("meg") || upperM) multiplier = 1e6;
             else if (suffix.StartsWith("mil")) multiplier = 25.4e-6;
             else if (suffix.StartsWith("g")) multiplier = 1e9;
             else if (suffix.StartsWith("t")) multiplier = 1e12;
@@ -117,7 +141,7 @@ namespace CircuitAnalyzer.WPF.Services
                 return false;
 
             val = num * multiplier;
-            return true;
+            return double.IsFinite(val);
         }
     }
 }

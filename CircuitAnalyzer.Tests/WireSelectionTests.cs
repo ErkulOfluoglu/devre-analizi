@@ -299,7 +299,7 @@ public class WireSelectionTests
     }
 
     [Fact]
-    public void SelectionWithOnlyWires_CtrlCDoesNotThrowAndLeavesClipboardUnchanged_CtrlXDeletesWires()
+    public void SelectionWithOnlyWires_CtrlCDoesNotThrowAndLeavesClipboardUnchanged_CtrlXIsRefusedAndKeepsWires()
     {
         RunOnSta(() =>
         {
@@ -330,14 +330,15 @@ public class WireSelectionTests
             Assert.Null(copyEx);
             Assert.Equal(initialClipboardPayload, clipboard.GetCircuitData());
 
-            // Ctrl+X (CutSelected): panoyu değiştirmeden seçili teli silmeli
-            Assert.True(win.CutSelected());
-            Assert.Empty(win.Wires);
+            // Ctrl+X (CutSelected): pano biçimi tek başına teli taşımaz; kopyalamadan silip teli
+            // kaybettirmek yerine kesme reddedilir (tel yerinde kalır, pano değişmez, kısa ipucu çıkar)
+            Assert.False(win.CutSelected());
+            Assert.Single(win.Wires);
             Assert.Equal(2, win.Elements.Count);
             Assert.Equal(initialClipboardPayload, clipboard.GetCircuitData());
+            Assert.Contains("Delete", win.TxtStatus.Text);
 
-            // Sağ-tık bağlam menüsü doğrulaması: Undo ile teli geri getirip sağ-tık menüsünü kontrol et
-            win.Undo();
+            // Sağ-tık bağlam menüsü doğrulaması: tel hâlâ yerinde, sağ-tık menüsünü kontrol et
             Assert.Single(win.Wires);
             var menu = win.HandleCanvasRightButtonDown(midPoint);
             Assert.NotNull(menu);

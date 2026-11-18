@@ -224,7 +224,7 @@ public class AssistantViewTests
     }
 
     [Fact]
-    public void AskerThrowsAnalysisRequestException_LastErrorContainsOllamaYok_HistoryHasUserTurnOnly()
+    public void AskerThrowsAnalysisRequestException_LastErrorContainsOllamaYok_FailedQuestionNotKept()
     {
         RunOnSta(() =>
         {
@@ -244,9 +244,37 @@ public class AssistantViewTests
 
             Assert.NotNull(view.LastError);
             Assert.Contains("Ollama yok", view.LastError);
-            Assert.Single(view.History);
-            Assert.Equal(ChatRoles.User, view.History[0].Role);
-            Assert.Equal("Devre nasıl çalışır?", view.History[0].Content);
+            // Cevapsız kalan soru geçmişte kalmaz: sonraki sorularda modele gönderilmez
+            Assert.Empty(view.History);
+        });
+    }
+
+    [Fact]
+    public void LongChat_SendsOnlyTheLastTurns()
+    {
+        RunOnSta(() =>
+        {
+            var sentCounts = new List<int>();
+            var view = new AssistantView
+            {
+                StatusProvider = _ => Task.FromResult<LlmStatusDto?>(new LlmStatusDto
+                {
+                    Available = true, Models = new List<string> { "m" }, SelectedModel = "m"
+                }),
+                Asker = (req, _) =>
+                {
+                    sentCounts.Add(req.History.Count);
+                    return Task.FromResult(new LlmAnswerDto { Answer = "Tamam." });
+                },
+            };
+            view.Configure(new AnalysisRequestDto { Netlist = "R1 1 0 100" }, practice: false, Array.Empty<PracticeQuestionDto>());
+
+            for (int i = 0; i < 15; i++)
+                RunAsync(() => view.AskAsync($"Soru {i}?"));
+
+            Assert.Equal(30, view.History.Count);
+            Assert.Equal(AssistantView.MaxSentTurns, sentCounts[^1]);
+            Assert.All(sentCounts, c => Assert.True(c <= AssistantView.MaxSentTurns));
         });
     }
 

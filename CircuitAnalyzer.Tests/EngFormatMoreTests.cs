@@ -6,11 +6,11 @@ namespace CircuitAnalyzer.Tests;
 public class EngFormatMoreTests
 {
     [Theory]
-    [InlineData(3, -4, "5∠-53,13° V")]
-    [InlineData(-3, -4, "5∠-126,9° V")]
+    [InlineData(3, -4, "5∠−53,13° V")]
+    [InlineData(-3, -4, "5∠−126,9° V")]
     [InlineData(-3, 4, "5∠126,9° V")]
     [InlineData(-10, 0, "10∠180° V")]
-    [InlineData(0, -0.05, "50∠-90° mV")]
+    [InlineData(0, -0.05, "50∠−90° mV")]
     public void EngFormat_NegativeComplex_FormatsPolarWithPrefix(double re, double im, string expected)
     {
         var v = ResultValue.FromComplex(new ComplexNumberDto { Real = re, Imaginary = im });
@@ -21,7 +21,7 @@ public class EngFormatMoreTests
     [InlineData(1e9, "Hz", "1 GHz")]
     [InlineData(2.4e9, "Hz", "2,4 GHz")]
     [InlineData(100e9, "Ω", "100 GΩ")]
-    [InlineData(-5e9, "W", "-5 GW")]
+    [InlineData(-5e9, "W", "−5 GW")]
     public void EngFormat_GigaRange_FormatsCorrectly(double value, string unit, string expected)
     {
         Assert.Equal(expected, EngFormat.Format(value, unit));
@@ -38,7 +38,7 @@ public class EngFormatMoreTests
     [InlineData(1e-12, "F", "1 pF")]
     [InlineData(22e-12, "F", "22 pF")]
     [InlineData(0.5e-12, "F", "0,5 pF")]
-    [InlineData(-4.7e-12, "A", "-4,7 pA")]
+    [InlineData(-4.7e-12, "A", "−4,7 pA")]
     public void EngFormat_PicoRange_FormatsCorrectly(double value, string unit, string expected)
     {
         Assert.Equal(expected, EngFormat.Format(value, unit));

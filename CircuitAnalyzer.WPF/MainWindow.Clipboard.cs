@@ -37,18 +37,20 @@ namespace CircuitAnalyzer.WPF
                 return false;
 
             int count = _selection.Count;
-            if (count > 0)
+            if (count == 0)
             {
-                CircuitClipboard.CopyToClipboard(ClipboardService, _selection.Elements, _wires);
-                _pasteCascadeCount = 0;
-                UpdateCanvasContextMenuState();
+                // Pano biçimi yalnız elemanları (ve aralarındaki telleri) taşır; tek başına tel kopyalanamaz.
+                // Kes, kopyalamadan silerse tel kaybolur: bu yüzden kesmeyi reddet.
+                TxtStatus.Text = "Yalnız tel kesilemez. Silmek için Delete tuşunu kullanın";
+                return false;
             }
 
+            CircuitClipboard.CopyToClipboard(ClipboardService, _selection.Elements, _wires);
+            _pasteCascadeCount = 0;
+            UpdateCanvasContextMenuState();
+
             DeleteSelected();
-            if (count > 0)
-            {
-                TxtStatus.Text = $"{count} eleman kesildi";
-            }
+            TxtStatus.Text = $"{count} eleman kesildi";
             return true;
         }
 

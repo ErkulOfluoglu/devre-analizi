@@ -125,6 +125,18 @@ namespace CircuitAnalyzer.WPF
                 }
             }
 
+            // Sağdaki sonuç etiketleri de görünsün (yalnız eleman kutuları sığınca etiketler kesiliyordu)
+            if (_overlay != null)
+            {
+                foreach (var r in _overlay.ItemBounds())
+                {
+                    minX = Math.Min(minX, r.Left);
+                    minY = Math.Min(minY, r.Top);
+                    maxX = Math.Max(maxX, r.Right);
+                    maxY = Math.Max(maxY, r.Bottom);
+                }
+            }
+
             double vw = CanvasScrollViewer.ViewportWidth > 0 ? CanvasScrollViewer.ViewportWidth : CanvasScrollViewer.ActualWidth;
             double vh = CanvasScrollViewer.ViewportHeight > 0 ? CanvasScrollViewer.ViewportHeight : CanvasScrollViewer.ActualHeight;
             if (vw <= 0) vw = 800;
@@ -173,6 +185,18 @@ namespace CircuitAnalyzer.WPF
                     minY = Math.Min(minY, wp.Y);
                     maxX = Math.Max(maxX, wp.X);
                     maxY = Math.Max(maxY, wp.Y);
+                }
+            }
+
+            // Sağdaki sonuç etiketleri de görünsün (yalnız eleman kutuları sığınca etiketler kesiliyordu)
+            if (_overlay != null)
+            {
+                foreach (var r in _overlay.ItemBounds())
+                {
+                    minX = Math.Min(minX, r.Left);
+                    minY = Math.Min(minY, r.Top);
+                    maxX = Math.Max(maxX, r.Right);
+                    maxY = Math.Max(maxY, r.Bottom);
                 }
             }
 
@@ -228,6 +252,10 @@ namespace CircuitAnalyzer.WPF
         private void CanvasScrollViewer_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
             CloseElementDrawer(); // tuvale tıklamak açık eleman listesini kapatır
+            // Sağ paneldeki bir kutuya (frekans, cevap, yapay zekâ) yazıldıysa odak orada kalıyor ve
+            // Delete / R / Ctrl+Z kutuya gidiyordu: tuvale tıklamak odağı tuvale alır.
+            if (!CircuitCanvas.IsKeyboardFocusWithin)
+                CircuitCanvas.Focus();
             bool isMiddle = e.ChangedButton == MouseButton.Middle;
             bool isSpaceLeft = e.ChangedButton == MouseButton.Left && Keyboard.IsKeyDown(Key.Space);
 

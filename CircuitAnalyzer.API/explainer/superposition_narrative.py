@@ -13,18 +13,23 @@ import math
 from typing import Dict, List
 
 from explainer.formatting import MINUS, eng, node_v, num, polar, rect
-from explainer.narrative import _Ctx, _Section, _close, _join_terms
+from explainer.narrative import _Ctx, _Section, _close, _join_terms, contribution_currents
 from models.request import AnalysisType
 from models.response import AnalysisResults
-from parser.netlist_parser import CURRENT_SOURCES, SINE_SOURCES, VOLTAGE_SOURCES
+from parser.netlist_parser import (
+    CURRENT_SOURCES, DEPENDENT_SOURCES, SINE_SOURCES, VOLTAGE_SOURCES,
+)
 from solver.superposition import Contribution
 
 _PRIMES = ["′", "″", "‴"]
 _SUPERSCRIPT = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
 
-# Alt devre anlatımından alınan bölümler
+# Alt devre anlatımından alınan bölümler (bağımlı kaynaklıda kontrol büyüklüğü bölümü de;
+# denklemler kurulamazsa çözücü sonucu bölümü sebebiyle birlikte)
 _SUB_SECTIONS = ("Empedanslar ve Fazörler", "Bilinen Düğüm Gerilimleri",
-                 "Düğüm Denklemleri (KCL)", "Denklemlerin Çözümü")
+                 "Kontrol Büyüklüğünü Bilinmeyenlerle Yazalım",
+                 "Düğüm Denklemleri (KCL)", "Denklemlerin Çözümü",
+                 "Düğüm Gerilimleri (Çözücü Sonucu)")
 
 
 def mark(k: int) -> str:
@@ -67,6 +72,7 @@ def build_superposition_sections(ctx: _Ctx, contributions: List[Contribution]) -
     sections.append(s)
 
     # ── Her kaynak için alt devre ──
+    seen_texts = set()      # genel açıklamalar yalnız ilk geçtikleri adımda
     for k, c in enumerate(contributions, 1):
         sec = _Section(f"{k}. Adım — Yalnız {c.source.id} Aktif ({_domain(c)})")
         if c.zeroed:
@@ -79,15 +85,12 @@ def build_superposition_sections(ctx: _Ctx, contributions: List[Contribution]) -
             continue
 
         if ctx.has_dependent:
-            # Alt devre denklemleri bağımlı kaynakları henüz bilmez; yalnızca
-            # çözücü sonuçları gösterilir (tek not girişte verildi)
-            sec.text("Bağımlı kaynaklar bu adımda da aktif; alt devre çözücüyle çözüldü.")
-            sub = []
-        else:
-            sub = build_explanation(
-                c.parsed, c.is_dc, c.frequency, AnalysisType.NODAL, None,
-                c.node_voltages, c.element_currents, AnalysisResults(),
-            )
+            sec.text("Bağımlı kaynaklar bu adımda da aktif: kontrol büyüklükleri bu alt devrenin "
+                     "düğüm gerilimleriyle yazılır.")
+        sub = build_explanation(
+            c.parsed, c.is_dc, c.frequency, AnalysisType.NODAL, None,
+            c.node_voltages, c.element_currents, AnalysisResults(),
+        )
         for sub_sec in sub:
             if sub_sec.title not in _SUB_SECTIONS:
                 continue
@@ -97,12 +100,26 @@ def build_superposition_sections(ctx: _Ctx, contributions: List[Contribution]) -
                 if b.kind == "text" and (b.text.startswith("Kirchhoff") or
                                          b.text.startswith("Her elemanı")):
                     continue
+                if b.kind in ("text", "note"):
+                    if b.text in seen_texts:
+                        continue        # önceki adımda söylendi
+                    seen_texts.add(b.text)
                 sec.blocks.append(b)
 
         sec.note(f"Bu adımda bulunan değerler {c.source.id} kaynağının katkısıdır "
                  f"({mark(k)} ile gösterilir).")
         for n in _node_order(c.node_voltages):
             sec.result(f"{node_v(n)}{mark(k)} = {_val(c.node_voltages[n], 'V', c.is_dc)}")
+        cur_blocks = contribution_currents(c.parsed, c.is_dc, c.frequency,
+                                           c.node_voltages, c.element_currents, mark(k))
+        deps = [e for e in c.parsed.elements
+                if e.element_type in DEPENDENT_SOURCES and e.id in c.element_currents]
+        if cur_blocks or deps:
+            sec.text("Bu adımdaki eleman akımları (Ohm yasası, I = (V₊ − V₋)/Z):")
+            sec.blocks.extend(cur_blocks)
+            for e in deps:
+                sec.math(f"I_{e.id}{mark(k)} = {_val(c.element_currents[e.id], 'A', c.is_dc)}  "
+                         f"({e.id} bağımlı kaynağının bu adımdaki akımı)")
         sections.append(sec)
 
     # ── Toplam ──
@@ -119,8 +136,8 @@ def build_superposition_sections(ctx: _Ctx, contributions: List[Contribution]) -
         is_dc = ok[0][1].is_dc
         same_as_main = (is_dc == ctx.is_dc) and (
             is_dc or (ctx.frequency is not None and _close(freqs[0], ctx.frequency, 1e-9)))
-        tot.text("Tüm katkılar aynı " + ("DC" if is_dc else "frekansta") + " olduğundan doğrudan "
-                 + ("toplanır:" if is_dc else "fazör olarak toplanır:"))
+        tot.text("Tüm katkılar DC olduğundan doğrudan toplanır:" if is_dc else
+                 "Tüm katkılar aynı frekansta olduğundan fazör olarak doğrudan toplanır:")
 
         def total_line(sym: str, key: str, kind: str, unit: str):
             values = [(k, (c.node_voltages if kind == "v" else c.element_currents).get(key))
@@ -132,7 +149,11 @@ def build_superposition_sections(ctx: _Ctx, contributions: List[Contribution]) -
                 (_val(v, unit, is_dc) if not (is_dc and v.real < 0)
                  else f"({_val(v, unit, is_dc)})") if is_dc else f"({polar(v, unit)})"
                 for _, v in values])
-            tot.math(f"{sym} = {terms} = {nums} = {_val(total, unit, is_dc)}")
+            if len(values) == 1:
+                # Tek katkı: "V₂ = V₂′ = 8 V" (aynı sayıyı iki kez yazma)
+                tot.math(f"{sym} = {terms} = {_val(total, unit, is_dc)}")
+            else:
+                tot.math(f"{sym} = {terms} = {nums} = {_val(total, unit, is_dc)}")
             return total
 
         for n in nodes:
@@ -146,6 +167,8 @@ def build_superposition_sections(ctx: _Ctx, contributions: List[Contribution]) -
         if same_as_main and all(n in ctx.v and _close(
                 sum(c.node_voltages.get(n, 0) for _, c in ok), ctx.v[n], 1e-5) for n in nodes):
             tot.check("Katkıların toplamı, tüm kaynaklar birlikteyken bulunan tam çözümle aynı ✓")
+        tot.note("Güç katkılar gibi toplanamaz: P = I²·R olduğundan (I′ + I″)²·R ≠ I′²·R + I″²·R. "
+                 "Güç, toplanmış akım ya da gerilimle hesaplanır.")
     else:
         tot.text("Kaynaklar farklı frekanslarda olduğundan fazörler doğrudan toplanamaz. "
                  "Her frekans bileşeni zaman domenine çevrilip toplanır:")

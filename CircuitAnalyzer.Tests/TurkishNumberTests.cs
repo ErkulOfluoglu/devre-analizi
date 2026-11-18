@@ -114,6 +114,23 @@ public class TurkishNumberTests
     }
 
     [Theory]
+    [InlineData(-0.5, "−0,5")]
+    [InlineData(-1250, "−1250")]
+    [InlineData(2.5, "2,5")]
+    [InlineData(0, "0")]
+    public void FormatDisplay_UsesUnicodeMinus_AndStillParsesBack(double value, string expected)
+    {
+        // Eksen sayıları ve ekrandaki değerler Unicode eksiyle; kullanıcı bunu yazsa da (ya da ASCII '-') okunur
+        string shown = TurkishNumber.FormatDisplay(value, "G4");
+        Assert.Equal(expected, shown);
+        Assert.True(TurkishNumber.TryParse(shown, out double back));
+        Assert.Equal(value, back, 9);
+        Assert.True(TurkishNumber.TryParse(shown.Replace('−', '-'), out double ascii));
+        Assert.Equal(value, ascii, 9);
+        Assert.Equal(expected, CircuitAnalyzer.WPF.Views.PlotMarkers.TickLabel(value));
+    }
+
+    [Theory]
     [InlineData("1M", 1e6)]
     [InlineData("2,2 MΩ", 2.2e6)]
     [InlineData("1meg", 1e6)]

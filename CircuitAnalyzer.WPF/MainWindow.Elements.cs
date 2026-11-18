@@ -838,11 +838,11 @@ namespace CircuitAnalyzer.WPF
             ClearCircuit();
             _problemCode = null;
             AnalysisPanel?.SetProblemCode(null);
-            _currentFilePath = null;
-            _isDirty = false;
-            _undoHistory.Reset(CircuitDocument.Snapshot(_elements, _wires));
-            UpdateTitle();
+            // Önce değişikliği bildir, sonra boş belgeyi "kaydedilmiş" say (başlıkta • kalmasın)
             OnCircuitChanged();
+            _currentFilePath = null;
+            ResetHistoryAsSaved();
+            UpdateTitle();
             AnalysisPanel?.ClearResults();
             TxtStatus.Text = "Canvas temizlendi";
         }
@@ -859,6 +859,11 @@ namespace CircuitAnalyzer.WPF
             _isRubberBandPending = false;
             _isRubberBandActive = false;
             RemoveRubberBandVisual();
+            // Sürükleme sırasında devre silinirse (örn. Ctrl+Z) eski sürükleme durumu kalmasın
+            _draggedVisual?.ReleaseMouseCapture();
+            _isDragging = false;
+            _draggedVisual = null;
+            _draggedElement = null;
             DeselectElement();
             _overlay?.Clear();
 

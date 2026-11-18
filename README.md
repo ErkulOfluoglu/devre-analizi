@@ -76,36 +76,38 @@ DC ve AC (fazör) devrelerin hepsinde çalışır; AC değerleri [etkin ya da te
   </tr>
 </table>
 
-**Ayrıca:** sürükle-bırak çizim · bağımlı kaynaklar (GKGK, GKAK, AKGK, AKAK) · anahtarlar (t = 0) · ölçüm probu · hazır örnek devreler · 4 haneli **soru kodları** (öğretmen kodu paylaşır, bütün sınıf aynı soruyu açar) · kaydet/aç (`.devre`) · geri al/yinele · yazdır/PDF · ondalık virgül (`4,7k` de `4.7k` de yazılabilir) · fare tekerleğiyle yakınlaştırma · adım adım açılan çözüm zinciri · Windows 11 görünümü, açık ve koyu tema.
+**Ayrıca:** listeden seçip tıklayarak kolay çizim · bağımlı kaynaklar (GKGK, GKAK, AKGK, AKAK) · anahtarlar (t = 0) · ölçüm probu ve wattmetre · hazır örnek devreler · 4 haneli **soru kodları** (öğretmen kodu paylaşır, bütün sınıf aynı soruyu açar) · kaydet/aç (`.devre`; program açıksa dosya açık pencerede açılır) · geri al/yinele · yazdır/PDF (zaman grafiği, rezonans eğrisi ve güç üçgeni de baskıya girer) · ondalık virgül (`4,7k` de `4.7k` de yazılabilir) · fare tekerleğiyle yakınlaştırma · adım adım açılan çözüm zinciri · çözülemeyen devrede sorunlu elemanları adıyla ve "Ne yapabilirsiniz" önerileriyle söyleme (kısa devre kaynak, paralel kaynaklar, GND'ye yolu olmayan bölüm) · pencerenin boyutunu ve yerini hatırlama · Windows 11 görünümü, açık ve koyu tema.
 
 ## Kurulum
 
 1. [Releases](../../releases/latest) sayfasından `DevreAnalizi-Kurulum-x.y.z.exe` dosyasını indirin.
-2. Çift tıklayın. Kurulum **yönetici izni istemez**; yalnızca sizin kullanıcı hesabınıza kurulur (okul bilgisayarlarında da çalışır).
+2. Çift tıklayın. Kurulum **yönetici izni istemez** ve "yalnızca ben mi, tüm kullanıcılar mı" diye sormaz; yalnızca sizin kullanıcı hesabınıza kurulur (okul bilgisayarlarında da çalışır).
 3. Kullanım koşullarını okuyup kabul edin, **Kur**'a basın. Python ya da başka bir program kurmanız gerekmez.
 
 > **"Windows kişisel bilgisayarınızı korudu" uyarısı çıkarsa:** Program ücretsiz olduğu için pahalı bir dijital imza sertifikasıyla imzalanmamıştır; Windows bu yüzden uyarır. **Ek bilgi → Yine de çalıştır**'a basabilirsiniz. Her sürümün notlarında dosyanın SHA-256 doğrulama kodu da yazar.
 
-**Sistem gereksinimleri:** Windows 10 veya 11 (64 bit), yaklaşık 250 MB boş disk alanı (indirme yaklaşık 75 MB). İnternet gerekmez.
+**Sistem gereksinimleri:** Windows 10 veya 11 (64 bit), yaklaşık 270 MB boş disk alanı (indirme yaklaşık 75 MB). İnternet gerekmez.
 
 ## Hızlı başlangıç
 
-1. Soldaki listeden bir elemana tıklayın, çizim alanında yerine bırakın. Bağlamak için bir elemanın **ucuna**, sonra bağlanacak uca tıklayın.
-2. Bir **toprak (GND)** eklemeyi unutmayın; gerilimler ona göre ölçülür.
-3. Sağ panelden yöntemi seçin ve **Çöz**'e (F5) basın.
+1. Soldaki şeritten bir kategori seçin (**Pasif**, **Kaynak** …), açılan listeden elemana tıklayın ve çizim alanında yerine tıklayın. Bağlamak için bir elemanın **ucuna**, sonra bağlanacak uca tıklayın.
+2. Bir **toprak (GND)** eklemeyi unutmayın (**Kaynak** listesinde); gerilimler ona göre ölçülür.
+3. Sağ panelden yöntemi seçin ve **▶ Çöz**'e (F5) basın.
 4. **Anlatım** sekmesinde çözümü adım adım okuyun; değerler devrenin üzerinde de görünür.
 
-İlk kez kullanıyorsanız **Örnek devreler** düğmesiyle başlayın. Ayrıntılar, ipuçları ve klavye kısayolları için: **[Kullanım rehberi (Wiki)](../../wiki)**.
+İlk kez kullanıyorsanız üst çubuktaki **Örnekler** düğmesiyle başlayın. Ayrıntılar, ipuçları ve klavye kısayolları için: **[Kullanım rehberi (Wiki)](../../wiki)**.
 
 ## Yapay zekâ yardımcısı (isteğe bağlı)
 
 Çözümle ilgili sorularınızı Türkçe sorabileceğiniz bir yardımcı vardır. **Tamamen isteğe bağlıdır**; program onsuz da eksiksiz çalışır.
 
 - Yardımcı **sizin bilgisayarınızda** çalışır (Ollama + Gemma 4). Sorularınız hiçbir yere gönderilmez.
-- Kurulum program içinden, terminal açmadan yapılır; program belleğinize uygun modeli kendisi seçer (8 GB RAM ve üstü önerilir).
+- Kurulum program içinden, terminal açmadan yapılır; program belleğinize uygun modeli kendisi seçer (8 GB RAM ve üstü önerilir; model diskte yaklaşık 7 GB ya da 5 GB yer kaplar). Ollama kurulu ama kapalıysa **Başlat** düğmesi onu açar.
+- **Çalıştığı yer** listesinden ekran kartını, işlemciyi ya da NPU'yu seçebilirsiniz; **Otomatik** en hızlısını seçer. İşlemcinin içindeki (tümleşik) ekran kartı için program Ollama'yı sizin onayınızla yeniden başlatır; program kapanınca Ollama eski hâline döner.
+- AMD Ryzen AI bilgisayarlarda yardımcı isterseniz **NPU**'da da çalışabilir. Bunun için ücretsiz [FastFlowLM](https://github.com/ROCm/FastFlowLM) programını ayrıca kurmanız gerekir; FastFlowLM, Devre Analizi ile birlikte gelmez.
 - Yanıtlardaki sayılar programın kesin çözümüyle karşılaştırılır; tutmayanlar için uyarır, alıştırma modunda cevabı veren sayıları gizler. **Yardımcıyı bir öğretmen yerine değil, ipucu veren bir arkadaş gibi kullanın.**
 
-Ayrıntılar: [Yapay zekâ yardımcısı](../../wiki/Yapay-Zekâ-Yardımcısı). Ollama (MIT) ve Gemma 4 (Apache 2.0) programla birlikte dağıtılmaz; kurarsanız kendi lisans koşulları geçerlidir.
+Ayrıntılar: [Yapay zekâ yardımcısı](../../wiki/Yapay-Zekâ-Yardımcısı). Ollama (MIT), Gemma 4 (Apache 2.0) ve FastFlowLM (MIT; NPU parçaları için ayrı bir ikili lisans, ücretsiz kullanılabilir, ticari kullanım koşulları lisans metninde) programla birlikte dağıtılmaz; kurarsanız kendi lisans koşulları geçerlidir.
 
 ## Gizlilik
 
