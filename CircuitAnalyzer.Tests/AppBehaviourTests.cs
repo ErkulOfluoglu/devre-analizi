@@ -476,6 +476,7 @@ public class AppBehaviourPureTests
 }
 
 /// <summary>Gerçek çözücüyle: yeniden başlatma iki süreç bırakmaz, kapanan çözücü hemen fark edilir.</summary>
+[Collection(RealProcessCollection.Name)]
 public class BackendRestartTests
 {
     [Fact]

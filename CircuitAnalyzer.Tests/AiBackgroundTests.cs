@@ -15,18 +15,20 @@ namespace CircuitAnalyzer.Tests;
 ///
 /// GÜVENLİK: Gerçek Ollama/flm'ye dokunulmaz. Tek gerçek süreçler bu testlerin kendi açtığı
 /// zararsız "python -c time.sleep" süreçleridir; finally içinde mutlaka kapatılır.
+/// Gerçek süreç açtıkları için diğer testlerle aynı anda değil, en sonda tek başına çalışırlar.
 /// </summary>
+[Collection(RealProcessCollection.Name)]
 public class AiBackgroundTests
 {
-    private const string SleeperPy = "import time; time.sleep(60)";
-
-    // Ana süreç: biri CREATE_BREAKAWAY_FROM_JOB (0x01000000) ile, biri bayraksız iki uyuyan süreç açar
+    // Ana süreç: girişten "go" satırını bekler (test onu önce iş nesnesine bağlayabilsin diye),
+    // sonra biri CREATE_BREAKAWAY_FROM_JOB (0x01000000) ile, biri bayraksız iki uyuyan süreç açar
     // ve PID'lerini yazdırır.
     private const string ParentPy =
         "import subprocess, sys, time\n" +
+        "sys.stdin.readline()\n" +
         "sl = ['python', '-c', 'import time; time.sleep(60)']\n" +
-        "a = subprocess.Popen(sl, creationflags=0x01000000)\n" +
-        "b = subprocess.Popen(sl)\n" +
+        "a = subprocess.Popen(sl, creationflags=0x01000000, stdin=subprocess.DEVNULL)\n" +
+        "b = subprocess.Popen(sl, stdin=subprocess.DEVNULL)\n" +
         "print(a.pid, b.pid, flush=True)\n" +
         "time.sleep(60)\n";
 
@@ -36,6 +38,7 @@ public class AiBackgroundTests
         {
             UseShellExecute = false,
             CreateNoWindow = true,
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
@@ -44,8 +47,11 @@ public class AiBackgroundTests
         return Process.Start(psi)!;
     }
 
+    /// <summary>Ana sürece çocukları açmasını söyler ve yazdığı PID'leri okur.</summary>
     private static (int Breakaway, int InJob) ReadPids(Process parent)
     {
+        parent.StandardInput.WriteLine("go");
+        parent.StandardInput.Flush();
         var line = parent.StandardOutput.ReadLineAsync();
         Assert.True(line.Wait(TimeSpan.FromSeconds(20)), "ana süreç PID yazmadı: " + ReadErr(parent));
         var parts = (line.Result ?? "").Split(' ');
@@ -109,7 +115,8 @@ public class AiBackgroundTests
             job = new BackendManager.JobObject();
             job.Assign(parent);
             (a, b) = ReadPids(parent);
-            Assert.True(IsAlive(a) && IsAlive(b), "iki uyuyan süreç de başta açık olmalı");
+            Assert.True(IsAlive(a), "ayrılan uyuyan süreç başta açık olmalı");
+            Assert.True(IsAlive(b), "işteki uyuyan süreç başta açık olmalı");
 
             // Backend Stop() ile aynı dizi: yalnız ana süreci öldür, sonra işi kapat
             BackendManager.StopProcessAndJob(parent, job);
@@ -140,7 +147,7 @@ public class AiBackgroundTests
 
             BackendManager.StopProcessAndJob(parent, null);
 
-            Assert.True(parent.WaitForExit(5000));
+            Assert.True(parent.WaitForExit(5000), "ana süreç kapanmalı");
             Assert.True(WaitUntilDead(b), "iş nesnesi yoksa süreç ağacı kapanmalı");
             Assert.True(WaitUntilDead(a), "iş nesnesi yoksa süreç ağacı kapanmalı");
         }
