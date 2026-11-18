@@ -264,6 +264,9 @@ namespace CircuitAnalyzer.WPF.Views
 
             // Açıklama kartı konumu hesaplama
             double cardW = 340;
+            // DesiredSize kenar boşluğunu (önceki konumu) da içerir; ölçmeden önce sıfırla,
+            // yoksa her yeniden hesapta kart yüksekliği şişer ve konum kayar
+            _calloutCard.Margin = new Thickness(0);
             _calloutCard.Measure(new Size(cardW, double.PositiveInfinity));
             double cardH = _calloutCard.DesiredSize.Height > 0 ? _calloutCard.DesiredSize.Height : 200;
 

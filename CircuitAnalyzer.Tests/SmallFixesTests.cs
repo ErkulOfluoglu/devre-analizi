@@ -351,16 +351,18 @@ public class SmallFixesTests
     // ── 28: tanıtım turunda 1. ve 3. adım ──
 
     [Fact]
-    public void Tour_StepsOneAndThree_PreferBelowSoTheyDoNotCoverCircuitOrMethodBox()
+    public void Tour_StepsOneAndThree_DoNotCoverCircuitOrMethodBox()
     {
         var steps = TourSteps.Steps;
-        Assert.Equal(TourSide.Below, steps[0].PreferredSides![0]);
+        Assert.Equal(TourSide.RightLow, steps[0].PreferredSides![0]);
         Assert.Equal(TourSide.Below, steps[2].PreferredSides![0]);
 
-        // Soldaki dar şerit: kart altına gelir, sağa (devrenin üstüne) değil
-        var rail = new Rect(0, 60, 80, 300);
-        var spot = TourPlacement.Place(rail, 340, 200, 1280, 800, steps[0].PreferredSides);
-        Assert.True(spot.Y >= rail.Bottom);
+        // Pencere boyu sol şerit: kart sağında ama alt kısımda, devrenin durduğu üst-solda değil
+        var rail = new Rect(0, 45, 72, 720);
+        var spot = TourPlacement.Place(rail, 340, 224, 1266, 763, steps[0].PreferredSides);
+        Assert.True(spot.X >= rail.Right);
+        Assert.Equal(763 - 224 - TourPlacement.RightLowBottomMargin, spot.Y);
+        Assert.True(spot.Y > 400, "kart devrenin bulunduğu üst kısımdan aşağıda olmalı");
 
         // Varsayılan sıra eskisi gibi: önce sağ
         var right = TourPlacement.Place(rail, 340, 200, 1280, 800);

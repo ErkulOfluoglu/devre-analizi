@@ -18,12 +18,19 @@ namespace CircuitAnalyzer.WPF.Services
         public string Body { get; init; } = "";
     }
 
-    public enum TourSide { Right, Left, Below, Above }
+    /// <summary>
+    /// Kartın hedefe göre yeri. <see cref="RightLow"/>: hedefin sağında ama pencerenin alt kısmında
+    /// (sol şerit gibi boyu uzun hedefler için; devre çizim alanının üst-solunda durur).
+    /// </summary>
+    public enum TourSide { Right, Left, Below, Above, RightLow }
 
     /// <summary>Açıklama kartının konumunu hesaplar (saf işlev: birim testlenebilir).</summary>
     public static class TourPlacement
     {
         public static readonly TourSide[] DefaultOrder = { TourSide.Right, TourSide.Left, TourSide.Below, TourSide.Above };
+
+        /// <summary><see cref="TourSide.RightLow"/> kartının pencere altından uzaklığı (araç çubuğu + durum satırı).</summary>
+        public const double RightLowBottomMargin = 96;
 
         /// <summary>
         /// Tercih sırasındaki ilk sığan yan seçilir; hiçbiri sığmazsa son çare olarak üst. Sonuç pencereye kelepçelenir.
@@ -45,6 +52,9 @@ namespace CircuitAnalyzer.WPF.Services
                         x = hole.Left + (hole.Width - cardW) / 2; y = hole.Bottom + 16; placed = true; break;
                     case TourSide.Above when hole.Top - 16 - cardH >= 0:
                         x = hole.Left + (hole.Width - cardW) / 2; y = hole.Top - 16 - cardH; placed = true; break;
+                    case TourSide.RightLow when hole.Right + 16 + cardW <= w:
+                        // Alttaki araç çubuğu ve durum satırı için pay bırak
+                        x = hole.Right + 16; y = h - cardH - RightLowBottomMargin; placed = true; break;
                 }
                 if (placed) break;
             }
@@ -75,8 +85,9 @@ namespace CircuitAnalyzer.WPF.Services
             {
                 new()
                 {
-                    // Şerit dar ve solda: kart sağa gelince devreyi örter; önce altına
-                    PreferredSides = new[] { TourSide.Below, TourSide.Right },
+                    // Şerit pencere boyunca uzanır; sağına ortalanan kart çizim alanının üst-solundaki
+                    // devreyi örter. Kart şeridin sağında, pencerenin alt kısmında durur.
+                    PreferredSides = new[] { TourSide.RightLow, TourSide.Right },
                     TargetAccessor = () => window?.ElementRail,
                     Title = "Elemanlar",
                     Body = "Bir kategoriye tıklayın, açılan listeden elemanı seçin. Eleman fareyi izler; çizim alanında istediğiniz yere tıklayıp bırakın. (R: döndür · Esc: vazgeç)"
