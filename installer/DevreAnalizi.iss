@@ -3,7 +3,7 @@
 ;
 ;  Doğrudan derlemeyin; installer\build.ps1 önce uygulamayı ve
 ;  çözücüyü hazırlar, sonra bu dosyayı ISCC ile derler:
-;    ISCC /DAppVersion=1.0.0 /DSourceDir=<hazırlanan klasör> DevreAnalizi.iss
+;    ISCC /DAppVersion=2.1.0 /DSourceDir=<hazırlanan klasör> DevreAnalizi.iss
 ;
 ;  Kurulum yönetici izni İSTEMEZ (okul bilgisayarları için):
 ;  yalnızca o kullanıcıya, %LOCALAPPDATA%\Programs altına kurulur.
@@ -13,7 +13,7 @@
 ; ════════════════════════════════════════════════════════════════
 
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "2.1.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\build\app"
