@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from typing import Dict, List, Optional, Tuple
 
-from explainer.formatting import MINUS, eng, node_v, num, ek
+from explainer.formatting import MINUS, _prefix_for, ek, eng, node_ek, node_name, node_pair, node_v, num
 from parser.netlist_parser import ElementType
 
 _ALLOWED = (ElementType.RESISTOR, ElementType.DC_SOURCE, ElementType.CURRENT_DC)
@@ -138,11 +138,12 @@ class _Net:
 
     def recap(self):
         def one(e: _El) -> str:
+            p, n = ("GND" if e.p == "0" else e.p), ("GND" if e.n == "0" else e.n)
             if e.kind == "R":
-                return f"{e.name} ({e.p}–{e.n})"
+                return f"{e.name} ({p}–{n})"
             if e.kind == "V":
-                return f"{e.name} (+ {e.p}, − {e.n})".replace("−", MINUS)
-            return f"{e.name} ({e.p} → {e.n})"
+                return f"{e.name} (+ {p}, − {n})".replace("−", MINUS)
+            return f"{e.name} ({p} → {n})"
         self.cur.append(("note", "Devrenin şimdiki hali: " + ", ".join(one(e) for e in self.els) + "."))
         self.steps.append(self.cur)      # adım tamam
         self.cur = []
@@ -209,9 +210,9 @@ def _step_cleanup(net: _Net) -> bool:
             continue
         e = inc[node][0]
         if e.kind == "I":
-            raise _Fail(f"{e.name} akım kaynağının bir ucu açıkta (Düğüm {node}).")
+            raise _Fail(f"{e.name} akım kaynağının bir ucu açıkta ({node_name(node)}).")
         net.remove(e)
-        net.text(f"Düğüm {ek(node, 'e')} yalnızca {e.name} bağlı; bir ucu boşta kalan eleman akım taşımaz, "
+        net.text(f"{node_ek(node, 'e')} yalnızca {e.name} bağlı; bir ucu boşta kalan eleman akım taşımaz, "
                  "devreden çıkarılır.")
         net.recap()
         return True
@@ -239,7 +240,7 @@ def _step_hanging_part(net: _Net, inc: Dict[str, List[_El]]) -> bool:
             hanging = [e for e in net.els if {e.p, e.n} & part]
             names = ", ".join(e.name for e in hanging)
             net.remove(*hanging)
-            net.text(f"{names} elemanları devrenin kalanına yalnızca Düğüm {cut} üzerinden bağlı. Akım tek "
+            net.text(f"{names} elemanları devrenin kalanına yalnızca {node_name(cut)} üzerinden bağlı. Akım tek "
                      "düğümden girip başka bir yerden çıkamayacağı için bu parça terminalleri etkilemez, "
                      "devreden çıkarılır.")
             net.recap()
@@ -276,10 +277,12 @@ def _step_chain(net: _Net) -> bool:
         r_tot = sum(e.val for e in res)
         if len(res) >= 2:
             names = [e.name for e in res]
+            scale, prefix = _prefix_for(max(e.val for e in res))
+            r_fmt = lambda v: f"{num(v / scale)} {prefix}Ω".strip()
             net.text(f"{' ve '.join(names) if len(names) == 2 else ', '.join(names)} dirençleri seri "
                      "bağlı; seri dirençler toplanır.")
             net.math(f"{r_new_name} = {' + '.join(names)} = "
-                     f"{' + '.join(eng(e.val, 'Ω') for e in res)} = {eng(r_tot, 'Ω')}")
+                     f"{' + '.join(r_fmt(e.val) for e in res)} = {r_fmt(r_tot)}")
 
         terms = [(e, 1 if (f == e.n and t == e.p) else -1) for e, f, t in vol]   # nk yönünde +
         e_signed = sum(s * e.val for e, s in terms)
@@ -332,17 +335,19 @@ def _step_parallel(net: _Net) -> bool:
         if kind == "R":
             new_name = net.new_name("R")
             r_eq = 1 / sum(1 / e.val for e in grp)
+            scale, prefix = _prefix_for(max(e.val for e in grp))
+            r_fmt = lambda v: f"{num(v / scale)} {prefix}Ω".strip()
             net.remove(*grp)
             net.els.append(_El("R", new_name, u, w, r_eq))
-            net.text(f"{listing} dirençleri Düğüm {u} ile Düğüm {w} arasında paralel bağlı; "
+            net.text(f"{listing} dirençleri {node_name(u)} ile {node_name(w)} arasında paralel bağlı; "
                      "paralel dirençler tek dirençle gösterilir.")
             if len(grp) == 2:
                 net.math(f"{new_name} = {names[0]}·{names[1]} / ({names[0]} + {names[1]}) = "
-                         f"{num(grp[0].val)}·{num(grp[1].val)} / ({num(grp[0].val)} + {num(grp[1].val)}) "
-                         f"= {eng(r_eq, 'Ω')}")
+                         f"{r_fmt(grp[0].val)}·{r_fmt(grp[1].val)} / ({r_fmt(grp[0].val)} + {r_fmt(grp[1].val)}) "
+                         f"= {r_fmt(r_eq)}")
             else:
                 net.math(f"{new_name} = 1 / ({' + '.join('1/' + n for n in names)}) = "
-                         f"1 / ({' + '.join('1/' + num(e.val) for e in grp)}) = {eng(r_eq, 'Ω')}")
+                         f"1 / ({' + '.join('1/' + r_fmt(e.val) for e in grp)}) = {r_fmt(r_eq)}")
         else:
             new_name = net.new_name("I")
             ref = grp[0]
@@ -351,14 +356,14 @@ def _step_parallel(net: _Net) -> bool:
             total = sum(s * e.val for s, e in zip(signs, grp))
             sym, val = _signed_sum(names, [e.val for e in grp], signs, "A")
             net.remove(*grp)
-            net.text(f"{listing} akım kaynakları Düğüm {u} ile Düğüm {w} arasında paralel bağlı; "
-                     f"akımlar {ref.name} yönünde (Düğüm {other} → Düğüm {toward}) alınarak toplanır, "
+            net.text(f"{listing} akım kaynakları {node_name(u)} ile {node_name(w)} arasında paralel bağlı; "
+                     f"akımlar {ref.name} yönünde ({node_name(other)} → {node_name(toward)}) alınarak toplanır, "
                      "ters yöne bakan kaynağın akımı çıkarılır.")
             if abs(total) > 1e-15:
                 new = _mk_i(new_name, toward, other, total)
                 net.els.append(new)
                 net.math(f"{new_name} = {sym} = {val} = {eng(total, 'A')}")
-                net.text(f"{new_name} kaynağı içinde Düğüm {new.p} → Düğüm {new.n} yönündedir"
+                net.text(f"{new_name} kaynağı içinde {node_name(new.p)} → {node_name(new.n)} yönündedir"
                          + (" (sonuç eksi çıktığı için yön ters döndü)." if total < 0 else "."))
             else:
                 net.math(f"{new_name} = {sym} = {val} = 0")
@@ -379,7 +384,7 @@ def _step_v_parallel(net: _Net) -> bool:
         net.used_v_parallel = True
         net.remove(*extra)
         net.text(f"{' ve '.join(names) if len(names) == 2 else ', '.join(names)}, {v.name} ideal gerilim "
-                 f"kaynağına paralel bağlı (Düğüm {v.p}–{v.n}). Bu iki düğüm arasındaki gerilimi {v.name} "
+                 f"kaynağına paralel bağlı ({node_pair(v.p, v.n)}). Bu iki düğüm arasındaki gerilimi {v.name} "
                  "belirler; paralel eleman bu gerilimi ve devrenin kalanını değiştirmez, çıkarılır.")
         net.recap()
         return True
@@ -407,31 +412,31 @@ def _step_v_shift(net: _Net) -> bool:
         net.used_v_shift = True
         net.remove(v, *others)
         net.text(f"{v.name} gerilim kaynağının seri direnci yok, kaynak dönüşümü doğrudan uygulanamaz. "
-                 f"Gerilim kaynağı kaydırma: Düğüm {w} ile Düğüm {u} arasındaki gerilim her zaman "
-                 f"{eng(abs(delta), 'V')} (+ ucu Düğüm {v.p}). {v.name} kaldırılır, Düğüm {w} üzerindeki kollar "
-                 f"Düğüm {u} üzerine taşınır; düğüm gerilimleri değişmez, Düğüm {w} ortadan kalkar.")
+                 f"Gerilim kaynağı kaydırma: {node_name(w)} ile {node_name(u)} arasındaki gerilim her zaman "
+                 f"{eng(abs(delta), 'V')} (+ ucu {node_name(v.p)}). {v.name} kaldırılır, {node_name(w)} üzerindeki kollar "
+                 f"{node_name(u)} üzerine taşınır; düğüm gerilimleri değişmez, {node_name(w)} ortadan kalkar.")
         for e in others:
             t = e.n if e.p == w else e.p
             if e.kind == "I":
                 moved = _El("I", e.name, u if e.p == w else e.p, u if e.n == w else e.n, e.val)
                 net.els.append(moved)
-                net.math(f"{e.name}: Düğüm {w} ucu Düğüm {u} üzerine taşınır ({v.name} iki düğüm arasında "
-                         f"akımı geçirir)  →  Düğüm {moved.p} → Düğüm {moved.n}")
+                net.math(f"{e.name}: {node_name(w)} ucu {node_name(u)} üzerine taşınır ({v.name} iki düğüm arasında "
+                         f"akımı geçirir)  →  {node_name(moved.p)} → {node_name(moved.n)}")
             elif e.kind == "R":
                 name = net.new_name("V")
                 kn = net.new_node()
                 net.els.append(_El("R", e.name, t, kn, e.val))
                 new_v = _mk_v(name, kn, u, delta)
                 net.els.append(new_v)
-                net.math(f"{e.name} (Düğüm {t}–{w})  →  {e.name} ile seri {name} = {eng(abs(delta), 'V')} "
-                         f"(+ ucu {new_v.p}, Düğüm {t}–{u} kolunda)")
+                net.math(f"{e.name} ({node_pair(t, w)})  →  {e.name} ile seri {name} = {eng(abs(delta), 'V')} "
+                         f"(+ ucu {node_name(new_v.p) if new_v.p == '0' else new_v.p}, {node_pair(t, u)} kolunda)")
             else:
                 name = net.new_name("V")
                 total = delta - _emf_toward(e, w)   # V_t − V_u
                 new_v = _mk_v(name, t, u, total)
                 net.els.append(new_v)
-                net.math(f"{e.name} (Düğüm {t}–{w})  →  {name} = {eng(abs(total), 'V')} "
-                         f"(Düğüm {t}–{u} arası, + ucu Düğüm {new_v.p})")
+                net.math(f"{e.name} ({node_pair(t, w)})  →  {name} = {eng(abs(total), 'V')} "
+                         f"({node_pair(t, u)} arası, + ucu {node_name(new_v.p)})")
         net.recap()
         return True
     return False
@@ -457,11 +462,11 @@ def _step_vr(net: _Net) -> bool:
         net.remove(v, r)
         net.els.append(new)
         net.els.append(_El("R", r.name, x, y, r.val))
-        net.text(f"{v.name} gerilim kaynağı ile {r.name} direnci seri bağlı (Düğüm {ek(m, 'de')} başka eleman yok). "
+        net.text(f"{v.name} gerilim kaynağı ile {r.name} direnci seri bağlı ({node_ek(m, 'de')} başka eleman yok). "
                  f"Kaynak dönüşümü: {v.name}, {r.name} direncine paralel bir akım kaynağına dönüşür; "
                  f"akım okunun yönü, {v.name} kaynağının + ucu tarafına bakar.")
         net.math(f"{i_name} = {v.name} / {r.name} = {eng(abs(emf_m), 'V')} / {eng(r.val, 'Ω')} = "
-                 f"{eng(abs(amount), 'A')}  (kaynak içinde Düğüm {new.p} → Düğüm {new.n} yönünde)")
+                 f"{eng(abs(amount), 'A')}  (kaynak içinde {node_name(new.p)} → {node_name(new.n)} yönünde)")
         net.recap()
         return True
     return False
@@ -477,7 +482,7 @@ def _norton_to_thevenin(net: _Net, src: _El, res: _El, x: str, z: str):
     net.els.append(_mk_v(e_name, z, kn, emf_z))
     net.text(f"{src.name} akım kaynağı ile {res.name} direnci paralel bağlı. Kaynak dönüşümü: "
              f"{src.name}, {res.name} direncine seri bir gerilim kaynağına dönüşür; gerilim "
-             f"kaynağının + ucu, akım okunun gösterdiği Düğüm {z if emf_z >= 0 else x} tarafındadır.")
+             f"kaynağının + ucu, akım okunun gösterdiği {node_name(z if emf_z >= 0 else x)} tarafındadır.")
     net.math(f"{e_name} = {src.name}·{res.name} = {eng(src.val, 'A')} · {eng(res.val, 'Ω')} = "
              f"{eng(src.val * res.val, 'V')}")
 
@@ -543,8 +548,16 @@ def _step_delta_y(net: _Net, with_sources: bool = False) -> bool:
         y = f"Y{net.count['Y'] + 1}"
         net.count["Y"] += 1
         denom = b12.val + b13.val + b23.val
+        scale, prefix = _prefix_for(max(b12.val, b13.val, b23.val))
+        if prefix:
+            r_op = lambda v: f"{num(v / scale)} {prefix}Ω"
+            r_res = lambda v: f"{num(v / scale)} {prefix}Ω"
+            num_d = f"{r_op(b12.val)} + {r_op(b13.val)} + {r_op(b23.val)}"
+        else:
+            r_op = lambda v: num(v)
+            r_res = lambda v: f"{num(v)} Ω"
+            num_d = f"{num(b12.val)}+{num(b13.val)}+{num(b23.val)}"
         sym_d = f"{b12.name}+{b13.name}+{b23.name}"
-        num_d = f"{num(b12.val)}+{num(b13.val)}+{num(b23.val)}"
         net.remove(b12, b13, b23)
         lines = []
         for node, a1, a2 in ((n1, b12, b13), (n2, b12, b23), (n3, b13, b23)):
@@ -552,10 +565,12 @@ def _step_delta_y(net: _Net, with_sources: bool = False) -> bool:
             v = a1.val * a2.val / denom
             net.els.append(_El("R", name, node, y, v))
             lines.append(f"{name} = {a1.name}·{a2.name}/({sym_d}) = "
-                         f"{num(a1.val)}·{num(a2.val)}/({num_d}) = {num(v)} Ω (Düğüm {node}–{y})")
+                         f"{r_op(a1.val)}·{r_op(a2.val)}/({num_d}) = {r_res(v)} ({node_pair(node, y)})")
         net.used_dy = True
+        tri_nodes = (", ".join(node_name(x) for x in (n1, n2, n3))
+                     if "0" in (n1, n2, n3) else f"Düğüm {n1}, {n2}, {n3}")
         net.text(f"Seri/paralel birleştirme ve kaynak dönüşümü kalmadı; {b12.name}, {b13.name}, "
-                 f"{b23.name} üçgen (Δ) bağlı (Düğüm {n1}, {n2}, {n3} arası) → yıldıza (Y) "
+                 f"{b23.name} üçgen (Δ) bağlı ({tri_nodes} arası) → yıldıza (Y) "
                  "dönüştürelim:")
         for ln in lines:
             net.math(ln)
@@ -569,8 +584,8 @@ def _step_delta_y(net: _Net, with_sources: bool = False) -> bool:
                 first, second = net.new_name("I"), net.new_name("I")
                 net.els.append(_El("I", first, src.p, y, src.val))
                 net.els.append(_El("I", second, y, src.n, src.val))
-                net.math(f"{src.name} ({eng(src.val, 'A')}, Düğüm {src.p} → Düğüm {src.n})  →  "
-                         f"{first} (Düğüm {src.p} → {y}) ve {second} ({y} → Düğüm {src.n})")
+                net.math(f"{src.name} ({eng(src.val, 'A')}, {node_name(src.p)} → {node_name(src.n)})  →  "
+                         f"{first} ({node_name(src.p)} → {y}) ve {second} ({y} → {node_name(src.n)})")
         net.recap()
         return True
     return False
@@ -602,10 +617,12 @@ def _step_y_delta(net: _Net) -> bool:
             val = s_sum / opp.val
             net.els.append(_El("R", name, u, v, val))
             lines.append(f"{name} = {sym}/{opp.name} = {numr}/{num(opp.val)} = {num(val)} Ω "
-                         f"(Düğüm {u}–{v})")
+                         f"({node_pair(u, v)})")
         net.used_dy = True
+        tri_nodes = (", ".join(node_name(x) for x in (n1, n2, n3))
+                     if "0" in (n1, n2, n3) else f"Düğüm {n1}, {n2}, {n3}")
         net.text(f"Seri/paralel birleştirme ve kaynak dönüşümü kalmadı; {ra.name}, {rb.name}, "
-                 f"{rc.name} yıldız (Y) bağlı (ortak Düğüm {m}) → üçgene (Δ, Düğüm {n1}, {n2}, {n3} "
+                 f"{rc.name} yıldız (Y) bağlı (ortak {node_name(m)}) → üçgene (Δ, {tri_nodes} "
                  "arası) dönüştürelim:")
         for ln in lines:
             net.math(ln)
@@ -717,7 +734,7 @@ def build_source_transform(ctx) -> Tuple[Optional[list], str]:
 
     # ── Bölüm 1: yöntem ──
     s1 = _Section("Kaynak Dönüşümü — Yöntem")
-    s1.text(f"Düğüm {a} (+) ile Düğüm {b} (−) terminallerinden bakıldığında devreyi, kaynak dönüşümleriyle "
+    s1.text(f"{node_name(a)} (+) ile {node_name(b)} (−) terminallerinden bakıldığında devreyi, kaynak dönüşümleriyle "
             "adım adım sadeleştirip tek bir kaynak ve tek bir dirence indireceğiz. Kullanacağımız kurallar:")
     s1.math("• Gerilim kaynağı E ile seri R  ⇄  akım kaynağı I = E/R ile paralel R "
             "(akım oku, gerilim kaynağının + ucu tarafına bakar)")
@@ -737,7 +754,7 @@ def build_source_transform(ctx) -> Tuple[Optional[list], str]:
         s1.math("• Gerilim kaynağı kaydırma: seri direnci olmayan E, bir ucundaki düğümün her koluna seri "
                 "taşınır; düğüm gerilimleri değişmez, o düğüm ortadan kalkar")
     s1.note("Yeni elemanlara Ra, Ia, Ea (Δ–Y'de Ry, Rd) gibi adlar, dönüşümle oluşan ara düğümlere x1, x2, … (Y düğümleri Y1, Y2, …) adı verilir. "
-            "Terminaller (Düğüm " + a + " ve Düğüm " + b + ") hiçbir adımda ortadan kaldırılmaz.")
+            "Terminaller (" + node_name(a) + " ve " + node_name(b) + ") hiçbir adımda ortadan kaldırılmaz.")
 
     # ── Bölüm 2: adımlar ──
     s2 = _Section("Kaynak Dönüşümü — Adım Adım")
@@ -763,7 +780,7 @@ def build_source_transform(ctx) -> Tuple[Optional[list], str]:
         s2.text(f"Terminaller arasında artık bir akım kaynağı ve ona paralel bir direnç (Norton biçimi) var. "
                 f"Gerilim kaynağına dönüştürürsek: E = {src.name}·{res.name}.")
         s2.math(f"E = {src.name}·{res.name} = {eng(src.val, 'A')} · {eng(res.val, 'Ω')} = "
-                f"{eng(src.val * res.val, 'V')}  (+ ucu Düğüm {toward} tarafında)")
+                f"{eng(src.val * res.val, 'V')}  (+ ucu {node_name(toward)} tarafında)")
     else:
         s2.text("Terminaller arasında tek bir gerilim kaynağı ve ona seri tek bir direnç kaldı "
                 "(Thevenin biçimi); sadeleştirme tamamdır.")
@@ -772,13 +789,13 @@ def build_source_transform(ctx) -> Tuple[Optional[list], str]:
     s3 = _Section("Kaynak Dönüşümü — Sonuç")
     sign_note = ""
     if fin.e_th < 0:
-        sign_note = f" (eksi: Düğüm {b}, Düğüm {ek(a, 'den')} daha yüksek potansiyelde)"
-    s3.result(f"Vth = V_AB = {node_v(a)} {MINUS} {node_v(b)} = {eng(fin.e_th, 'V')}{sign_note}")
+        sign_note = f" (eksi: {node_name(b)}, {node_ek(a, 'den')} daha yüksek potansiyelde)"
+    s3.result(f"Vth = V({node_name(a)}) {MINUS} V({node_name(b)}) = {eng(fin.e_th, 'V')}{sign_note}")
     s3.result(f"Rth = {eng(fin.r_th, 'Ω')}")
     if fin.r_th > 1e-12:
         i_n = fin.e_th / fin.r_th
         s3.math(f"In = Vth / Rth = {eng(fin.e_th, 'V')} / {eng(fin.r_th, 'Ω')} = {eng(i_n, 'A')}")
         s3.text("Thevenin eşdeğeri: Vth kaynağı ile seri Rth. Norton eşdeğeri: In akım kaynağı ile "
                 "paralel Rth (In = Vth / Rth).")
-    s3.check(f"Çözücünün Thevenin sonucuyla aynı: Vth = {eng(vth.real, 'V')}, Rth = {eng(zth.real, 'Ω')} ✓")
+    s3.check(f"Doğrudan Thevenin hesabıyla aynı sonuç: Vth = {eng(vth.real, 'V')}, Rth = {eng(zth.real, 'Ω')} ✓")
     return [s1, s2, s3], ""

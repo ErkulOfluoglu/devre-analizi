@@ -124,7 +124,7 @@ def test_power_220v_50hz_100_plus_j100_and_compensation_095():
     assert "V·I·cos φ" in ucgen_txt
     assert "V·I·sin φ" in ucgen_txt
     assert "S = V·I" in ucgen_txt
-    assert "geri (endüktif)" in ucgen_txt
+    assert "geri, endüktif" in ucgen_txt
 
     kontrol_txt = _section_text(data, "Kontrol")
     assert "✓" in kontrol_txt

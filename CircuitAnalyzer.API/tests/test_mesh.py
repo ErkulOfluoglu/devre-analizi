@@ -256,7 +256,7 @@ def test_mesh_narrative_ladder(solve):
     assert any("Çevre 1: R1·I₁ + R2·(I₁ − I₂) = V1" in t for t in texts)
     assert any("Δ = 3·4 − (−2)·(−2) = 8" in t for t in texts)
     assert any("I₁ = Δ₁/Δ = 48 / 8 = 6 mA" in t for t in texts)
-    assert any("I_R2 = I₁ − I₂ = 6 mA − 3 mA = 3 mA  (Düğüm 2 → Düğüm 0)" in t for t in texts)
+    assert any("I_R2 = I₁ − I₂ = 6 mA − 3 mA = 3 mA  (Düğüm 2 → GND)" in t for t in texts)
 
     # results.meshes dökümü
     assert len(res.meshes) == 2
@@ -299,7 +299,7 @@ def test_mesh_narrative_current_source_outer_branch(solve):
     kvl_texts = [b.text for b in kvl_sec.blocks]
     assert any("bu çevrenin akımı doğrudan kaynağın akımıdır" in t for t in kvl_texts)
     # Eksi işaretin sebebi: kaynak 0 → 3, çevre kaynaktan 3 → 0 geçiyor
-    assert any("Düğüm 0 → Düğüm 3 yönündedir" in t and "Düğüm 3 → Düğüm 0 yönünde" in t
+    assert any("GND → Düğüm 3 yönündedir" in t and "Düğüm 3 → GND yönünde" in t
                and "Yönler ters" in t for t in kvl_texts)
     assert "I₂ = −2 mA" in kvl_texts
     assert any("Eksi işaret, Çevre 2 akımının" in t for t in kvl_texts)

@@ -19,7 +19,7 @@ import math
 from typing import List
 
 from explainer.cramer import cramer2, exact_fmt
-from explainer.formatting import MINUS, eng, is_real, node_v, num, paren, polar, rect
+from explainer.formatting import MINUS, eng, is_real, node_name, node_v, num, paren, polar, rect
 from explainer.narrative import _Section
 from models.request import AnalysisType
 from parser.netlist_parser import (
@@ -85,7 +85,7 @@ def _equivalent_section(ctx, an: TransformerAnalysis, requested_type) -> List[_S
         vth = complex(th.vth.real, th.vth.imaginary)
         zth = complex(th.zth.real, th.zth.imaginary)
         s = _Section("Thevenin Eşdeğeri")
-        s.text(f"Düğüm {a} (+) ile Düğüm {b} (−) terminallerinden bakılan Thevenin eşdeğerini buluruz. "
+        s.text(f"{node_name(a)} (+) ile {node_name(b)} (−) terminallerinden bakılan Thevenin eşdeğerini buluruz. "
                "Transformatör devrenin bir parçası olarak hesaba katılır.")
         s.text("Vth: terminallere dışarıdan yük bağlı değilken (açık devre) terminaller arasındaki gerilimdir.")
         va, vb = complex(ctx.v.get(a, 0j)), complex(ctx.v.get(b, 0j))
@@ -103,7 +103,7 @@ def _equivalent_section(ctx, an: TransformerAnalysis, requested_type) -> List[_S
     if requested_type == AnalysisType.NORTON and no is not None:
         i_n = complex(no.i_n.real, no.i_n.imaginary)
         s = _Section("Norton Eşdeğeri")
-        s.text(f"Düğüm {a} (+) ile Düğüm {b} (−) terminallerinden bakılan Norton eşdeğerini buluruz. "
+        s.text(f"{node_name(a)} (+) ile {node_name(b)} (−) terminallerinden bakılan Norton eşdeğerini buluruz. "
                "Transformatör devrenin bir parçası olarak hesaba katılır.")
         s.text("In: terminaller bir telle kısa devre edildiğinde telden (+) uçtan (−) uca akan akımdır.")
         s.math(f"In = I_kısa devre = {_c(i_n, 'A')}")
@@ -121,8 +121,8 @@ def _equivalent_section(ctx, an: TransformerAnalysis, requested_type) -> List[_S
 
 def describe_transformer(t) -> str:
     p = t.params
-    ends = (f"primer Düğüm {t.node_positive} (p+, nokta) – Düğüm {t.node_negative} (p−), "
-            f"sekonder Düğüm {p['s_pos']} (s+, nokta) – Düğüm {p['s_neg']} (s−)")
+    ends = (f"primer {node_name(t.node_positive)} (p+, nokta) – {node_name(t.node_negative)} (p−), "
+            f"sekonder {node_name(p['s_pos'])} (s+, nokta) – {node_name(p['s_neg'])} (s−)")
     if p["kind"] == "IDEAL":
         return (f"{t.id}: ideal transformatör, dönüştürme oranı a = N₂/N₁ = {num(p['a'])}; "
                 f"{ends}")
@@ -252,7 +252,14 @@ def _impedance_section(ctx, an: TransformerAnalysis) -> List[_Section]:
             unit = "A" if e.element_type in CURRENT_SOURCES else "V"
             vs = source_phasor(e)
             s.math(f"{e.id} = {polar(vs, unit, scaled=False)} = {rect(vs, unit)}")
-    s.note("Kondansatörün empedansı −j yönünde (kapasitif), bobininki +j yönündedir (endüktif).")
+    has_c = any(e.element_type == ElementType.CAPACITOR for e in elems)
+    has_l = any(e.element_type == ElementType.INDUCTOR for e in elems)
+    if has_c and has_l:
+        s.note("Kondansatörün empedansı −j yönünde (kapasitif), bobininki +j yönündedir (endüktif).")
+    elif has_c:
+        s.note("Kondansatörün empedansı −j yönündedir (kapasitif).")
+    elif has_l:
+        s.note("Bobinin empedansı +j yönündedir (endüktif).")
     return [s]
 
 
@@ -289,7 +296,7 @@ def _ideal_sections(ctx, an: TransformerAnalysis) -> List[_Section]:
     # ── Yansıyan Empedans ──
     s = _Section("Yansıyan Empedans")
     sec_ids = ", ".join(passive_label(e) for e in an.secondary)
-    s.text(f"Sekonder uçlarına (Düğüm {t.params['s_pos']} – Düğüm {t.params['s_neg']}) bağlı yük "
+    s.text(f"Sekonder uçlarına ({node_name(t.params['s_pos'])} – {node_name(t.params['s_neg'])}) bağlı yük "
            f"({sec_ids}) tek bir empedans olarak görülür; buna Z₂ diyelim.")
     for step in an.z2_steps:
         s.math(step)
@@ -307,13 +314,13 @@ def _ideal_sections(ctx, an: TransformerAnalysis) -> List[_Section]:
            "elemanlar ve Z₁ kalır.")
     for step in an.top_steps:
         s.math(step)
+    sign = "" if an.sigma == 1 else MINUS
     if an.top_steps:
         s.math(f"Z_top = {z_text(an.z_top)}")
+        s.math(f"I₁ = {sign}V / Z_top = {sign}{_cn(an.v_s)} V / {_zeq(an.z_top)} = {_c(an.i1, 'A')}")
     else:
         s.text("Primerde başka eleman yok: kaynak doğrudan Z₁'e bağlanır.")
-        s.math(f"Z_top = Z₁ = {z_text(an.z_top)}")
-    sign = "" if an.sigma == 1 else MINUS
-    s.math(f"I₁ = {sign}V / Z_top = {sign}{_cn(an.v_s)} V / {_zeq(an.z_top)} = {_c(an.i1, 'A')}")
+        s.math(f"I₁ = {sign}V / Z₁ = {sign}{_cn(an.v_s)} V / {_zeq(an.z1)} = {_c(an.i1, 'A')}")
     s.result(f"I₁ = {_c(an.i1, 'A')}")
     if (abs(an.z_ser) > 1e-12 and an.z_ser.real > 0 and abs(an.z_ser.imag) < 1e-9 * abs(an.z_ser)
             and abs(an.z2.imag) < 1e-9 * abs(an.z2) and an.z2.real > 0):

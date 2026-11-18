@@ -151,73 +151,83 @@ Yalnızca yöntemi, hangi denklemin nasıl kurulacağını ve bir sonraki adım�
 Bilinmeyen sayısını doğru söyle: düğüm yönteminde kaynaktan bilinmeyen her düğüm bir bilinmeyendir ve her biri için ayrı bir KCL denklemi gerekir."""
 
 
+MAX_ID_CHARS = 24
+
+
+def _eid(eid: str) -> str:
+    s = str(eid)
+    return s if len(s) <= MAX_ID_CHARS else s[:MAX_ID_CHARS] + "…"
+
+
 def _node(n: str) -> str:
     return "GND" if n == "0" else f"Düğüm {n}"
 
 
 def describe_element(e: ParsedElement, value_basis: str = "PEAK") -> str:
     t = e.element_type
+    eid = _eid(e.id)
     between = f"{_node(e.node_positive)} – {_node(e.node_negative)}"
     p = e.params
     basis_label = "etkin (RMS)" if value_basis == "RMS" else "tepe"
     if t == ElementType.RESISTOR:
-        return f"{e.id}: direnç {eng(e.value, 'Ω')}, {between}"
+        return f"{eid}: direnç {eng(e.value, 'Ω')}, {between}"
     if t == ElementType.CAPACITOR:
-        return f"{e.id}: kondansatör {eng(e.value, 'F')}, {between}"
+        return f"{eid}: kondansatör {eng(e.value, 'F')}, {between}"
     if t == ElementType.INDUCTOR:
-        return f"{e.id}: bobin {eng(e.value, 'H')}, {between}"
+        return f"{eid}: bobin {eng(e.value, 'H')}, {between}"
     if t == ElementType.IMPEDANCE:
         z = complex(p.get("impedance", e.value))
-        return f"{e.id}: empedans {num(z.real)} {'+' if z.imag >= 0 else '−'} j{num(abs(z.imag))} Ω, {between}"
+        return f"{eid}: empedans {num(z.real)} {'+' if z.imag >= 0 else '−'} j{num(abs(z.imag))} Ω, {between}"
     if t == ElementType.DC_SOURCE:
-        return f"{e.id}: DC gerilim kaynağı {eng(e.value, 'V')}, (+) ucu {_node(e.node_positive)}, (−) ucu {_node(e.node_negative)}"
+        return f"{eid}: DC gerilim kaynağı {eng(e.value, 'V')}, (+) ucu {_node(e.node_positive)}, (−) ucu {_node(e.node_negative)}"
     if t in (ElementType.AC_SOURCE_SINE, ElementType.AC_SOURCE_PHASOR):
         amp = p.get("amplitude", e.value)
         freq = p.get("frequency")
         f_txt = f", f = {num(freq)} Hz" if freq else ""
-        return (f"{e.id}: AC gerilim kaynağı, genlik ({basis_label}) {eng(amp, 'V')}, faz {num(p.get('phase', 0))}°{f_txt}, "
+        return (f"{eid}: AC gerilim kaynağı, genlik ({basis_label}) {eng(amp, 'V')}, faz {num(p.get('phase', 0))}°{f_txt}, "
                 f"(+) ucu {_node(e.node_positive)}, (−) ucu {_node(e.node_negative)}")
     if t == ElementType.CURRENT_DC:
-        return (f"{e.id}: DC akım kaynağı {eng(e.value, 'A')}, akım kaynak içinde "
+        return (f"{eid}: DC akım kaynağı {eng(e.value, 'A')}, akım kaynak içinde "
                 f"{_node(e.node_positive)} → {_node(e.node_negative)} yönünde")
     if t in (ElementType.CURRENT_AC_SINE, ElementType.CURRENT_AC_PHASOR):
         amp = p.get("amplitude", e.value)
         freq = p.get("frequency")
         f_txt = f", f = {num(freq)} Hz" if freq else ""
-        return (f"{e.id}: AC akım kaynağı, genlik ({basis_label}) {eng(amp, 'A')}, faz {num(p.get('phase', 0))}°{f_txt}, "
+        return (f"{eid}: AC akım kaynağı, genlik ({basis_label}) {eng(amp, 'A')}, faz {num(p.get('phase', 0))}°{f_txt}, "
                 f"akım kaynak içinde {_node(e.node_positive)} → {_node(e.node_negative)} yönünde")
     if t == ElementType.TRANSFORMER:
         ends = (f"primer {_node(e.node_positive)} (p+, nokta) – {_node(e.node_negative)} (p−), "
                 f"sekonder {_node(p['s_pos'])} (s+, nokta) – {_node(p['s_neg'])} (s−)")
         if p["kind"] == "IDEAL":
-            return f"{e.id}: ideal transformatör, a = N₂/N₁ = {num(p['a'])}; {ends}"
-        return (f"{e.id}: kuplajlı transformatör, L₁ = {eng(p['l1'], 'H')}, L₂ = {eng(p['l2'], 'H')}, "
+            return f"{eid}: ideal transformatör, a = N₂/N₁ = {num(p['a'])}; {ends}"
+        return (f"{eid}: kuplajlı transformatör, L₁ = {eng(p['l1'], 'H')}, L₂ = {eng(p['l2'], 'H')}, "
                 f"k = {num(p['k'])}, M = {eng(p['m'], 'H')}; {ends}")
     if t == ElementType.THREE_PHASE_SOURCE:
         conn = "yıldız (Y)" if p["connection"] == "Y" else "üçgen (Δ)"
         kind = "hat" if p["value_kind"] == "LINE" else "faz"
-        return (f"{e.id}: üç fazlı kaynak, {conn}, {kind} gerilimi {eng(p['amplitude'], 'V')} ({basis_label}), "
+        return (f"{eid}: üç fazlı kaynak, {conn}, {kind} gerilimi {eng(p['amplitude'], 'V')} ({basis_label}), "
                 f"f = {num(p['frequency'])} Hz, faz sırası {p['sequence']}; uçlar R {_node(e.node_positive)}, "
                 f"S {_node(e.node_negative)}, T {_node(p['t_node'])}, N {_node(p['n_node'])}")
     if t == ElementType.THREE_PHASE_LOAD:
         conn = "yıldız (Y)" if p["connection"] == "Y" else "üçgen (Δ)"
         zs = ", ".join(f"{k} = {rect(z, 'Ω')}" for k, z in zip(
             ("Z_R", "Z_S", "Z_T") if p["connection"] == "Y" else ("Z_RS", "Z_ST", "Z_TR"), p["z"]))
-        return (f"{e.id}: üç fazlı yük, {conn}, {zs}; uçlar R {_node(e.node_positive)}, "
+        return (f"{eid}: üç fazlı yük, {conn}, {zs}; uçlar R {_node(e.node_positive)}, "
                 f"S {_node(e.node_negative)}, T {_node(p['t_node'])}, N {_node(p['n_node'])}")
     if t == ElementType.WATTMETER:
-        return (f"{e.id}: wattmetre, akım bobini {_node(e.node_positive)} → {_node(e.node_negative)}, "
+        return (f"{eid}: wattmetre, akım bobini {_node(e.node_positive)} → {_node(e.node_negative)}, "
                 f"gerilim bobini {_node(p['v_pos'])} – {_node(p['v_neg'])}")
     if t == ElementType.SWITCH:
         kind = p.get("kind")
         if kind == "SPDT":
-            return (f"{e.id}: iki konumlu anahtar, ortak uç {_node(p['common'])}; t < 0'da "
+            return (f"{eid}: iki konumlu anahtar, ortak uç {_node(p['common'])}; t < 0'da "
                     f"{_node(p['pos1'])} ile, t = 0'da {_node(p['pos2'])} ile bağlanır")
         what = "t < 0'da açık, t = 0'da kapanır" if kind == "NO" else "t < 0'da kapalı, t = 0'da açılır"
-        return f"{e.id}: anahtar, {between}; {what}"
+        return f"{eid}: anahtar, {between}; {what}"
     if t in DEPENDENT_SOURCES:
         # Ters kontrolde eksi yazılmaz; V_R2 / I_R2 ekrandaki işaretlere göre tanımlanır
-        ctrl = f"{p['control_kind']}_{p['control_id']}"
+        ctrl_id = _eid(p['control_id'])
+        ctrl = f"{p['control_kind']}_{ctrl_id}"
         if p["control_sign"] < 0:
             ctrl += (" (ölçüm yönü kontrol elemanının ters yönünde: + ucu onun n− ucu)"
                      if p["control_kind"] == "V" else
@@ -227,9 +237,9 @@ def describe_element(e: ParsedElement, value_basis: str = "PEAK") -> str:
                 if t in DEPENDENT_VOLTAGE_OUTPUT else
                 f"akım kaynağı, akım kaynak içinde {_node(e.node_positive)} → "
                 f"{_node(e.node_negative)} yönünde")
-        return (f"{e.id}: {DEPENDENT_NAMES[t].lower()} ({what}); {e.id} = {num(p['gain'])}·{ctrl}, "
-                f"kontrol elemanı {p['control_id']}")
-    return f"{e.id}: {between}"
+        return (f"{eid}: {DEPENDENT_NAMES[t].lower()} ({what}); {eid} = {num(p['gain'])}·{ctrl}, "
+                f"kontrol elemanı {ctrl_id}")
+    return f"{eid}: {between}"
 
 
 def circuit_text(parsed: ParsedCircuit, is_dc: bool, frequency: Optional[float]) -> str:
@@ -283,20 +293,21 @@ def current_directions_text(parsed: ParsedCircuit, results: AnalysisResults, is_
         ec = results.element_currents.get(e.id)
         if ec is None:
             continue
+        eid = _eid(e.id)
         p, n = _node(e.node_positive), _node(e.node_negative)
         v = ec.value
         if is_dc or isinstance(v, (int, float)):
             i = v if isinstance(v, (int, float)) else v.real
             if abs(i) < 1e-15:
-                lines.append(f"- I_{e.id} = 0: bu elemandan akım geçmiyor.")
+                lines.append(f"- I_{eid} = 0: bu elemandan akım geçmiyor.")
             elif i > 0:
-                lines.append(f"- I_{e.id} = {eng(i, 'A')} (referans {p} → {n}): pozitif, akım eleman "
+                lines.append(f"- I_{eid} = {eng(i, 'A')} (referans {p} → {n}): pozitif, akım eleman "
                              f"içinden {p} → {n} yönünde akar.")
             else:
-                lines.append(f"- I_{e.id} = {eng(i, 'A')} (referans {p} → {n}): EKSİ, yani akım gerçekte "
+                lines.append(f"- I_{eid} = {eng(i, 'A')} (referans {p} → {n}): EKSİ, yani akım gerçekte "
                              f"eleman içinden {n} → {p} yönünde {eng(-i, 'A')} olarak akar.")
         else:
-            lines.append(f"- I_{e.id} = {polar(complex(v.real, v.imaginary), 'A')} "
+            lines.append(f"- I_{eid} = {polar(complex(v.real, v.imaginary), 'A')} "
                          f"(fazör, referans {p} → {n}).")
 
         if (e.element_type in VOLTAGE_SOURCES
@@ -306,13 +317,13 @@ def current_directions_text(parsed: ParsedCircuit, results: AnalysisResults, is_
                 sign_text = ("akımı eksi çıkar" if is_dc else
                              "akım fazörü ile kaynak gerilimi arasındaki açı 90°'den büyüktür "
                              "(cos φ < 0, P < 0)")
-                lines.append(f"  {e.id} devreye güç VERİYOR (P = {eng(-ap, 'W')}): gerçek akım kaynağın "
+                lines.append(f"  {eid} devreye güç VERİYOR (P = {eng(-ap, 'W')}): gerçek akım kaynağın "
                              f"içinden (−) uçtan (+) uca akar ve dış devreye (+) ucundan ({p}) çıkar. "
                              f"Referans yön (+) → (−) olduğu için {sign_text}.")
             elif ap > 1e-15:
-                lines.append(f"  {e.id} güç ALIYOR (P = {eng(ap, 'W')}): akım kaynağa (+) ucundan girer.")
+                lines.append(f"  {eid} güç ALIYOR (P = {eng(ap, 'W')}): akım kaynağa (+) ucundan girer.")
         elif e.element_type in CURRENT_SOURCES or e.element_type in DEPENDENT_CURRENT_OUTPUT:
-            lines.append(f"  {e.id} bir akım kaynağıdır: tanımı gereği akımı kaynak içinden {p} → {n} "
+            lines.append(f"  {eid} bir akım kaynağıdır: tanımı gereği akımı kaynak içinden {p} → {n} "
                          f"yönündedir, dış devreye {n} ucundan çıkar.")
     return "\n".join(lines)
 

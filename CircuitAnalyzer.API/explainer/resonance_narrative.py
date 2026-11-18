@@ -14,7 +14,7 @@ Gerilim sembolü V'dir; kitaplardaki U gösterimi bir notla belirtilir.
 import math
 from typing import List
 
-from explainer.formatting import MINUS, eng, num, ek
+from explainer.formatting import MINUS, eng, node_ek, node_name, num
 from explainer.narrative import _Section, _intro
 
 U_NOTE = "Kitaplarda gerilim U ile de gösterilir (U = V)."
@@ -56,7 +56,7 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
     elif tank:
         s.text(
             f"Bu devrede {src_id} gerilim kaynağına seri bağlı {', '.join(r_ids)} direnci ve "
-            f"Düğüm {a.x_node} ile Düğüm {a.b_node} arasında paralel bağlı {l_id} ve {c_id} var "
+            f"{node_name(a.x_node)} ile {node_name(a.b_node)} arasında paralel bağlı {l_id} ve {c_id} var "
             "(seri R + paralel LC)."
         )
         if len(r_ids) > 1:
@@ -121,7 +121,7 @@ def build_resonance_sections(ctx, a) -> List[_Section]:
         s.math("Kaynak akımı: I = 0   (R üzerindeki gerilim V_R = I · R = 0)")
         s.math(f"V_x = V {MINUS} V_R = V = {eng(a.v0, 'V')}")
         s.text(f"Yani rezonansta kaynaktan görülen empedans sonsuza gider (kaynak akımı 0); "
-               f"Düğüm {ek(a.x_node, 'de')}ki V_x gerilimi kaynak gerilimine eşit olur. Aşağıdaki grafikte "
+               f"{node_ek(a.x_node, 'de')}ki V_x gerilimi kaynak gerilimine eşit olur. Aşağıdaki grafikte "
                "ise dönüştürülmüş devrenin empedansı |R‖Z_L‖Z_C| gösterilir; tepe değeri R'dir.")
     elif series:
         s = _Section("Rezonansta Empedans ve Akım")

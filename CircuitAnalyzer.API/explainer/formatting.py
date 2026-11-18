@@ -152,6 +152,27 @@ def node_v(node: str) -> str:
     return f"V{node.translate(_SUBSCRIPTS)}" if node.isdigit() else f"V_{node}"
 
 
+def node_name(node: str) -> str:
+    """Öğrenci metninde düğüm adı: '0' → 'GND', diğerleri → 'Düğüm N'."""
+    return "GND" if str(node) == "0" else f"Düğüm {node}"
+
+
+def node_ek(node: str, kind: str) -> str:
+    """Düğüm adına Türkçe hâl eki: '0', 'e' → 'GND'ye'; '3', 'e' → 'Düğüm 3'e'."""
+    return ek(node_name(node), kind)
+
+
+def node_pair(a: str, b: str) -> str:
+    """İki düğüm arası: '2', '3' → 'Düğüm 2–3'; '2', '0' → 'Düğüm 2–GND'; '0', 'Y1' → 'GND–Y1'."""
+    a, b = str(a), str(b)
+    if a == "0":
+        # Sayı tek başına anlaşılmaz ("GND–2"), Y1 / x1 gibi adlar anlaşılır
+        return f"GND–{node_name(b) if b.isdigit() else b}"
+    if b == "0":
+        return f"{node_name(a)}–GND"
+    return f"Düğüm {a}–{b}"
+
+
 def sub(text: str) -> str:
     """Rakamları alt simgeye çevirir: '12' → '₁₂'."""
     return text.translate(_SUBSCRIPTS)

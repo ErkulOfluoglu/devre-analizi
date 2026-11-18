@@ -189,11 +189,11 @@ def test_y_to_delta_star_node_conversion():
     ) in yd.formula
     assert (
         "Rd2 = (R1·R2 + R2·R3 + R3·R1)/R1 = "
-        "(20·30 + 30·60 + 60·20)/20 = 180 Ω (Düğüm 2–0)"
+        "(20·30 + 30·60 + 60·20)/20 = 180 Ω (Düğüm 2–GND)"
     ) in yd.formula
     assert (
         "Rd3 = (R1·R2 + R2·R3 + R3·R1)/R2 = "
-        "(20·30 + 30·60 + 60·20)/30 = 120 Ω (Düğüm 1–0)"
+        "(20·30 + 30·60 + 60·20)/30 = 120 Ω (Düğüm 1–GND)"
     ) in yd.formula
     assert len(rem) == 3
 

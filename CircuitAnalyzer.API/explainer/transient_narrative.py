@@ -50,15 +50,15 @@ def _switch_lines(a: TransientAnalysis) -> List[str]:
     for sw in a.switches:
         kind = sw.params.get("kind")
         if kind == "NO":
-            out.append(f"{sw.id}: Düğüm {sw.node_positive} ile Düğüm {sw.node_negative} arasında; "
+            out.append(f"{sw.id}: {_node(sw.node_positive)} ile {_node(sw.node_negative)} arasında; "
                        "t < 0'da AÇIK, t = 0'da KAPANIR.")
         elif kind == "NC":
-            out.append(f"{sw.id}: Düğüm {sw.node_positive} ile Düğüm {sw.node_negative} arasında; "
+            out.append(f"{sw.id}: {_node(sw.node_positive)} ile {_node(sw.node_negative)} arasında; "
                        "t < 0'da KAPALI, t = 0'da AÇILIR.")
         else:
             c, p1, p2 = sw.params["common"], sw.params["pos1"], sw.params["pos2"]
-            out.append(f"{sw.id}: iki konumlu anahtar; ortak uç Düğüm {c}. t < 0'da Düğüm {p1} "
-                       f"(konum 1) ile bağlı, t = 0'da Düğüm {p2} (konum 2) ile bağlanır.")
+            out.append(f"{sw.id}: iki konumlu anahtar; ortak uç {_node(c)}. t < 0'da {_node(p1)} "
+                       f"(konum 1) ile bağlı, t = 0'da {_node(p2)} (konum 2) ile bağlanır.")
     return out
 
 
@@ -70,7 +70,7 @@ def _state_lines(a: TransientAnalysis, when: str) -> List[str]:
         if kind == "SPDT":
             tgt = sw.params["pos1"] if when == "before" else sw.params["pos2"]
             pos = 1 if when == "before" else 2
-            out.append(f"{sw.id}: konum {pos} (Düğüm {sw.params['common']} – Düğüm {tgt} bağlı)")
+            out.append(f"{sw.id}: konum {pos} ({_node(sw.params['common'])} – {_node(tgt)} bağlı)")
         else:
             closed = (kind == "NC") if when == "before" else (kind == "NO")
             out.append(f"{sw.id}: {'kapalı (tel gibi)' if closed else 'açık (devreden çıkar)'}")
@@ -89,8 +89,8 @@ def _merge_lines(a: TransientAnalysis, when: str) -> List[str]:
     for old, new in renamed.items():
         if old != new:
             groups.setdefault(new, []).append(old)
-    return [f"Kapalı anahtar tel gibidir: Düğüm {', '.join(sorted(olds))} ile Düğüm {new} aynı "
-            f"düğümdür (aşağıda Düğüm {new} diye anılır)." for new, olds in sorted(groups.items())]
+    return [f"Kapalı anahtar tel gibidir: {', '.join(_node(o) for o in sorted(olds))} ile {_node(new)} aynı "
+            f"düğümdür (aşağıda {_node(new)} diye anılır)." for new, olds in sorted(groups.items())]
 
 
 def _dc_listing(s: _Section, circuit: ParsedCircuit, dc: DcSolution, skip_id: Optional[str]) -> None:
@@ -286,8 +286,11 @@ def build_transient_explanation(a: TransientAnalysis) -> List[ExplanationSection
     s.math(f"x(t) = x(∞) + [x(0) {MINUS} x(∞)] · e^({MINUS}t/τ)")
     x0, xf = a.x_start, a.x_final
     s.math(f"{x_lbl}(t) = {_x(a, xf)} + [{_x(a, x0)} {MINUS} {paren(_x(a, xf))}] · e^({MINUS}t/τ),   τ = {tau_txt}")
+    diff = x0 - xf
+    exp_term = (f"{MINUS} {_x(a, -diff)}·e^({MINUS}t/τ)" if diff < 0
+                else f"+ ({_x(a, diff)}) · e^({MINUS}t/τ)")
     if abs(xf) > 1e-12 and abs(x0) > 1e-12:
-        s.math(f"{x_lbl}(t) = {_x(a, xf)} + ({_x(a, x0 - xf)}) · e^({MINUS}t/τ)")
+        s.math(f"{x_lbl}(t) = {_x(a, xf)} {exp_term}")
     if abs(x0) < 1e-12 and abs(xf) > 1e-12:
         if is_c:
             s.text("Kondansatör boştan doluyor (V_C(0) = 0). Kitaplardaki kısa biçim:")
@@ -305,25 +308,35 @@ def build_transient_explanation(a: TransientAnalysis) -> List[ExplanationSection
             s.math(f"{x_lbl}(t) = I₀ · e^({MINUS}t/τ)   →   I₀ = {_x(a, x0)}")
         s.result(f"{x_lbl}(t) = {_x(a, x0)} · e^({MINUS}t/τ),   τ = {tau_txt}")
     else:
-        s.result(f"{x_lbl}(t) = {_x(a, xf)} + ({_x(a, x0 - xf)}) · e^({MINUS}t/τ),   τ = {tau_txt}")
+        s.result(f"{x_lbl}(t) = {_x(a, xf)} {exp_term},   τ = {tau_txt}")
 
     # Diğer büyüklük (C akımı / L gerilimi): t = 0'da sıçrayabilir, son değeri sıfır
     o_unit = "A" if is_c else "V"
     o0 = a.other_start
     if is_c:
-        s.text(f"Kondansatör akımı {o_lbl} (n1 → n2 yönünde; {sid}: Düğüm {a.storage.node_positive} → "
-               f"Düğüm {a.storage.node_negative}). t = 0⁺ anındaki değeri, kondansatörün gördüğü "
+        s.text(f"Kondansatör akımı {o_lbl} (n1 → n2 yönünde; {sid}: {_node(a.storage.node_positive)} → "
+               f"{_node(a.storage.node_negative)}). t = 0⁺ anındaki değeri, kondansatörün gördüğü "
                "Thevenin eşdeğeriyle (V_C(∞) kaynağı ve R_th direnci) bulunur: akım = gerilim farkı / R_th.")
         s.math(f"{o_lbl}(0⁺) = ({x_lbl}(∞) {MINUS} {x_lbl}(0⁺)) / R_th = "
                f"({_x(a, xf)} {MINUS} {paren(_x(a, x0))}) / {eng(a.r_th, 'Ω')} = {eng(o0, 'A')}")
     else:
-        s.text(f"Bobin gerilimi {o_lbl} (n1 − n2; {sid}: Düğüm {a.storage.node_positive} → "
-               f"Düğüm {a.storage.node_negative}). t = 0⁺ anındaki değeri, bobinin gördüğü R_th "
+        s.text(f"Bobin gerilimi {o_lbl} (n1 − n2; {sid}: {_node(a.storage.node_positive)} → "
+               f"{_node(a.storage.node_negative)}). t = 0⁺ anındaki değeri, bobinin gördüğü R_th "
                "üzerindeki gerilim farkıdır:")
         s.math(f"{o_lbl}(0⁺) = ({x_lbl}(∞) {MINUS} {x_lbl}(0⁺)) · R_th = "
                f"({_x(a, xf)} {MINUS} {paren(_x(a, x0))}) · {eng(a.r_th, 'Ω')} = {eng(o0, 'V')}")
     s.math(f"{o_lbl}(t) = {eng(o0, o_unit)} · e^({MINUS}t/τ)   (son değeri 0)")
-    if o0 < -1e-15 and is_c:
+    opposite_signs = abs(x0) > 1e-12 and abs(xf) > 1e-12 and (x0 > 0) != (xf > 0)
+    if opposite_signs:
+        what_q = "Kondansatör gerilimi" if is_c else "Bobin akımı"
+        if o0 < -1e-15 and is_c:
+            s.note("Başlangıç ve son değer zıt işaretlidir: kondansatör gerilimi önce sıfıra düşer, "
+                   "ardından ters yönde yükselir; akımın eksi çıkması bu süreçte akımın seçilen "
+                   "yönün tersine aktığını gösterir.")
+        else:
+            s.note(f"Başlangıç ve son değer zıt işaretlidir: {what_q.lower()} önce sıfıra düşer, "
+                   "ardından ters yönde son değerine yükselir.")
+    elif o0 < -1e-15 and is_c:
         durum = "deşarj olurken" if abs(x0) > abs(xf) else "ters yönde dolarken"
         s.note(f"Akımın eksi çıkması, kondansatör {durum} akımın seçilen yönün tersine "
                "aktığını gösterir.")

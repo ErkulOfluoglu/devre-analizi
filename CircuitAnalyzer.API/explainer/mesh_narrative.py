@@ -726,8 +726,10 @@ def build_mesh_sections(ctx: _Ctx, ma: MeshAnalysis) -> List[_Section]:
         s.note(note)
     for m in ma.meshes:
         names = ", ".join(e.id for e, _ in m.elements)
-        path = " → ".join(m.nodes)
-        s.math(f"Çevre {m.index} ({mesh_symbol(m.index)}): Düğüm {path}  —  {names}")
+        path = " → ".join("GND" if n == "0" else n for n in m.nodes)
+        # "Düğüm GND → 1 → …" olmasın: yol GND'den başlıyorsa "Düğüm" sözcüğü yazılmaz
+        prefix = "" if m.nodes and str(m.nodes[0]) == "0" else "Düğüm "
+        s.math(f"Çevre {m.index} ({mesh_symbol(m.index)}): {prefix}{path}  —  {names}")
     if ma.clockwise:
         s.note("Tüm çevre akımları saat yönünde seçildi. İki çevrenin ortak "
                "elemanından iki çevre akımı ters yönde geçer.")

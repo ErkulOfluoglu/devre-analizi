@@ -51,7 +51,7 @@ def test_isc_route_shows_shorted_circuit_equations():
     """
     secs = _sections(G_CIRCUIT)
     sec = _step(secs, "2. Adım")
-    assert any("Düğüm 3 ile Düğüm 0 aynı gerilimde olur (V₃ = V₀)" in t for t in sec)
+    assert any("Düğüm 3 ile GND aynı gerilimde olur (V₃ = V₀)" in t for t in sec)
     assert "V₃ = V₀ = 0 V" in sec
     assert "V_R2 = V₂ − V₀ = V₂" in sec
     assert "Düğüm 2: (V₂ − V₁)/R1 + V₂/R2 + (V₂ − V₃)/R3 = 0" in sec
@@ -110,7 +110,7 @@ def test_isc_route_cut_containing_ground():
       Açık devre: V₁ − V₂ = 10 − 100 = −90 V → Rth = −90 / −0,009 = 10 kΩ
     """
     sec = _step(_sections(G_CIRCUIT, ("1", "2")), "2. Adım")
-    assert any("Düğüm 0 ve 1 birlikte ele alınarak" in t for t in sec)
+    assert any("GND ve Düğüm 1 birlikte ele alınarak" in t for t in sec)
     assert f"V_R2 = V₂ {MINUS} V₀ = 10 V" in sec
     assert any(t.startswith(f"I_R1 = (V₁ {MINUS} V₂)/R1 = (10 V {MINUS} 10 V) / 1 kΩ = 0 mA")
                for t in sec)
@@ -276,7 +276,7 @@ def test_unverified_derivation_falls_back_to_old_text(monkeypatch):
 
     monkeypatch.setattr(cs, "_solve_port_extras", tampered)
     sec = _step(_sections(G_CIRCUIT), "2. Adım")
-    assert any("Devre böyle yeniden çözüldüğünde telden Düğüm 3 → Düğüm 0 yönünde geçen akım:"
+    assert any("Devre böyle yeniden çözüldüğünde telden Düğüm 3 → GND yönünde geçen akım:"
                in t for t in sec)
     assert not any(t.startswith("Isc = ") for t in sec)
     assert "Düğüm Denklemleri (KCL):" not in sec
