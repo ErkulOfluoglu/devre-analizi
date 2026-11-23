@@ -1436,9 +1436,12 @@ public partial class AnalysisPanel : UserControl
                 grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
                 string name = el.Role == "source" ? $"{el.ElementId} ⚡" : el.ElementId;
-                string pStr = EngFormat.Format(el.ActivePower, "W");
-                string qStr = EngFormat.Format(el.ReactivePower, "VAR");
-                string sStr = EngFormat.Format(el.ApparentPower, "VA");
+                // Bir satırdaki P, Q, S tek önekle ("950 W | 1,2 kVAR" yerine "0,95 kW | 1,2 kVAR")
+                var pqs = EngFormat.FormatGroup(
+                    new[] { el.ActivePower, el.ReactivePower, el.ApparentPower }, new[] { "W", "VAR", "VA" });
+                string pStr = pqs[0];
+                string qStr = pqs[1];
+                string sStr = pqs[2];
                 string pfStr;
                 if (el.PowerFactor.HasValue)
                 {

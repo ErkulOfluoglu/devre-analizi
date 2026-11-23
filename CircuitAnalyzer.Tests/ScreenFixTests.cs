@@ -279,7 +279,7 @@ public class ScreenFixTests
     {
         var r = PowerTriangleLayout.Layout(340, 180, 1000, 750, "lagging", null);
         Assert.Equal("P = 1 kW", r["P"]!.Text);
-        Assert.Equal("Q = 750 VAR", r["Q"]!.Text);
+        Assert.Equal("Q = 0,75 kVAR", r["Q"]!.Text);   // kenarlar tek önekle (S = 1,25 kVA)
         Assert.Equal("S = 1,25 kVA", r["S"]!.Text);
         Assert.Equal("φ = 36,87°", r["phi"]!.Text);
         Assert.Null(r["Q2"]);
@@ -289,7 +289,7 @@ public class ScreenFixTests
     public void PowerTriangle_LeadingQ_UsesUnicodeMinus()
     {
         var r = PowerTriangleLayout.Layout(340, 180, 1000, -750, "leading", null);
-        Assert.Equal("Q = −750 VAR", r["Q"]!.Text);
+        Assert.Equal("Q = −0,75 kVAR", r["Q"]!.Text);
     }
 
     [Fact]
@@ -303,7 +303,7 @@ public class ScreenFixTests
         Assert.Equal("S′", r["S2"]!.Text);
         Assert.Equal("φ₂", r["phi2"]!.Text);
         Assert.All(r.Labels.Where(l => l.Key is "Qc" or "Q2" or "S2" or "phi2"), l => Assert.True(l.IsCompensation));
-        Assert.Equal("Kompanzasyondan sonra (kesikli): Q′ = 328,7 VAR, S′ = 1,053 kVA, φ₂ = 18,19° (cos φ₂ = 0,95)",
+        Assert.Equal("Kompanzasyondan sonra (kesikli): Q′ = 0,3287 kVAR, S′ = 1,053 kVA, φ₂ = 18,19° (cos φ₂ = 0,95)",
                      PowerTriangleLayout.CompensationCaption(1000, 0.95));
     }
 

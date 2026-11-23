@@ -30,7 +30,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from explainer.formatting import (
-    MINUS, ek, eng, node_ek, node_name, node_v, num, paren, polar, rect, shown_digits,
+    MINUS, ek, eng, eng_group, node_ek, node_name, node_v, num, paren, polar, rect, shown_digits,
 )
 from explainer.cramer import cramer3, exact_fmt, integer_rows, is_integral_row
 from explainer.step_generator import _node_groups, _source_value
@@ -2019,12 +2019,12 @@ def _power(ctx: _Ctx) -> List[_Section]:
         if ctx.is_dc:
             if t == ElementType.RESISTOR:
                 s.math(f"P_{name} = I²·R = ({eng(i_mag, 'A')})² · {eng(e.value, 'Ω')} = {eng(ep.active_power, 'W')}")
-                absorbed_terms.append(eng(ep.active_power, 'W'))
+                absorbed_terms.append(ep.active_power)
             elif t in (ElementType.CAPACITOR, ElementType.INDUCTOR):
                 s.math(f"P_{name} = 0 (DC'de {'açık' if t == ElementType.CAPACITOR else 'kısa'} devre, güç harcamaz)")
             else:
                 s.math(f"P_{name} = {eng(ep.active_power, 'W')}")
-                absorbed_terms.append(eng(ep.active_power, 'W'))
+                absorbed_terms.append(ep.active_power)
         else:
             z = ctx.impedance(e)
             if ctx.is_rms:
@@ -2085,9 +2085,11 @@ def _power(ctx: _Ctx) -> List[_Section]:
     sup = complex(pw.total_supplied.real, pw.total_supplied.imaginary)
     absb = complex(pw.total_absorbed.real, pw.total_absorbed.imaginary)
     if ctx.is_dc:
-        terms = " + ".join(absorbed_terms) if len(absorbed_terms) > 1 else ""
-        s.check(f"Güç dengesi: kaynakların (net) verdiği {eng(sup.real, 'W')} = elemanların harcadığı "
-                f"{(terms + ' = ') if terms else ''}{eng(absb.real, 'W')} ✓"
+        # Denge satırı tek önekle yazılır ("10,27 W + 394,7 mW" yerine "10,27 W + 0,3947 W")
+        sup_txt, *term_txts, absb_txt = eng_group([sup.real, *absorbed_terms, absb.real], "W")
+        terms = " + ".join(term_txts) if len(term_txts) > 1 else ""
+        s.check(f"Güç dengesi: kaynakların (net) verdiği {sup_txt} = elemanların harcadığı "
+                f"{(terms + ' = ') if terms else ''}{absb_txt} ✓"
                 if _close(sup, absb, 1e-6) else
                 f"Güç dengesi: verilen {eng(sup.real, 'W')}, harcanan {eng(absb.real, 'W')}")
     else:

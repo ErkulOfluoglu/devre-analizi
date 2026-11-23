@@ -70,12 +70,15 @@ namespace CircuitAnalyzer.WPF.Services
                 "load" => "Yük",
                 _ => "—"
             };
+            // Bir satırdaki P, Q, S tek önekle (ekrandaki tabloyla aynı)
+            var pqs = EngFormat.FormatGroup(
+                new[] { el.ActivePower, el.ReactivePower, el.ApparentPower }, new[] { "W", "VAR", "VA" });
             return new[]
             {
                 string.IsNullOrEmpty(el.ElementId) ? key : el.ElementId,
-                UnicodeMinus(EngFormat.Format(el.ActivePower, "W")),
-                UnicodeMinus(EngFormat.Format(el.ReactivePower, "VAR")),
-                UnicodeMinus(EngFormat.Format(el.ApparentPower, "VA")),
+                UnicodeMinus(pqs[0]),
+                UnicodeMinus(pqs[1]),
+                UnicodeMinus(pqs[2]),
                 pf,
                 role
             };

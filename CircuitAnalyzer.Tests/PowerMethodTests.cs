@@ -278,7 +278,7 @@ public class PowerMethodTests
                 P = 1000, Q = 500, S = 1118.03, Pf = 0.894, PfType = "lagging", PhiDeg = 26.56
             });
             Assert.Contains("P = 1 kW", view.TxtSummary.Text);
-            Assert.Contains("Q = 500 VAR", view.TxtSummary.Text);
+            Assert.Contains("Q = 0,5 kVAR", view.TxtSummary.Text);   // P, Q, S tek önekle
             Assert.Contains("geri", view.TxtSummary.Text);
 
             // 2. leading

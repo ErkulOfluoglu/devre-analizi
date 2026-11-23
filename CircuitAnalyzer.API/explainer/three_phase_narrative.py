@@ -15,7 +15,7 @@ U gösterimi bir notla belirtilir.
 import math
 from typing import List
 
-from explainer.formatting import MINUS, eng, num, paren, polar, rect
+from explainer.formatting import MINUS, eng, eng_group, num, paren, polar, rect
 from explainer.narrative import _Section
 from explainer.transformer_narrative import _c, _cn, _zeq
 from models.request import AnalysisType
@@ -265,8 +265,8 @@ def _power_section(an: ThreePhaseAnalysis) -> List[_Section]:
             s.math(f"S_{k} = {f_txt} = {rect(sk, 'VA')}")
         p_sum = " + ".join(f"P_{k}" for k in keys)
         q_sum = " + ".join(f"Q_{k}" for k in keys)
-        s.math(f"P = {p_sum} = {eng(an.p, 'W')},  Q = {q_sum} = {eng(an.q, 'VAR')},  "
-               f"S = √(P² + Q²) = {eng(an.s, 'VA')}")
+        p_t, q_t, s_t = _pqs(an)
+        s.math(f"P = {p_sum} = {p_t},  Q = {q_sum} = {q_t},  S = √(P² + Q²) = {s_t}")
     s.math(f"cos φ = P / S = {num(an.pf)}  →  {_pf_text(an)}")
     arm_kinds = {}
     if an.z:
@@ -297,6 +297,11 @@ def _power_section(an: ThreePhaseAnalysis) -> List[_Section]:
 #  ARON
 # ═══════════════════════════════════════════════════════
 
+def _pqs(an: ThreePhaseAnalysis):
+    """P, Q, S aynı satırda tek önekle (S'ye göre): "1,979 kW, 0,1946 kVAR, 1,988 kVA"."""
+    return eng_group([an.p, an.q, an.s], ["W", "VAR", "VA"])
+
+
 def _aron_section(an: ThreePhaseAnalysis) -> List[_Section]:
     if an.aron is None:
         return []
@@ -306,15 +311,17 @@ def _aron_section(an: ThreePhaseAnalysis) -> List[_Section]:
     s.text("3 iletkenli devrede toplam güç iki wattmetreyle ölçülebilir: birinci wattmetrenin akım "
            "bobini R hattında, ikincisinin T hattında, gerilim bobinleri S hattına bağlıdır "
            "(V_RS ve V_TS).")
-    s.math(f"P_A = {f_txt}Re(V_RS · I_R*) = {eng(pa, 'W')}")
-    s.math(f"P_B = {f_txt}Re(V_TS · I_T*) = {eng(pb, 'W')}")
-    s.math(f"P = P_A + P_B = {eng(pa + pb, 'W')}")
+    # Aynı kartta tek önek: "898,6 W ... 1,08 kW" yerine "0,8986 kW ... 1,08 kW"
+    pa_t, pb_t, sum_t, p_t = eng_group([pa, pb, pa + pb, an.p], "W")
+    s.math(f"P_A = {f_txt}Re(V_RS · I_R*) = {pa_t}")
+    s.math(f"P_B = {f_txt}Re(V_TS · I_T*) = {pb_t}")
+    s.math(f"P = P_A + P_B = {sum_t}")
     if abs(pa + pb - an.p) <= 1e-5 * max(abs(an.p), 1e-9) + 1e-6:
         if an.others or not an.guided:
-            s.check(f"P_A + P_B = {eng(pa + pb, 'W')}, wattmetre noktalarından giren "
-                    f"(kaynağın verdiği) toplam güce ({eng(an.p, 'W')}) eşit; hat kayıpları dahildir.")
+            s.check(f"P_A + P_B = {sum_t}, wattmetre noktalarından giren "
+                    f"(kaynağın verdiği) toplam güce ({p_t}) eşit; hat kayıpları dahildir.")
         else:
-            s.check(f"P_A + P_B = {eng(pa + pb, 'W')}, yük kollarının toplam gücüne ({eng(an.p, 'W')}) eşit.")
+            s.check(f"P_A + P_B = {sum_t}, yük kollarının toplam gücüne ({p_t}) eşit.")
     if an.guided and an.balanced:
         phi = math.degrees(math.atan2(an.q, an.p))
         sign = "+" if an.sequence == "RST" else MINUS
@@ -409,7 +416,8 @@ def _short_sections(an: ThreePhaseAnalysis, transformer: bool) -> List[_Section]
             s.math(f"I_{k} = {_c(an.i_phase[k], 'A')}")
     f_txt = "V·I*" if an.is_rms else "½·V·I*"
     s.text(f"Kaynağın verdiği güç, her faz için S = {f_txt} toplanarak bulunur:")
-    s.math(f"P = {eng(an.p, 'W')},  Q = {eng(an.q, 'VAR')},  S = {eng(an.s, 'VA')},  cos φ = {num(an.pf)} "
+    p_t, q_t, s_t = _pqs(an)
+    s.math(f"P = {p_t},  Q = {q_t},  S = {s_t},  cos φ = {num(an.pf)} "
            f"({_pf_text(an)})")
     return [s]
 
@@ -419,8 +427,8 @@ def _check_section(an: ThreePhaseAnalysis) -> _Section:
     s.check("Elle türetilen hat akımları programın çözücüsünün sonuçlarıyla uyuşuyor.")
     if an.i_n is not None:
         s.check(f"Nötr akımı I_N = {eng(abs(an.i_n), 'A')}.")
-    s.check("Toplam güç, kaynağın verdiği güçle aynı: "
-            f"P = {eng(an.p, 'W')}, Q = {eng(an.q, 'VAR')}.")
+    p_t, q_t, _ = _pqs(an)
+    s.check(f"Toplam güç, kaynağın verdiği güçle aynı: P = {p_t}, Q = {q_t}.")
     return s
 
 
@@ -432,10 +440,12 @@ def _result_section(an: ThreePhaseAnalysis) -> _Section:
                                                     for k in ("RS", "ST", "TR")))
     if an.i_n is not None:
         s.result(f"Nötr akımı: I_N = {_c(an.i_n, 'A')}")
-    s.result(f"P = {eng(an.p, 'W')}, Q = {eng(an.q, 'VAR')}, S = {eng(an.s, 'VA')}, "
+    p_t, q_t, s_t = _pqs(an)
+    s.result(f"P = {p_t}, Q = {q_t}, S = {s_t}, "
              f"cos φ = {num(an.pf)} ({_pf_text(an)})")
     if an.aron is not None:
-        s.result(f"Aron: P_A = {eng(an.aron[0], 'W')}, P_B = {eng(an.aron[1], 'W')}")
+        pa_t, pb_t = eng_group(an.aron[:2], "W")
+        s.result(f"Aron: P_A = {pa_t}, P_B = {pb_t}")
     if an.comp is not None and an.comp.applied:
         s.result(f"Kompanzasyon: Q_C = {eng(an.comp.q_c, 'VAR')}, C_Y = {eng(an.comp.c_y, 'F')}, "
                  f"C_Δ = {eng(an.comp.c_delta, 'F')}")

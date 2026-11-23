@@ -58,14 +58,16 @@ namespace CircuitAnalyzer.WPF.Views
 
             // ── Yazılar (önce metin: kenar boşlukları metin genişliğine göre ayrılır) ──
             string phiName = r.HasComp ? "φ₁" : "φ";
+            // Üçgenin kenarları tek önekle ("P = 950 W, S = 1,2 kVA" yerine "P = 0,95 kW, S = 1,2 kVA")
+            var pqs = EngFormat.FormatGroup(new[] { p, q, Math.Sqrt(p * p + q * q) }, new[] { "W", "VAR", "VA" });
             var texts = new List<(string Key, string Text, bool Comp)>
             {
-                ("P", "P = " + EngFormat.Format(p, "W"), false),
+                ("P", "P = " + (r.IsUnity ? EngFormat.Format(p, "W") : pqs[0]), false),
             };
             if (!r.IsUnity)
             {
-                texts.Add(("Q", "Q = " + Signed(q, "VAR"), false));
-                texts.Add(("S", "S = " + EngFormat.Format(Math.Sqrt(p * p + q * q), "VA"), false));
+                texts.Add(("Q", "Q = " + pqs[1], false));
+                texts.Add(("S", "S = " + pqs[2], false));
                 texts.Add(("phi", $"{phiName} = {Degrees(phi * 180 / Math.PI)}", false));
             }
             else
@@ -296,14 +298,15 @@ namespace CircuitAnalyzer.WPF.Views
 
         /// <summary>
         /// Çizimin altındaki kompanzasyon satırına eklenen değerler, kesikli kenarların adlarıyla:
-        /// "Kompanzasyondan sonra: Q′ = 328,7 VAR, S′ = 1,053 kVA, φ₂ = 18,19° (cos φ₂ = 0,95)".
+        /// "Kompanzasyondan sonra: Q′ = 0,3287 kVAR, S′ = 1,053 kVA, φ₂ = 18,19° (cos φ₂ = 0,95)".
         /// </summary>
         public static string CompensationCaption(double p, double targetPf)
         {
             var (qPrime, sPrime) = Compensated(p, targetPf);
             double phi2 = Math.Acos(Math.Clamp(targetPf, 1e-6, 1.0)) * 180 / Math.PI;
-            return $"Kompanzasyondan sonra (kesikli): Q′ = {EngFormat.Format(qPrime, "VAR")}, " +
-                   $"S′ = {EngFormat.Format(sPrime, "VA")}, φ₂ = {Degrees(phi2)} " +
+            var qs = EngFormat.FormatGroup(new[] { qPrime, sPrime }, new[] { "VAR", "VA" });
+            return $"Kompanzasyondan sonra (kesikli): Q′ = {qs[0]}, " +
+                   $"S′ = {qs[1]}, φ₂ = {Degrees(phi2)} " +
                    $"(cos φ₂ = {TurkishNumber.Format(targetPf, "0.###")})";
         }
 

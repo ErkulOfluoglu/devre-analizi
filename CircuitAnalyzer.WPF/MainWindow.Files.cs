@@ -479,30 +479,8 @@ namespace CircuitAnalyzer.WPF
             if (_elements.Count == 0 && _wires.Count == 0)
                 return null;
 
-            double minX = double.MaxValue, minY = double.MaxValue;
-            double maxX = double.MinValue, maxY = double.MinValue;
-
-            foreach (var el in _elements)
-            {
-                minX = Math.Min(minX, el.Position.X);
-                minY = Math.Min(minY, el.Position.Y);
-                maxX = Math.Max(maxX, el.Position.X + 80);
-                maxY = Math.Max(maxY, el.Position.Y + 40);
-            }
-            foreach (var wire in _wires)
-            {
-                minX = Math.Min(minX, Math.Min(wire.StartPin.AbsolutePosition.X, wire.EndPin.AbsolutePosition.X));
-                minY = Math.Min(minY, Math.Min(wire.StartPin.AbsolutePosition.Y, wire.EndPin.AbsolutePosition.Y));
-                maxX = Math.Max(maxX, Math.Max(wire.StartPin.AbsolutePosition.X, wire.EndPin.AbsolutePosition.X));
-                maxY = Math.Max(maxY, Math.Max(wire.StartPin.AbsolutePosition.Y, wire.EndPin.AbsolutePosition.Y));
-                foreach (var wp in wire.Waypoints)
-                {
-                    minX = Math.Min(minX, wp.X);
-                    minY = Math.Min(minY, wp.Y);
-                    maxX = Math.Max(maxX, wp.X);
-                    maxY = Math.Max(maxY, wp.Y);
-                }
-            }
+            // Sonuç etiketleri de kutuya girer: yalnız eleman/tel kutusu sağdaki akım etiketini kesiyordu
+            var (minX, minY, maxX, maxY) = ContentBounds();
 
             double margin = 30.0;
             minX = Math.Max(0, minX - margin);
