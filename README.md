@@ -47,7 +47,7 @@ https://github.com/user-attachments/assets/6a0aa370-13cc-41c2-84c5-b9b9a4e97656
 | **Thevenin / Norton** | İki uç arasındaki eşdeğer devre ve maksimum güç aktarımı | [Wiki](../../wiki/Thevenin-ve-Norton) |
 | **Süperpozisyon** | Her kaynağın ayrı katkısı ve toplamı (farklı frekanslı AC kaynaklar dahil) | [Wiki](../../wiki/Süperpozisyon) |
 | **Millman** | Paralel kollu devrelerde iki düğüm arası gerilim, tek formülle | [Wiki](../../wiki/Millman) |
-| **Karşıtlık** | Tek kaynaklı devrede kaynak ile ölçülen kol yer değiştirince akımın (ya da gerilimin) değişmediğini iki çözümle gösterir; aktarım direnci/empedansı | — |
+| **Karşıtlık** | Tek kaynaklı devrede kaynak ile ölçülen kol yer değiştirince akımın (ya da gerilimin) değişmediğini iki çözümle gösterir; aktarım direnci/empedansı | [Wiki](../../wiki/Karşıtlık) |
 | **Kaynak dönüşümü** | Gerilim ⇄ akım kaynağı dönüşümleriyle sadeleştirme, gerekirse Δ–Y | [Wiki](../../wiki/Kaynak-Dönüşümü) |
 | **Geçici durum (anahtar)** | Kondansatör/bobin şarj–deşarjı: τ, x(t) formülü, τ tablosu, enerji ve zaman grafiği | [Wiki](../../wiki/Geçici-Durum) |
 | **Güç ve güç katsayısı** | P, Q, S, cos φ, güç üçgeni ve kompanzasyon kondansatörü | [Wiki](../../wiki/Güç-ve-Güç-Katsayısı) |
