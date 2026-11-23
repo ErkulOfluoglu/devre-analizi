@@ -23,7 +23,7 @@
   <a href="../../issues">💬 Hata bildir / öneri</a>
 </p>
 
-https://github.com/user-attachments/assets/8298aa93-6456-4b34-bcca-171816584310
+https://github.com/user-attachments/assets/6a0aa370-13cc-41c2-84c5-b9b9a4e97656
 
 <p align="center">
   <img src="docs/ekran/06-gecici-durum.png" width="900" alt="Anahtarlı RC devresi: geçici durum anlatımı ve zaman grafiği">
