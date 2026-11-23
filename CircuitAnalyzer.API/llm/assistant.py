@@ -40,6 +40,7 @@ _METHOD_NAMES = {
     AnalysisType.TRANSIENT: "Geçici durum (anahtarlı RC / RL devresi, zaman sabitesi τ)",
     AnalysisType.POWER: "Güç ve güç katsayısı (P, Q, S, cos φ ve kompanzasyon)",
     AnalysisType.RESONANCE: "Rezonans (seri/paralel RLC: f₀, kalite faktörü Q, bant genişliği)",
+    AnalysisType.RECIPROCITY: "Karşıtlık teoremi",
     AnalysisType.TRANSFORMER: "Transformatör (ideal: V₂ = a·V₁; kuplajlı: M = k·√(L₁L₂), primer/sekonder gerilim ve akımlar)",
     AnalysisType.THREE_PHASE: "Üç faz (Y/Δ kaynak ve yük, hat/faz büyüklükleri, nötr akımı, güç, Aron, kompanzasyon)",
 }

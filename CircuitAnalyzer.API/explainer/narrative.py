@@ -165,6 +165,8 @@ class _Ctx:
     port: Optional["PortExtras"] = None
     # Norton: kısa devre akımının türetmesi In adımında gösterildi (Rn adımı tekrar etmez)
     isc_derived: bool = False
+    # Karşıtlık teoremi: çözücünün ikinci çözümünden gelen ReciprocityAnalysis (tanıtımda kullanılır)
+    reciprocity: Optional[object] = None
 
     # ── Eleman bilgileri ──
 
@@ -268,6 +270,8 @@ def build_explanation(
     resonance_inapplicable_reason: Optional[str] = None,
     transformer_analysis=None,
     requested_type: Optional[AnalysisType] = None,
+    reciprocity_analysis=None,
+    reciprocity_inapplicable_reason: Optional[str] = None,
 ) -> List[ExplanationSection]:
     """
     Çözümün Türkçe anlatımını üretir. Çözüm başarısızsa boş liste döner.
@@ -370,6 +374,27 @@ def build_explanation(
         )
         analysis_type = ctx.analysis_type = AnalysisType.NODAL
         method_builders = (lambda c: [fallback],) + method_builders
+
+    if analysis_type == AnalysisType.RECIPROCITY:
+        # Döngüsel içe aktarmayı önlemek için yerel import
+        from explainer.reciprocity_narrative import build_reciprocity
+        if reciprocity_analysis is not None:
+            extra, why = build_reciprocity(ctx, reciprocity_analysis)
+        else:
+            extra, why = None, (reciprocity_inapplicable_reason
+                                or "karşıtlık teoremi bu devreye uygulanamadı.")
+        if extra is not None:
+            ctx.reciprocity = reciprocity_analysis
+            method_builders = (lambda c: extra,)
+        else:
+            fallback = _Section("Karşıtlık Teoremi")
+            fallback.note(
+                f"Bu devrede karşıtlık teoremi uygulanamadı: {why} "
+                "“Düğüm Gerilimleri” yöntemini seçebilirsiniz; aynı sonuçları şimdi o "
+                "yöntemle anlatıyoruz."
+            )
+            analysis_type = ctx.analysis_type = AnalysisType.NODAL
+            method_builders = (lambda c: [fallback],) + method_builders
 
     if analysis_type in (AnalysisType.MILLMAN, AnalysisType.SOURCE_TRANSFORM):
         # Döngüsel içe aktarmayı önlemek için yerel import
@@ -597,6 +622,15 @@ def _intro(ctx: _Ctx) -> List[_Section]:
             "Millman teoremiyle çözeceğiz: devre, iki düğüm arasına paralel bağlı kollar olarak "
             "ele alınır. Önce bu iki düğüm arasındaki gerilimi tek bir formülle bulacağız, sonra her "
             "kolun akımını Ohm yasasıyla hesaplayacağız."
+        )
+    elif ctx.analysis_type == AnalysisType.RECIPROCITY and ctx.reciprocity is not None:
+        ra = ctx.reciprocity
+        s.text(
+            f"Karşıtlık teoremiyle çözeceğiz: {ra.source.id} kaynağını {ra.target.id} koluna "
+            "taşıyıp ölçülen "
+            + ("akımın" if ra.form == "current" else "gerilimin")
+            + " değişmediğini göstereceğiz. Önce kaynak kendi yerindeyken, sonra "
+            f"{ra.target.id} koluna taşınmışken devreyi inceleyeceğiz."
         )
     elif ctx.analysis_type == AnalysisType.SOURCE_TRANSFORM and ctx.terminals:
         a, b = ctx.terminals.node_positive, ctx.terminals.node_negative

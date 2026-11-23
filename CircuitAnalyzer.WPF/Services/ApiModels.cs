@@ -24,6 +24,7 @@ namespace CircuitAnalyzer.WPF.Services
         public const string Mesh = "MESH";
         public const string Superposition = "SUPERPOSITION";
         public const string Millman = "MILLMAN";
+        public const string Reciprocity = "RECIPROCITY";
         public const string SourceTransform = "SOURCE_TRANSFORM";
         public const string Transient = "TRANSIENT";
         public const string Power = "POWER";
@@ -47,6 +48,9 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("thevenin_terminals")] public TerminalsDto? TheveninTerminals { get; set; }
         [JsonPropertyName("value_display")] public string ValueDisplay { get; set; } = "PEAK";
         [JsonPropertyName("power_factor_target")] public double? PowerFactorTarget { get; set; }
+        [JsonPropertyName("reciprocity_target")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ReciprocityTarget { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -453,6 +457,9 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("thevenin_terminals")] public TerminalsDto? TheveninTerminals { get; set; }
         [JsonPropertyName("value_display")] public string ValueDisplay { get; set; } = "PEAK";
         [JsonPropertyName("power_factor_target")] public double? PowerFactorTarget { get; set; }
+        [JsonPropertyName("reciprocity_target")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ReciprocityTarget { get; set; }
         [JsonPropertyName("question")] public string Question { get; set; } = "";
         /// <summary>Boşsa sunucu seçer (önerilen ya da ilk kurulu model).</summary>
         [JsonPropertyName("model")] public string? Model { get; set; }
@@ -474,6 +481,7 @@ namespace CircuitAnalyzer.WPF.Services
             TheveninTerminals = analysis.TheveninTerminals,
             ValueDisplay = analysis.ValueDisplay,
             PowerFactorTarget = analysis.PowerFactorTarget,
+            ReciprocityTarget = analysis.ReciprocityTarget,
             Question = question,
         };
     }

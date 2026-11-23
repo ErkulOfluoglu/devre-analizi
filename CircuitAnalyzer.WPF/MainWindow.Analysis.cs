@@ -229,6 +229,7 @@ namespace CircuitAnalyzer.WPF
                 .Select(kv => kv.Key)
                 .OrderBy(n => n)
                 .ToList());
+            AnalysisPanel.SetAvailableReciprocityTargets(_elements);
             _overlay?.ShowNodeNumbers(netlist, _wires);
         }
 
@@ -296,6 +297,9 @@ namespace CircuitAnalyzer.WPF
                     },
                 ValueDisplay = AnalysisPanel.ValueDisplay,
                 PowerFactorTarget = (options.AnalysisType == AnalysisTypes.Power || options.AnalysisType == AnalysisTypes.ThreePhase) ? options.PowerFactorTarget : null,
+                ReciprocityTarget = string.Equals(options.AnalysisType, AnalysisTypes.Reciprocity, StringComparison.OrdinalIgnoreCase)
+                    ? options.ReciprocityTarget
+                    : null,
             };
 
             // Büyük AC devre: 2 dakikalık sınıra takılabilir, önce sor (ekran testlerinde sorulmaz)

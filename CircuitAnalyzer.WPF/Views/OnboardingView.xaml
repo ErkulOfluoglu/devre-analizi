@@ -308,7 +308,7 @@
                         </Border>
                     </StackPanel>
 
-                    <TextBlock Text="Yöntemler: düğüm gerilimleri, çevre akımları, Thevenin, Norton, süperpozisyon, Millman, kaynak dönüşümü, geçici durum, güç ve güç katsayısı, rezonans, transformatör, üç faz. DC ve AC devreler."
+                    <TextBlock Text="Yöntemler: düğüm gerilimleri, çevre akımları, Thevenin, Norton, süperpozisyon, Millman, karşıtlık teoremi, kaynak dönüşümü, geçici durum, güç ve güç katsayısı, rezonans, transformatör, üç faz. DC ve AC devreler."
                                Style="{DynamicResource Text.Caption}"/>
                 </StackPanel>
             </Grid>

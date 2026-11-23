@@ -70,6 +70,9 @@ class AnalysisType(str, Enum):
     POWER:    Güç ve Güç Katsayısı — P, Q, S, cos φ, güç üçgeni ve isteğe bağlı kompanzasyon
     RESONANCE: Rezonans — seri ya da paralel RLC devresinde f₀, Q, bant genişliği;
               kaynağın frekansı kullanılmaz, devre f₀'da çözülür; sonuç 'resonance' alanında
+    RECIPROCITY: Karşıtlık teoremi — tek bağımsız kaynaklı, yalnızca R/L/C içeren devrede kaynağı bir koldan
+              başka bir kola taşıyıp akımın (ya da gerilimin) aynı kaldığını gösterir; ikinci kol
+              'reciprocity_target' alanıyla seçilir (boşsa netlist'teki son R/L/C)
     TRANSFORMER: Transformatör — ideal (V₂ = a·V₁) ya da kuplajlı (M = k·√(L₁L₂)) transformatörlü
               AC devre; sonuç 'transformer' alanında. Netlist'te transformatör varsa başka bir
               yöntem seçilse de devre çözülür ve anlatım bu yöntemle verilir
@@ -90,6 +93,7 @@ class AnalysisType(str, Enum):
     TRANSIENT = "TRANSIENT"
     POWER = "POWER"
     RESONANCE = "RESONANCE"
+    RECIPROCITY = "RECIPROCITY"
     TRANSFORMER = "TRANSFORMER"
     THREE_PHASE = "THREE_PHASE"
 
@@ -98,7 +102,8 @@ class AnalysisType(str, Enum):
         schema = handler(core_schema)
         if "enum" in schema:
             schema["enum"] = [v for v in schema["enum"]
-                              if v not in ("POWER", "RESONANCE", "TRANSFORMER", "THREE_PHASE")]
+                              if v not in ("POWER", "RESONANCE", "RECIPROCITY",
+                                           "TRANSFORMER", "THREE_PHASE")]
         return schema
 
 
@@ -338,7 +343,7 @@ class AnalysisRequest(BaseModel):
 
     analysis_type: AnalysisType = Field(
         default=AnalysisType.NODAL,
-        description="Çözüm yöntemi: NODAL (Düğüm gerilimleri), MESH (Çevre akımları), THEVENIN (Thevenin eşdeğeri), NORTON (Norton eşdeğeri), SUPERPOSITION, MILLMAN (Millman teoremi), SOURCE_TRANSFORM (kaynak dönüşümü) veya TRANSIENT (anahtarlı RC/RL geçici durum)",
+        description="Çözüm yöntemi: NODAL (Düğüm gerilimleri), MESH (Çevre akımları), THEVENIN (Thevenin eşdeğeri), NORTON (Norton eşdeğeri), SUPERPOSITION, MILLMAN (Millman teoremi), SOURCE_TRANSFORM (kaynak dönüşümü), RECIPROCITY (karşıtlık teoremi) veya TRANSIENT (anahtarlı RC/RL geçici durum)",
         examples=["NODAL"],
     )
 
@@ -358,6 +363,12 @@ class AnalysisRequest(BaseModel):
         default=None,
         description="POWER (Güç ve Güç Katsayısı) yönteminde hedef güç katsayısı cos φ₂ (0 < cos φ₂ ≤ 1).",
         examples=[0.95],
+    )
+
+    reciprocity_target: SkipJsonSchema[Optional[str]] = Field(
+        default=None,
+        description="RECIPROCITY (karşıtlık teoremi) yönteminde ikinci kolu oluşturan pasif elemanın (R, L veya C) kimliği, ör: 'R4'. Boşsa netlist'teki son R/L/C elemanı alınır.",
+        examples=["R4"],
     )
 
     @field_validator("power_factor_target")

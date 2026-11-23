@@ -326,7 +326,7 @@ public class SmallFixesTests
             panel.SetCircuitInfo(hasAcSource: false, needsFrequency: false);
             Assert.Equal("DC analiz", panel.TxtModeLabel.Text);
 
-            panel.CmbAnalysisType.SelectedIndex = 7;   // Geçici Durum (Anahtar)
+            panel.CmbAnalysisType.SelectedIndex = 8;   // Geçici Durum (Anahtar)
             Assert.Equal("Geçici durum", panel.TxtModeLabel.Text);
 
             panel.CmbAnalysisType.SelectedIndex = 0;

@@ -54,7 +54,7 @@ public class ResonanceMethodTests
             var panel = new AnalysisPanel();
             panel.SetAnalysisType(AnalysisTypes.Resonance);
 
-            Assert.Equal(9, panel.CmbAnalysisType.SelectedIndex);
+            Assert.Equal(10, panel.CmbAnalysisType.SelectedIndex);
             Assert.Equal(Visibility.Collapsed, panel.RowTerminals.Visibility);
             Assert.Equal(Visibility.Collapsed, panel.RowPowerFactorTarget.Visibility);
 
@@ -79,7 +79,7 @@ public class ResonanceMethodTests
             var panel2 = new AnalysisPanel();
             panel2.RestoreAnalysisSettings(settings);
 
-            Assert.Equal(9, panel2.CmbAnalysisType.SelectedIndex);
+            Assert.Equal(10, panel2.CmbAnalysisType.SelectedIndex);
             Assert.Equal(AnalysisTypes.Resonance, panel2.GetAnalysisSettings().Type);
         });
     }
