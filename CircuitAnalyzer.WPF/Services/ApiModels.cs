@@ -31,6 +31,7 @@ namespace CircuitAnalyzer.WPF.Services
         public const string Resonance = "RESONANCE";
         public const string Transformer = "TRANSFORMER";
         public const string ThreePhase = "THREE_PHASE";
+        public const string ZenerRange = "ZENER_RANGE";
     }
 
     public sealed class TerminalsDto
@@ -51,6 +52,9 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("reciprocity_target")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? ReciprocityTarget { get; set; }
+        [JsonPropertyName("zener_range_target")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ZenerRangeTarget { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -253,6 +257,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("three_phase")] public ThreePhaseResultDto? ThreePhase { get; set; }
         [JsonPropertyName("wattmeters")] public List<WattmeterResultDto>? Wattmeters { get; set; }
         [JsonPropertyName("diodes")] public List<DiodeResultDto>? Diodes { get; set; }
+        [JsonPropertyName("zener_range")] public ZenerRangeDto? ZenerRange { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -461,6 +466,9 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("reciprocity_target")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? ReciprocityTarget { get; set; }
+        [JsonPropertyName("zener_range_target")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ZenerRangeTarget { get; set; }
         [JsonPropertyName("question")] public string Question { get; set; } = "";
         /// <summary>Boşsa sunucu seçer (önerilen ya da ilk kurulu model).</summary>
         [JsonPropertyName("model")] public string? Model { get; set; }
@@ -483,6 +491,7 @@ namespace CircuitAnalyzer.WPF.Services
             ValueDisplay = analysis.ValueDisplay,
             PowerFactorTarget = analysis.PowerFactorTarget,
             ReciprocityTarget = analysis.ReciprocityTarget,
+            ZenerRangeTarget = analysis.ZenerRangeTarget,
             Question = question,
         };
     }
@@ -659,6 +668,51 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("i")] public double I { get; set; }
     }
 
+    public sealed class ZenerRangeStepDto
+    {
+        [JsonPropertyName("symbol")] public string Symbol { get; set; } = "";
+        [JsonPropertyName("value")] public double? Value { get; set; }
+        [JsonPropertyName("unit")] public string Unit { get; set; } = "";
+        [JsonPropertyName("text")] public string Text { get; set; } = "";
+    }
+
+    public sealed class ZenerRangeCheckDto
+    {
+        [JsonPropertyName("x")] public double X { get; set; }
+        [JsonPropertyName("state")] public string State { get; set; } = "";
+        [JsonPropertyName("v_y")] public double VY { get; set; }
+        [JsonPropertyName("i_z")] public double IZ { get; set; }
+        /// <summary>"BELOW", "OK" veya "ABOVE".</summary>
+        [JsonPropertyName("verdict")] public string Verdict { get; set; } = "";
+        [JsonPropertyName("text")] public string Text { get; set; } = "";
+    }
+
+    public sealed class ZenerRangeCurveDto
+    {
+        [JsonPropertyName("x")] public List<double> X { get; set; } = new();
+        [JsonPropertyName("v_y")] public List<double> VY { get; set; } = new();
+        [JsonPropertyName("i_z")] public List<double> IZ { get; set; } = new();
+    }
+
+    public sealed class ZenerRangeDto
+    {
+        [JsonPropertyName("target_id")] public string TargetId { get; set; } = "";
+        /// <summary>"LOAD" veya "INPUT".</summary>
+        [JsonPropertyName("kind")] public string Kind { get; set; } = "LOAD";
+        [JsonPropertyName("symbol")] public string Symbol { get; set; } = "";
+        [JsonPropertyName("unit")] public string Unit { get; set; } = "";
+        [JsonPropertyName("min")] public double? Min { get; set; }
+        /// <summary>null → üst sınır yok (∞).</summary>
+        [JsonPropertyName("max")] public double? Max { get; set; }
+        [JsonPropertyName("current_value")] public double? CurrentValue { get; set; }
+        [JsonPropertyName("current_inside")] public bool? CurrentInside { get; set; }
+        [JsonPropertyName("steps")] public List<ZenerRangeStepDto> Steps { get; set; } = new();
+        [JsonPropertyName("checks")] public List<ZenerRangeCheckDto> Checks { get; set; } = new();
+        [JsonPropertyName("curve")] public ZenerRangeCurveDto? Curve { get; set; }
+        [JsonPropertyName("x_label")] public string XLabel { get; set; } = "";
+        [JsonPropertyName("y_label")] public string YLabel { get; set; } = "";
+    }
+
     public sealed class AnalysisResponseDto
     {
         /// <summary>"success" veya "warning".</summary>
@@ -677,11 +731,13 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("three_phase")] public ThreePhaseResultDto? ThreePhase { get; set; }
         [JsonPropertyName("wattmeters")] public List<WattmeterResultDto>? Wattmeters { get; set; }
         [JsonPropertyName("diodes")] public List<DiodeResultDto>? Diodes { get; set; }
+        [JsonPropertyName("zener_range")] public ZenerRangeDto? ZenerRange { get; set; }
 
         [JsonIgnore] public TransformerResultDto? TransformerResult => Transformer ?? Results?.Transformer;
         [JsonIgnore] public ThreePhaseResultDto? ThreePhaseResult => ThreePhase ?? Results?.ThreePhase;
         [JsonIgnore] public List<WattmeterResultDto>? WattmeterResults => Wattmeters ?? Results?.Wattmeters;
         [JsonIgnore] public List<DiodeResultDto>? DiodeResults => Diodes ?? Results?.Diodes;
+        [JsonIgnore] public ZenerRangeDto? ZenerRangeResult => ZenerRange ?? Results?.ZenerRange;
     }
 
     public sealed class HealthDto

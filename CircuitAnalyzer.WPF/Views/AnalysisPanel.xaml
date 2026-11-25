@@ -53,6 +53,7 @@
                         <ComboBoxItem Content="Rezonans" ToolTip="Seri veya paralel RLC devrelerinin rezonans frekansı, kalite faktörü, bant genişliği ve frekans eğrisi"/>
                         <ComboBoxItem Content="Transformatör" ToolTip="İdeal veya kuplajlı transformatör analizi"/>
                         <ComboBoxItem Content="Üç Faz" ToolTip="Üç fazlı devrelerin hat/faz gerilim ve akımları, güç ve kompanzasyon hesabı"/>
+                        <ComboBoxItem Content="Zener Aralığı" ToolTip="Zener regülatöründe yük direncinin veya giriş geriliminin çalışma aralığı"/>
                     </ComboBox>
 
                     <Button x:Name="BtnSolve"
@@ -214,6 +215,20 @@
                     <ComboBox x:Name="CmbReciprocityTarget"
                               AutomationProperties.Name="Ölçülen eleman"
                               ToolTip="Kaynağın taşınacağı ikinci kol: bu elemanın akımı (akım kaynağında gerilimi) ölçülür."/>
+                </StackPanel>
+
+                <!-- Değişen eleman (Zener Aralığı için) -->
+                <StackPanel x:Name="RowZenerRangeTarget"
+                            Margin="0,8,0,0"
+                            Visibility="Collapsed">
+                    <TextBlock x:Name="TxtZenerRangeTargetLabel"
+                               Text="Değişen eleman"
+                               Style="{DynamicResource Text.Caption}"
+                               Margin="0,0,0,2"
+                               ToolTip="Aralığı bulunacak yük direnci veya DC gerilim kaynağı. Boş bırakılırsa yük direnci otomatik seçilir."/>
+                    <ComboBox x:Name="CmbZenerRangeTarget"
+                              AutomationProperties.Name="Değişen eleman"
+                              ToolTip="Aralığı bulunacak yük direnci veya DC gerilim kaynağı. Boş bırakılırsa yük direnci otomatik seçilir."/>
                 </StackPanel>
 
                 <!-- Değer Gösterimi (AC için: Etkin / Tepe) -->

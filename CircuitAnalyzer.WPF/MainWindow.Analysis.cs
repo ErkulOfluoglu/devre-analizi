@@ -56,6 +56,7 @@ namespace CircuitAnalyzer.WPF
             };
             AnalysisPanel.EnlargePlotRequested += (_, data) => PlotOverlay.Show(data);
             AnalysisPanel.EnlargeResonanceRequested += (_, data) => PlotOverlay.Show(data);
+            AnalysisPanel.EnlargeZenerRangeRequested += (_, data) => PlotOverlay.Show(data);
             Closed += (_, _) => _backend.Dispose();
 
             AnalysisPanel.AnswerChecker = async req =>
@@ -230,6 +231,7 @@ namespace CircuitAnalyzer.WPF
                 .OrderBy(n => n)
                 .ToList());
             AnalysisPanel.SetAvailableReciprocityTargets(_elements);
+            AnalysisPanel.SetAvailableZenerRangeTargets(_elements);
             _overlay?.ShowNodeNumbers(netlist, _wires);
         }
 
@@ -299,6 +301,9 @@ namespace CircuitAnalyzer.WPF
                 PowerFactorTarget = (options.AnalysisType == AnalysisTypes.Power || options.AnalysisType == AnalysisTypes.ThreePhase) ? options.PowerFactorTarget : null,
                 ReciprocityTarget = string.Equals(options.AnalysisType, AnalysisTypes.Reciprocity, StringComparison.OrdinalIgnoreCase)
                     ? options.ReciprocityTarget
+                    : null,
+                ZenerRangeTarget = string.Equals(options.AnalysisType, AnalysisTypes.ZenerRange, StringComparison.OrdinalIgnoreCase)
+                    ? options.ZenerRangeTarget
                     : null,
             };
 

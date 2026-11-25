@@ -14,4 +14,5 @@ public sealed record SolveOptions(
     string TerminalNegative,
     string ValueDisplay = "RMS",
     double? PowerFactorTarget = null,
-    string? ReciprocityTarget = null);
+    string? ReciprocityTarget = null,
+    string? ZenerRangeTarget = null);

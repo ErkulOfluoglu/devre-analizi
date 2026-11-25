@@ -494,6 +494,7 @@ def solve_circuit(
     value_display: Optional[Union[str, object]] = None,
     power_factor_target: Optional[float] = None,
     reciprocity_target: Optional[str] = None,
+    zener_range_target: Optional[str] = None,
 ) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
     """
     Devreyi çözer (anahtarlı devreler için giriş noktası).
@@ -511,7 +512,7 @@ def solve_circuit(
         # Ham diyot asla _solve_core'a gitmez (lcapy netlistine yazılamaz).
         from solver.diode import solve_with_diodes
         return solve_with_diodes(parsed, mode, frequency, analysis_type, thevenin_terminals,
-                                 target_probes, warnings)
+                                 target_probes, warnings, zener_range_target=zener_range_target)
     if (has_three_phase(parsed) or has_wattmeters(parsed)) and not parsed.errors:
         return _solve_three_phase(parsed, mode, frequency, analysis_type, thevenin_terminals,
                                   target_probes, warnings, power_factor_target)
@@ -521,11 +522,15 @@ def solve_circuit(
         # Karşıtlık teoremi anahtarsız devre ister: sebebi _solve_core'a önceden verilir
         switch_block = ("devrede anahtar var; karşıtlık teoremi anahtarsız devrelerde uygulanır."
                         if analysis_type == AnalysisType.RECIPROCITY else None)
+        zr_block = ("devrede anahtar var; Zener Aralığı yalnızca temel zener regülatör devresinde "
+                    "(DC kaynak, R_X, zener diyot ve R_Y) uygulanır"
+                    if analysis_type == AnalysisType.ZENER_RANGE else None)
         results, steps, errors = _solve_core(
             circuit_at_time(parsed, "after"), mode, frequency, analysis_type,
             thevenin_terminals, target_probes, warnings,
             power_factor_target=power_factor_target,
-            reciprocity_target=reciprocity_target, reciprocity_block=switch_block)
+            reciprocity_target=reciprocity_target, reciprocity_block=switch_block,
+            zener_range_target=zener_range_target, zener_range_block=zr_block)
         results.explanation.insert(0, ExplanationSection(
             title="Anahtar Konumu",
             blocks=[ExplanationBlock(kind="note", text=SWITCH_NOTE)]))
@@ -533,7 +538,8 @@ def solve_circuit(
     return _solve_core(parsed, mode, frequency, analysis_type,
                        thevenin_terminals, target_probes, warnings,
                        power_factor_target=power_factor_target,
-                       reciprocity_target=reciprocity_target)
+                       reciprocity_target=reciprocity_target,
+                       zener_range_target=zener_range_target)
 
 
 def _solve_three_phase(
@@ -561,7 +567,8 @@ def _solve_three_phase(
     exp = expand_three_phase(parsed, is_dc, frequency)
     freq = exp.frequency or frequency
     core_type = (AnalysisType.NODAL if three or analysis_type in (
-        AnalysisType.THREE_PHASE, AnalysisType.TRANSFORMER, AnalysisType.RECIPROCITY)
+        AnalysisType.THREE_PHASE, AnalysisType.TRANSFORMER, AnalysisType.RECIPROCITY,
+        AnalysisType.ZENER_RANGE)
         else analysis_type)
     results, steps, errors = solve_circuit(
         exp.flat, mode, freq, core_type, None if three else thevenin_terminals, target_probes,
@@ -569,6 +576,9 @@ def _solve_three_phase(
     if analysis_type == AnalysisType.RECIPROCITY:
         errors.append("ℹ Karşıtlık teoremi uygulanamadı: devrede üç fazlı eleman ya da wattmetre "
                       "var; sonuçlar Düğüm Gerilimleri yöntemiyle verildi.")
+    elif analysis_type == AnalysisType.ZENER_RANGE:
+        from explainer.zener_range_narrative import fallback_note
+        errors.append(fallback_note("devrede üç fazlı eleman ya da wattmetre var"))
     if any(m.startswith(UNSOLVABLE_PREFIX) for m in errors) or not results.node_voltages:
         return results, steps, errors
 
@@ -799,6 +809,8 @@ def _solve_core(
     power_factor_target: Optional[float] = None,
     reciprocity_target: Optional[str] = None,
     reciprocity_block: Optional[str] = None,
+    zener_range_target: Optional[str] = None,
+    zener_range_block: Optional[str] = None,
 ) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
     """
     Devreyi çözer ve yapılandırılmış sonuç döndürür.
@@ -1230,6 +1242,19 @@ def _solve_core(
         if reciprocity_inapplicable_reason:
             errors.append(f"ℹ Karşıtlık teoremi uygulanamadı: {reciprocity_inapplicable_reason}")
 
+    # ── Adım 6.68: Zener Aralığı (ZENER_RANGE) — diyotsuz devrede her zaman NODAL'a döner ──
+    zener_range_inapplicable_reason: Optional[str] = None
+    if analysis_type == AnalysisType.ZENER_RANGE:
+        from explainer.zener_range_narrative import fallback_note
+        from solver.zener_range import detect_zener_regulator
+        if zener_range_block:
+            zener_range_inapplicable_reason = zener_range_block
+        else:
+            _, zener_range_inapplicable_reason = detect_zener_regulator(
+                parsed, mode, zener_range_target)
+        if zener_range_inapplicable_reason:
+            errors.append(fallback_note(zener_range_inapplicable_reason))
+
     # ── Adım 6.7: Bağımlı kaynaklı Thevenin/Norton için ek sayılar ──
     port_extras = None
     if (has_dependent and thevenin_terminals is not None
@@ -1267,6 +1292,7 @@ def _solve_core(
             requested_type=requested_type,
             reciprocity_analysis=reciprocity_analysis,
             reciprocity_inapplicable_reason=reciprocity_inapplicable_reason,
+            zener_range_inapplicable_reason=zener_range_inapplicable_reason,
         )
     except Exception as e:
         errors.append(f"ℹ Anlatım oluşturulamadı: {turkish_error(e, 'anlatım')}")

@@ -54,6 +54,16 @@ namespace CircuitAnalyzer.WPF.Views
             ShowContent(plotView, "Rezonans Eğrisi", animate);
         }
 
+        public void Show(ZenerRangeDto data, bool animate = true)
+        {
+            var plotView = new ZenerRangePlotView
+            {
+                IsEnlarged = true
+            };
+            plotView.LoadData(data);
+            ShowContent(plotView, "Zener Aralığı Grafiği", animate);
+        }
+
         private void ShowContent(UIElement content, string title, bool animate)
         {
             TxtOverlayTitle.Text = title;
