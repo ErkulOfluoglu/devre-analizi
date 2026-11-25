@@ -87,8 +87,9 @@ namespace CircuitAnalyzer.WPF
             if (pasted.Elements.Count == 0)
                 return false;
 
-            InsertPastedItems(pasted);
-            TxtStatus.Text = $"{pasted.Elements.Count} eleman yapıştırıldı";
+            var dropResult = InsertPastedItems(pasted);
+            TxtStatus.Text = WireDropConnector.FormatStatusMessage(dropResult)
+                ?? $"{pasted.Elements.Count} eleman yapıştırıldı";
             return true;
         }
 
@@ -106,12 +107,13 @@ namespace CircuitAnalyzer.WPF
             if (pasted.Elements.Count == 0)
                 return false;
 
-            InsertPastedItems(pasted);
-            TxtStatus.Text = $"{pasted.Elements.Count} eleman çoğaltıldı";
+            var dropResult = InsertPastedItems(pasted);
+            TxtStatus.Text = WireDropConnector.FormatStatusMessage(dropResult)
+                ?? $"{pasted.Elements.Count} eleman çoğaltıldı";
             return true;
         }
 
-        private void InsertPastedItems(PasteResult pasted)
+        private WireDropResult InsertPastedItems(PasteResult pasted)
         {
             // Yapıştırılan Id'ler bekleyen yerleştirmenin Id'siyle çakışabilir
             CancelPlacement();
@@ -125,10 +127,12 @@ namespace CircuitAnalyzer.WPF
                 CircuitCanvas.Children.Add(wire.CreateOrUpdateVisual());
             }
 
+            var dropResult = AutoConnectOnCanvas(pasted.Elements);
             RefreshJunctionWireCounts();
             SyncCountersFromIds();
-            _selection.Select(pasted.Elements, pasted.Wires);
+            _selection.Select(pasted.Elements, pasted.Wires.Where(_wires.Contains));
             OnCircuitChanged();
+            return dropResult;
         }
     }
 }
