@@ -155,7 +155,7 @@ namespace CircuitAnalyzer.WPF.Services
         {
             if (zr?.Checks == null)
                 return new();
-            string unit = zr.Unit ?? "";
+            string unit = AnalysisPanel.ZenerCheckXUnit(zr);
             return zr.Checks
                 .Select(c => (
                     UnicodeMinus(EngFormat.Format(c.X, unit)),
@@ -271,8 +271,10 @@ namespace CircuitAnalyzer.WPF.Services
         public static string ZenerRangeCaption(ZenerRangeDto data)
         {
             string range = AnalysisPanel.FormatZenerRange(data);
+            string? given = AnalysisPanel.FormatZenerGiven(data);
+            string summary = given != null ? $"{given}; {range}" : range;
             return UnicodeMinus(
-                $"Zener aralığı grafiği: {range}. Gölgeli bölge geçerli çalışma aralığını, " +
+                $"Zener aralığı grafiği: {summary}. Gölgeli bölge geçerli çalışma aralığını, " +
                 "kesikli dikey çizgiler sınırları, noktalar sağlama değerlerini gösterir.");
         }
 

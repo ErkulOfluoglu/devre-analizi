@@ -614,7 +614,9 @@ def gate_reason(parsed: ParsedCircuit, mode: AnalysisMode) -> Optional[str]:
 
 def solve_with_diodes(parsed: ParsedCircuit, mode: AnalysisMode, frequency, analysis_type,
                       thevenin_terminals, target_probes, warnings,
-                      zener_range_target: Optional[str] = None):
+                      zener_range_target: Optional[str] = None,
+                      zener_range_given_min: Optional[float] = None,
+                      zener_range_given_max: Optional[float] = None):
     """Diyotlu devre: durum araması → eşdeğer devre → mevcut çözücü → sonuçların tamamlanması."""
     from solver.circuit_solver import UNSOLVABLE_PREFIX, _solve_core
 
@@ -703,7 +705,11 @@ def solve_with_diodes(parsed: ParsedCircuit, mode: AnalysisMode, frequency, anal
             build_zener_range_sections, fallback_note, fallback_section,
         )
         from solver.zener_range import analyze_zener_range
-        zr_analysis, zr_reason = analyze_zener_range(parsed, mode, zener_range_target)
+        zr_analysis, zr_reason = analyze_zener_range(
+            parsed, mode, zener_range_target,
+            given_min=zener_range_given_min,
+            given_max=zener_range_given_max,
+        )
         if zr_analysis is not None:
             results.zener_range = zr_analysis.summary
             results.explanation = build_zener_range_sections(zr_analysis)

@@ -68,10 +68,25 @@ namespace CircuitAnalyzer.WPF.Views
                 RenderPlot();
         }
 
+        /// <summary>Grafik bandı ve kesikli çizgi sınırları: plot_min/plot_max varsa onları kullanır, yoksa min/max'a düşer.</summary>
+        internal static (double? Min, double? Max) PlotBoundsFor(ZenerRangeDto data)
+        {
+            if (data.PlotMin.HasValue || data.PlotMax.HasValue)
+                return (data.PlotMin, data.PlotMax);
+            return (data.Min, data.Max);
+        }
+
+        private static string BaseXUnitFor(ZenerRangeDto data)
+        {
+            string raw = data.IsInverse && data.Given != null ? data.Given.Unit : data.Unit;
+            return string.IsNullOrWhiteSpace(raw) ? "" : raw.Trim();
+        }
+
         /// <summary>X ekseni için mühendislik ölçeği ve birimi (ör. ≥ 1000 Ω → kΩ, V → V).</summary>
         internal static (double Scale, string Unit) XUnitFor(ZenerRangeDto data)
         {
-            string baseUnit = string.IsNullOrWhiteSpace(data.Unit) ? "" : data.Unit.Trim();
+            string baseUnit = BaseXUnitFor(data);
+            var (plotMin, plotMax) = PlotBoundsFor(data);
             double maxAbs = 0;
 
             if (data.Curve?.X is { Count: > 0 } xs)
@@ -80,9 +95,11 @@ namespace CircuitAnalyzer.WPF.Views
                     if (double.IsFinite(x))
                         maxAbs = Math.Max(maxAbs, Math.Abs(x));
             }
-            if (data.Min is { } mn && double.IsFinite(mn)) maxAbs = Math.Max(maxAbs, Math.Abs(mn));
-            if (data.Max is { } mx && double.IsFinite(mx)) maxAbs = Math.Max(maxAbs, Math.Abs(mx));
-            if (data.CurrentValue is { } cv && double.IsFinite(cv)) maxAbs = Math.Max(maxAbs, Math.Abs(cv));
+            if (plotMin is { } mn && double.IsFinite(mn)) maxAbs = Math.Max(maxAbs, Math.Abs(mn));
+            if (plotMax is { } mx && double.IsFinite(mx)) maxAbs = Math.Max(maxAbs, Math.Abs(mx));
+            // Ters problemde current_value cevap elemanına aittir, x ekseninde değildir
+            if (!data.IsInverse && data.CurrentValue is { } cv && double.IsFinite(cv))
+                maxAbs = Math.Max(maxAbs, Math.Abs(cv));
             if (data.Checks is { Count: > 0 } checks)
             {
                 foreach (var c in checks)
@@ -145,6 +162,8 @@ namespace CircuitAnalyzer.WPF.Views
                 }
             }
 
+            var (plotMin, plotMax) = PlotBoundsFor(data);
+
             // Eksen sınırlarını eğri, sınır değerleri ve sağlama noktalarından hesapla
             var xCandidates = new List<double>();
             var yCandidates = new List<double>();
@@ -153,8 +172,8 @@ namespace CircuitAnalyzer.WPF.Views
                 xCandidates.AddRange(xVals.Where(double.IsFinite));
                 yCandidates.AddRange(yVals.Where(double.IsFinite));
             }
-            if (data.Min is { } mn && double.IsFinite(mn)) xCandidates.Add(mn * xScale);
-            if (data.Max is { } mx && double.IsFinite(mx)) xCandidates.Add(mx * xScale);
+            if (plotMin is { } mn && double.IsFinite(mn)) xCandidates.Add(mn * xScale);
+            if (plotMax is { } mx && double.IsFinite(mx)) xCandidates.Add(mx * xScale);
             if (data.Checks is { Count: > 0 })
             {
                 foreach (var c in data.Checks)
@@ -178,10 +197,10 @@ namespace CircuitAnalyzer.WPF.Views
                 bottom = Math.Max(0, yMin - ySpan * 0.12);
 
             // Geçerli çalışma bandı hafif gölgeli — eğrinin altında kalsın diye önce eklenir
-            if (data.Min is { } minVal && double.IsFinite(minVal))
+            if (plotMin is { } minVal && double.IsFinite(minVal))
             {
                 double bandLeft = minVal * xScale;
-                double bandRight = data.Max is { } maxVal && double.IsFinite(maxVal)
+                double bandRight = plotMax is { } maxVal && double.IsFinite(maxVal)
                     ? maxVal * xScale
                     : right;
                 if (bandRight > bandLeft)
@@ -194,7 +213,7 @@ namespace CircuitAnalyzer.WPF.Views
 
             // Min ve maks sınırları: dikey kesikli çizgiler + üst rozet bandı
             var markers = new List<(double X, string Text)>();
-            if (data.Min is { } minLine && double.IsFinite(minLine))
+            if (plotMin is { } minLine && double.IsFinite(minLine))
             {
                 double xPos = minLine * xScale;
                 var vl = plot.Add.VerticalLine(xPos);
@@ -203,7 +222,7 @@ namespace CircuitAnalyzer.WPF.Views
                 vl.LineWidth = 1.2f;
                 markers.Add((xPos, "min"));
             }
-            if (data.Max is { } maxLine && double.IsFinite(maxLine))
+            if (plotMax is { } maxLine && double.IsFinite(maxLine))
             {
                 double xPos = maxLine * xScale;
                 var vl = plot.Add.VerticalLine(xPos);
@@ -247,9 +266,7 @@ namespace CircuitAnalyzer.WPF.Views
 
             // Eksen başlıkları (kart başlığı zaten üstte, grafiğin içinde tekrarlanmaz)
             plot.Title("");
-            string xLabel = !string.IsNullOrWhiteSpace(data.Symbol)
-                ? (string.IsNullOrEmpty(xUnit) ? SubscriptText.Plain(data.Symbol) : $"{SubscriptText.Plain(data.Symbol)} ({xUnit})")
-                : (!string.IsNullOrWhiteSpace(data.XLabel) ? SubscriptText.Plain(data.XLabel) : xUnit);
+            string xLabel = FormatXLabel(data, xScale, xUnit);
             string yLabel = !string.IsNullOrWhiteSpace(data.YLabel)
                 ? SubscriptText.Plain(data.YLabel)
                 : "V_Y (V)";
@@ -264,6 +281,28 @@ namespace CircuitAnalyzer.WPF.Views
             crosshair.LineColor = curveCol;
             crosshair.LinePattern = ScottPlot.LinePattern.Dotted;
             return crosshair;
+        }
+
+        /// <summary>X ekseni başlığı: önce API'nin x_label alanı (ölçeklendiyse birim güncellenir), yoksa sembol + birim.</summary>
+        internal static string FormatXLabel(ZenerRangeDto data, double xScale, string xUnit)
+        {
+            if (!string.IsNullOrWhiteSpace(data.XLabel))
+            {
+                string raw = data.XLabel.Trim();
+                string baseUnit = BaseXUnitFor(data);
+                if (xScale != 1.0 && !string.IsNullOrEmpty(baseUnit) && !string.IsNullOrEmpty(xUnit))
+                {
+                    string baseSuffix = $"({baseUnit})";
+                    if (raw.EndsWith(baseSuffix, StringComparison.Ordinal))
+                        raw = raw[..^baseSuffix.Length] + $"({xUnit})";
+                }
+                return SubscriptText.Plain(raw);
+            }
+
+            string xSym = AnalysisPanel.ZenerCheckXSymbol(data);
+            return string.IsNullOrEmpty(xUnit)
+                ? SubscriptText.Plain(xSym)
+                : $"{SubscriptText.Plain(xSym)} ({xUnit})";
         }
 
         private static ScottPlot.Color GetThemeColor(string resourceKey)
@@ -321,7 +360,7 @@ namespace CircuitAnalyzer.WPF.Views
             _crosshair.IsVisible = true;
             PlotZener.Refresh();
 
-            string sym = !string.IsNullOrWhiteSpace(_data.Symbol) ? _data.Symbol : "x";
+            string sym = AnalysisPanel.ZenerCheckXSymbol(_data);
             string unitPart = string.IsNullOrEmpty(_xUnit) ? "" : " " + _xUnit;
             TxtHover.Text = $"{sym} = {TurkishNumber.FormatDisplay(nearestX, "G4")}{unitPart}, V_Y = {TurkishNumber.FormatDisplay(nearestY, "G4")} V";
             SubscriptText.Apply(TxtHover);

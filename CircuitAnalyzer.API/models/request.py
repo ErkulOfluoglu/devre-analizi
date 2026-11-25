@@ -377,8 +377,20 @@ class AnalysisRequest(BaseModel):
 
     zener_range_target: SkipJsonSchema[Optional[str]] = Field(
         default=None,
-        description="ZENER_RANGE (Zener Aralığı) yönteminde aralığı bulunacak elemanın kimliği: yük direnci (ör: 'RY') veya DC gerilim kaynağı (ör: 'V1'). Boşsa yük direnci alınır.",
+        description="ZENER_RANGE (Zener Aralığı) yönteminde aralığı bulunacak (veya ters problemde aralığı verilen) elemanın kimliği: yük direnci (ör: 'RY') veya DC gerilim kaynağı (ör: 'V1'). Boşsa yük direnci alınır.",
         examples=["RY"],
+    )
+
+    zener_range_given_min: SkipJsonSchema[Optional[float]] = Field(
+        default=None,
+        description="ZENER_RANGE ters probleminde hedef elemanın verilen alt sınırı (SI temel birimi: Ω veya V).",
+        examples=[120.0],
+    )
+
+    zener_range_given_max: SkipJsonSchema[Optional[float]] = Field(
+        default=None,
+        description="ZENER_RANGE ters probleminde hedef elemanın verilen üst sınırı (SI temel birimi: Ω veya V).",
+        examples=[200.0],
     )
 
     @field_validator("power_factor_target")

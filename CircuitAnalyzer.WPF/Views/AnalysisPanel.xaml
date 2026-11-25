@@ -228,7 +228,52 @@
                                ToolTip="Aralığı bulunacak yük direnci veya DC gerilim kaynağı. Boş bırakılırsa yük direnci otomatik seçilir."/>
                     <ComboBox x:Name="CmbZenerRangeTarget"
                               AutomationProperties.Name="Değişen eleman"
-                              ToolTip="Aralığı bulunacak yük direnci veya DC gerilim kaynağı. Boş bırakılırsa yük direnci otomatik seçilir."/>
+                              ToolTip="Aralığı bulunacak yük direnci veya DC gerilim kaynağı. Boş bırakılırsa yük direnci otomatik seçilir."
+                              SelectionChanged="CmbZenerRangeTarget_SelectionChanged"/>
+                </StackPanel>
+
+                <!-- Değişim aralığı (Zener Aralığı ters problem için isteğe bağlı) -->
+                <StackPanel x:Name="RowZenerRangeGiven"
+                            Margin="0,8,0,0"
+                            Visibility="Collapsed">
+                    <TextBlock x:Name="TxtZenerRangeGivenLabel"
+                               Text="Değişim aralığı (isteğe bağlı)"
+                               Style="{DynamicResource Text.Caption}"
+                               Margin="0,0,0,2"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtZenerRangeGivenMin"
+                                 Grid.Column="0"
+                                 AutomationProperties.Name="Değişim aralığı en küçük"
+                                 ToolTip="Alt sınır (ör. 120 V, 1 kΩ)"
+                                 TextChanged="TxtZenerRangeGiven_TextChanged"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="–"
+                                   VerticalAlignment="Center"
+                                   Margin="8,0"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"/>
+                        <TextBox x:Name="TxtZenerRangeGivenMax"
+                                 Grid.Column="2"
+                                 AutomationProperties.Name="Değişim aralığı en büyük"
+                                 ToolTip="Üst sınır (ör. 200 V, 4,7 kΩ)"
+                                 TextChanged="TxtZenerRangeGiven_TextChanged"/>
+                    </Grid>
+                    <TextBlock x:Name="TxtZenerRangeGivenHint"
+                               Text="boş bırakılırsa aralık hesaplanır; doluysa diğer büyüklük bulunur"
+                               Style="{DynamicResource Text.Caption}"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,0"/>
+                    <TextBlock x:Name="TxtZenerRangeGivenError"
+                               Foreground="{DynamicResource Brush.Error}"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,0"
+                               Visibility="Collapsed"/>
                 </StackPanel>
 
                 <!-- Değer Gösterimi (AC için: Etkin / Tepe) -->

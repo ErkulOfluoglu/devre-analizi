@@ -582,10 +582,14 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
         put(zr.min, zr.unit)
         put(zr.max, zr.unit)
         put(zr.current_value, zr.unit)
+        if zr.given is not None:
+            put(zr.given.min, zr.given.unit)
+            put(zr.given.max, zr.given.unit)
         for st in zr.steps:
             put(st.value, st.unit)
+        ch_unit = zr.given.unit if zr.given is not None else zr.unit
         for ch in zr.checks:
-            put(ch.x, zr.unit)
+            put(ch.x, ch_unit)
             put(ch.v_y, "V")
             put(ch.i_z, "A")
     return known_from(values, texts)

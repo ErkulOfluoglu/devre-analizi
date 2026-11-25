@@ -55,6 +55,12 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("zener_range_target")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? ZenerRangeTarget { get; set; }
+        [JsonPropertyName("zener_range_given_min")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? ZenerRangeGivenMin { get; set; }
+        [JsonPropertyName("zener_range_given_max")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? ZenerRangeGivenMax { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -469,6 +475,12 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("zener_range_target")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? ZenerRangeTarget { get; set; }
+        [JsonPropertyName("zener_range_given_min")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? ZenerRangeGivenMin { get; set; }
+        [JsonPropertyName("zener_range_given_max")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? ZenerRangeGivenMax { get; set; }
         [JsonPropertyName("question")] public string Question { get; set; } = "";
         /// <summary>Boşsa sunucu seçer (önerilen ya da ilk kurulu model).</summary>
         [JsonPropertyName("model")] public string? Model { get; set; }
@@ -492,6 +504,8 @@ namespace CircuitAnalyzer.WPF.Services
             PowerFactorTarget = analysis.PowerFactorTarget,
             ReciprocityTarget = analysis.ReciprocityTarget,
             ZenerRangeTarget = analysis.ZenerRangeTarget,
+            ZenerRangeGivenMin = analysis.ZenerRangeGivenMin,
+            ZenerRangeGivenMax = analysis.ZenerRangeGivenMax,
             Question = question,
         };
     }
@@ -694,16 +708,32 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("i_z")] public List<double> IZ { get; set; } = new();
     }
 
+    public sealed class ZenerRangeGivenDto
+    {
+        [JsonPropertyName("symbol")] public string Symbol { get; set; } = "";
+        [JsonPropertyName("unit")] public string Unit { get; set; } = "";
+        [JsonPropertyName("min")] public double Min { get; set; }
+        [JsonPropertyName("max")] public double Max { get; set; }
+    }
+
     public sealed class ZenerRangeDto
     {
         [JsonPropertyName("target_id")] public string TargetId { get; set; } = "";
-        /// <summary>"LOAD" veya "INPUT".</summary>
+        /// <summary>"LOAD", "INPUT", "LOAD_FROM_INPUT" veya "INPUT_FROM_LOAD".</summary>
         [JsonPropertyName("kind")] public string Kind { get; set; } = "LOAD";
+        /// <summary>"RANGE" (ileri) veya "INVERSE" (ters problem).</summary>
+        [JsonPropertyName("mode")] public string Mode { get; set; } = "RANGE";
+        [JsonPropertyName("unique")] public bool Unique { get; set; }
+        [JsonPropertyName("feasible")] public bool Feasible { get; set; } = true;
+        [JsonPropertyName("given")] public ZenerRangeGivenDto? Given { get; set; }
+        [JsonPropertyName("answer_id")] public string? AnswerId { get; set; }
         [JsonPropertyName("symbol")] public string Symbol { get; set; } = "";
         [JsonPropertyName("unit")] public string Unit { get; set; } = "";
         [JsonPropertyName("min")] public double? Min { get; set; }
         /// <summary>null → üst sınır yok (∞).</summary>
         [JsonPropertyName("max")] public double? Max { get; set; }
+        [JsonPropertyName("plot_min")] public double? PlotMin { get; set; }
+        [JsonPropertyName("plot_max")] public double? PlotMax { get; set; }
         [JsonPropertyName("current_value")] public double? CurrentValue { get; set; }
         [JsonPropertyName("current_inside")] public bool? CurrentInside { get; set; }
         [JsonPropertyName("steps")] public List<ZenerRangeStepDto> Steps { get; set; } = new();
@@ -711,6 +741,8 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("curve")] public ZenerRangeCurveDto? Curve { get; set; }
         [JsonPropertyName("x_label")] public string XLabel { get; set; } = "";
         [JsonPropertyName("y_label")] public string YLabel { get; set; } = "";
+
+        [JsonIgnore] public bool IsInverse => string.Equals(Mode, "INVERSE", StringComparison.OrdinalIgnoreCase);
     }
 
     public sealed class AnalysisResponseDto
