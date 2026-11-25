@@ -191,6 +191,42 @@ namespace CircuitAnalyzer.WPF.Services
                 .ToList();
         }
 
+        /// <summary>Kenetleme özet satırları (V_C, iletimde V_O, kayma, salınım); kenetleyici değilse boş.</summary>
+        public static List<string> WaveformClamperSummaryLines(WaveformResultDto? wf)
+        {
+            if (wf?.Clamper is not { } c)
+                return new();
+            return new List<string>
+            {
+                UnicodeMinus(AnalysisPanel.FormatWaveformClamperVC(c)),
+                UnicodeMinus(AnalysisPanel.FormatWaveformClamperConductingVO(c)),
+                UnicodeMinus(AnalysisPanel.FormatWaveformClamperShift(c)),
+                UnicodeMinus(AnalysisPanel.FormatWaveformClamperSwing(c)),
+            };
+        }
+
+        /// <summary>Kenetleme sağlama tablosu (kontrol adı, karar metni, tema fırça anahtarı, açıklama).</summary>
+        public static List<(string Name, string Verdict, string BrushKey, string Text)> WaveformClamperCheckRows(WaveformResultDto? wf)
+        {
+            if (wf?.Clamper?.Checks == null)
+                return new();
+            return wf.Clamper.Checks
+                .Select(c =>
+                {
+                    var (verdict, brushKey) = AnalysisPanel.FormatWaveformClamperCheckVerdict(c.Ok);
+                    return (
+                        c.Name ?? "",
+                        verdict,
+                        brushKey,
+                        UnicodeMinus(TurkishNumber.NormalizeForDisplay(c.Text ?? "")));
+                })
+                .ToList();
+        }
+
+        /// <summary>Kenetleyici RC zaman sabiti bilgilendirme notu (yoksa null).</summary>
+        public static string? WaveformClamperRcNote(WaveformResultDto? wf) =>
+            AnalysisPanel.FormatWaveformClamperRcNote(wf?.Clamper?.RcNote);
+
         /// <summary>Başlık + tablo sayfaya bölünmüş mü (başlık ile son satır ayrı sayfalarda).</summary>
         public static bool TableIsSplit(TablePlacement p) => p.Heading != p.LastRow;
 
@@ -326,7 +362,7 @@ namespace CircuitAnalyzer.WPF.Services
                 // Güç yöntemi "Güç Üçgeni", üç faz "Güç" bölümünde anlatır
                 PrintFigureKind.PowerTriangle => new[] { "Güç Üçgeni", "Güç" },
                 PrintFigureKind.ZenerRangePlot => new[] { "Sağlama", "Çalışma Aralığı" },
-                PrintFigureKind.WaveformPlot => new[] { "Dalga Şekli", "Çıkış Dalga Şekli", "Ortalama Değer" },
+                PrintFigureKind.WaveformPlot => new[] { "Dalga Şekli", "Çıkış Dalga Şekli", "Ortalama Değer", "Kenetleme" },
                 _ => Array.Empty<string>()
             };
             foreach (string anchor in anchors)

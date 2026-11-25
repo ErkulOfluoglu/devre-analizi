@@ -1996,6 +1996,51 @@ public partial class AnalysisPanel : UserControl
         return string.Join(", ", states.Select(kv => $"{kv.Key}: {FormatDiodeState(kv.Value)}"));
     }
 
+    internal static string FormatWaveformClamperVC(WaveformClamperDto clamper)
+    {
+        string mag = FormatDiodeVoltage(Math.Abs(clamper.VC));
+        string side = (clamper.VCPlusSide ?? "").Trim().ToUpperInvariant() switch
+        {
+            "INPUT" => "giriş tarafında",
+            "OUTPUT" => "çıkış tarafında",
+            _ => "",
+        };
+        return string.IsNullOrEmpty(side)
+            ? $"V_C = {mag}"
+            : $"V_C = {mag} (+ ucu {side})";
+    }
+
+    internal static string FormatWaveformClamperConductingVO(WaveformClamperDto clamper) =>
+        $"Diyot iletimdeyken V_O = {FormatDiodeVoltage(clamper.VK)}";
+
+    internal static string FormatWaveformClamperShift(WaveformClamperDto clamper)
+    {
+        string mag = FormatDiodeVoltage(Math.Abs(clamper.VC));
+        string dir = string.Equals(clamper.Shift?.Trim(), "UP", StringComparison.OrdinalIgnoreCase)
+            ? "yukarı"
+            : "aşağı";
+        return $"Çıkış, girişin {mag} {dir} kaymış hâlidir";
+    }
+
+    internal static string FormatWaveformClamperSwing(WaveformClamperDto clamper) =>
+        $"Salınım: Giriş {FormatDiodeVoltage(clamper.InputSwing)} · Çıkış {FormatDiodeVoltage(clamper.OutputSwing)}";
+
+    /// <summary>Kenetleyici sağlama satırı kararı: true yeşil, false hata fırçası, null ikincil yazı.</summary>
+    internal static (string Text, string BrushKey) FormatWaveformClamperCheckVerdict(bool? ok) => ok switch
+    {
+        true => ("Uygun ✓", "Brush.Success"),
+        false => ("Uymuyor ✗", "Brush.Error"),
+        null => ("Uygulanmaz", "Brush.Text.Secondary"),
+    };
+
+    internal static string? FormatWaveformClamperRcNote(string? rcNote)
+    {
+        if (string.IsNullOrWhiteSpace(rcNote))
+            return null;
+        string cleaned = rcNote.Trim().TrimStart('ℹ', ' ');
+        return string.IsNullOrWhiteSpace(cleaned) ? null : TurkishNumber.NormalizeForDisplay(cleaned);
+    }
+
     private Border BuildWaveformCard(WaveformResultDto wf)
     {
         var card = new Border
@@ -2051,7 +2096,8 @@ public partial class AnalysisPanel : UserControl
         SubscriptText.Apply(txtDc);
         stack.Children.Add(txtDc);
 
-        if (FormatWaveformBookFormula(wf.BookFormula) is { } bookText)
+        // Kenetleyicide kitap formülü ve iletim açısı satırları gösterilmez
+        if (wf.Clamper == null && FormatWaveformBookFormula(wf.BookFormula) is { } bookText)
         {
             var txtBook = new TextBlock
             {
@@ -2065,7 +2111,7 @@ public partial class AnalysisPanel : UserControl
             stack.Children.Add(txtBook);
         }
 
-        if (FormatWaveformConductionAngle(wf.ConductionAngleDeg) is { } angleText)
+        if (wf.Clamper == null && FormatWaveformConductionAngle(wf.ConductionAngleDeg) is { } angleText)
         {
             var txtAngle = new TextBlock
             {
@@ -2077,6 +2123,183 @@ public partial class AnalysisPanel : UserControl
             txtAngle.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
             SubscriptText.Apply(txtAngle);
             stack.Children.Add(txtAngle);
+        }
+
+        // Kenetleme özeti, sağlama tablosu ve RC notu
+        if (wf.Clamper is { } clamper)
+        {
+            var clampHeader = new TextBlock
+            {
+                Text = "Kenetleme",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 6, 0, 6)
+            };
+            clampHeader.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+            stack.Children.Add(clampHeader);
+
+            var summaryCard = new Border { Margin = new Thickness(0, 0, 0, 8) };
+            summaryCard.SetResourceReference(StyleProperty, "Card.Inset");
+            var summaryStack = new StackPanel();
+
+            var txtVc = new TextBlock
+            {
+                Text = FormatWaveformClamperVC(clamper),
+                FontSize = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 3)
+            };
+            txtVc.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+            SubscriptText.Apply(txtVc);
+            summaryStack.Children.Add(txtVc);
+
+            var txtVk = new TextBlock
+            {
+                Text = FormatWaveformClamperConductingVO(clamper),
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 3)
+            };
+            txtVk.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+            SubscriptText.Apply(txtVk);
+            summaryStack.Children.Add(txtVk);
+
+            var txtShift = new TextBlock
+            {
+                Text = FormatWaveformClamperShift(clamper),
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 3)
+            };
+            txtShift.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Body");
+            SubscriptText.Apply(txtShift);
+            summaryStack.Children.Add(txtShift);
+
+            var txtSwing = new TextBlock
+            {
+                Text = FormatWaveformClamperSwing(clamper),
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap
+            };
+            txtSwing.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+            SubscriptText.Apply(txtSwing);
+            summaryStack.Children.Add(txtSwing);
+
+            summaryCard.Child = summaryStack;
+            stack.Children.Add(summaryCard);
+
+            // Sağlama tablosu (Zener sağlama tablosuyla aynı kompakt biçem)
+            if (clamper.Checks is { Count: > 0 })
+            {
+                var checksCard = new Border { Margin = new Thickness(0, 0, 0, 8) };
+                checksCard.SetResourceReference(StyleProperty, "Card.Inset");
+
+                var grid = new Grid();
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                string[] headers = { "Kontrol", "Karar", "Açıklama" };
+                for (int c = 0; c < headers.Length; c++)
+                {
+                    var th = new TextBlock
+                    {
+                        Text = headers[c],
+                        FontSize = 11,
+                        FontWeight = FontWeights.SemiBold,
+                        Margin = new Thickness(2, 0, 8, 4)
+                    };
+                    th.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+                    Grid.SetRow(th, 0);
+                    Grid.SetColumn(th, c);
+                    grid.Children.Add(th);
+                }
+
+                for (int i = 0; i < clamper.Checks.Count; i++)
+                {
+                    var chk = clamper.Checks[i];
+                    int row = i + 1;
+                    grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                    var (verdictText, verdictBrush) = FormatWaveformClamperCheckVerdict(chk.Ok);
+                    string[] vals =
+                    {
+                        chk.Name ?? "",
+                        verdictText,
+                        TurkishNumber.NormalizeForDisplay(chk.Text ?? ""),
+                    };
+
+                    for (int c = 0; c < vals.Length; c++)
+                    {
+                        var td = new TextBlock
+                        {
+                            Text = vals[c],
+                            FontSize = 11,
+                            Margin = new Thickness(2, 2, 8, 2),
+                            TextWrapping = c == 2 ? TextWrapping.Wrap : TextWrapping.NoWrap
+                        };
+                        if (c == 1)
+                        {
+                            td.FontWeight = FontWeights.SemiBold;
+                            td.SetResourceReference(TextBlock.ForegroundProperty, verdictBrush);
+                        }
+                        else if (c == 0)
+                        {
+                            td.FontWeight = FontWeights.SemiBold;
+                            td.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+                            SubscriptText.Apply(td);
+                        }
+                        else
+                        {
+                            td.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+                            SubscriptText.Apply(td);
+                        }
+                        Grid.SetRow(td, row);
+                        Grid.SetColumn(td, c);
+                        grid.Children.Add(td);
+                    }
+                }
+
+                checksCard.Child = grid;
+                stack.Children.Add(checksCard);
+            }
+
+            if (FormatWaveformClamperRcNote(clamper.RcNote) is { } rcNote)
+            {
+                var noteBorder = new Border { Margin = new Thickness(0, 0, 0, 8) };
+                noteBorder.SetResourceReference(StyleProperty, "InfoBar.Info");
+
+                var noteGrid = new Grid();
+                noteGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                noteGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var noteIcon = new Icon
+                {
+                    Width = 16,
+                    Height = 16,
+                    Margin = new Thickness(0, 2, 8, 0),
+                    VerticalAlignment = VerticalAlignment.Top
+                };
+                noteIcon.SetResourceReference(Icon.DataProperty, "Icon.Info");
+                Grid.SetColumn(noteIcon, 0);
+                noteGrid.Children.Add(noteIcon);
+
+                var noteTb = new TextBlock
+                {
+                    Text = rcNote,
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                SubscriptText.Apply(noteTb);
+                Grid.SetColumn(noteTb, 1);
+                noteGrid.Children.Add(noteTb);
+
+                noteBorder.Child = noteGrid;
+                stack.Children.Add(noteBorder);
+            }
         }
 
         // Kare dalga iki seviye tablosu

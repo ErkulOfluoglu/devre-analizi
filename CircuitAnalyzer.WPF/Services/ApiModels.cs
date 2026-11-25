@@ -781,6 +781,34 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("states")] public Dictionary<string, string> States { get; set; } = new();
     }
 
+    public sealed class WaveformClamperCheckDto
+    {
+        [JsonPropertyName("name")] public string Name { get; set; } = "";
+        /// <summary>true: uygun, false: uymuyor, null: uygulanmaz.</summary>
+        [JsonPropertyName("ok")] public bool? Ok { get; set; }
+        [JsonPropertyName("text")] public string Text { get; set; } = "";
+    }
+
+    public sealed class WaveformClamperDto
+    {
+        /// <summary>İşaretli kondansatör gerilimi (+ ucu giriş tarafında iken pozitif).</summary>
+        [JsonPropertyName("v_c")] public double VC { get; set; }
+        /// <summary>"INPUT" veya "OUTPUT".</summary>
+        [JsonPropertyName("v_c_plus_side")] public string VCPlusSide { get; set; } = "";
+        /// <summary>Diyot iletimdeyken çıkış gerilimi V_O.</summary>
+        [JsonPropertyName("v_k")] public double VK { get; set; }
+        /// <summary>"TOP" veya "BOTTOM".</summary>
+        [JsonPropertyName("pinned")] public string Pinned { get; set; } = "";
+        /// <summary>"DOWN" veya "UP".</summary>
+        [JsonPropertyName("shift")] public string Shift { get; set; } = "";
+        [JsonPropertyName("input_swing")] public double InputSwing { get; set; }
+        [JsonPropertyName("output_swing")] public double OutputSwing { get; set; }
+        [JsonPropertyName("checks")] public List<WaveformClamperCheckDto> Checks { get; set; } = new();
+        [JsonPropertyName("tau")] public double Tau { get; set; }
+        [JsonPropertyName("period")] public double Period { get; set; }
+        [JsonPropertyName("rc_note")] public string? RcNote { get; set; }
+    }
+
     public sealed class WaveformResultDto
     {
         [JsonPropertyName("source_id")] public string SourceId { get; set; } = "";
@@ -799,6 +827,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("book_formula")] public WaveformBookFormulaDto? BookFormula { get; set; }
         [JsonPropertyName("conduction_angle_deg")] public double? ConductionAngleDeg { get; set; }
         [JsonPropertyName("levels")] public List<WaveformLevelDto>? Levels { get; set; }
+        [JsonPropertyName("clamper")] public WaveformClamperDto? Clamper { get; set; }
     }
 
     public sealed class AnalysisResponseDto
@@ -863,7 +892,7 @@ namespace CircuitAnalyzer.WPF.Services
         public static (ResultValue Value, string Direction) Normalize(string elementId, ElementCurrentDto current)
         {
             var value = current.Value;
-            string direction = current.Direction;
+            string direction = current.Direction ?? "";
             string[] ends = direction.Split('→');
             bool canReverse = ends.Length == 2;
             // Only voltage sources ("V", "VAC") need inversion in AC because solver reports branch current

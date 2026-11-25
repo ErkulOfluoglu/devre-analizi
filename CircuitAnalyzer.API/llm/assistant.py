@@ -621,6 +621,13 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
             for lv in wf.levels:
                 put(lv.v_in, "V")
                 put(lv.v_out, "V")
+        if wf.clamper is not None:
+            cl = wf.clamper
+            put(cl.v_c, "V")
+            put(cl.v_k, "V")
+            put(cl.input_swing, "V")
+            put(cl.output_swing, "V")
+            put(cl.tau, "s")
     return known_from(values, texts)
 
 

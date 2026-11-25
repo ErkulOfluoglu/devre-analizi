@@ -14,7 +14,7 @@ Kitap sırası (Selek, Elektronik-1):
 
 from typing import List
 
-from explainer.formatting import MINUS, ek, eng, num
+from explainer.formatting import MINUS, ek, eng, num, paren
 from models.response import ExplanationBlock, ExplanationSection
 
 
@@ -120,9 +120,208 @@ def _alternans_section(title: str, intro: str, setup, pt) -> _Sec:
     return s
 
 
+def _build_clamper_sections(analysis) -> List[ExplanationSection]:
+    """Kenetleme (clamper) devresi için kitap sırasıyla Türkçe anlatım bölümleri."""
+    setup = analysis.setup
+    cl = setup.clamper
+    sm = analysis.summary
+    info = sm.clamper
+    d = cl.diode
+    c = cl.capacitor
+    r = cl.resistor
+    bias = cl.bias_source
+    sections: List[_Sec] = []
+
+    # ── 1. Devreyi Tanıyalım ──
+    s1 = _Sec("Devreyi Tanıyalım")
+    s1.add(
+        "text",
+        "Bu devre bir kenetleme devresidir (clamper): giriş dalga şeklinin biçimini "
+        "bozmadan DC seviyesini aşağı ya da yukarı kaydırır.",
+    )
+    shape_tr = _SHAPE_LABELS[setup.shape]
+    if setup.shape == "SQUARE":
+        src_desc = (
+            f"Giriş kaynağı {setup.source.id}: {shape_tr} dalga, "
+            f"seviyeler V₁ = {_volts(setup.v1)} ve V₂ = {_volts(setup.v2)}, "
+            f"f = {eng(setup.frequency, 'Hz')}, periyot T = 1/f = {eng(setup.period, 's')}."
+        )
+    else:
+        off_txt = f", ofset {_volts(setup.offset)}" if abs(setup.offset) > 1e-12 else ""
+        src_desc = (
+            f"Giriş kaynağı {setup.source.id}: {shape_tr} dalga, "
+            f"tepe değeri V_m = {_volts(setup.amplitude)}{off_txt}, "
+            f"f = {eng(setup.frequency, 'Hz')}, periyot T = 1/f = {eng(setup.period, 's')}."
+        )
+    s1.add("text", src_desc)
+    if bias is not None:
+        s1.add(
+            "text",
+            f"Diyot kolu: {_diode_spec(d)} ve seri DC kaynak {bias.id} = {_volts(bias.value)} "
+            f"(çıkıştan toprağa katkısı V_bias = {_volts(cl.v_bias)}).",
+        )
+    else:
+        s1.add("text", f"Diyot kolu: {_diode_spec(d)} (seri DC kaynak yok).")
+    s1.add(
+        "text",
+        f"Kondansatör {c.id} = {eng(c.value, 'F')}, yük direnci {r.id} = {eng(r.value, 'Ω')} "
+        f"(τ = R·C = {eng(info.tau, 's')}). Çıkış gerilimi {sm.output_label}, "
+        f"{ek(sm.output_id, 'in')} uçlarından alınır.",
+    )
+    s1.add(
+        "note",
+        "Kitap yöntemi: kondansatör yalıtım alternansında gerilimini korur (RC ≫ T). "
+        "Düğüm gerilimleri ve akımlar iletim alternansı anındaki değerlerdir.",
+    )
+    sections.append(s1)
+
+    # ── 2. İletim Koşulu ──
+    s2 = _Sec("İletim Koşulu")
+    if bias is not None:
+        op = "+" if cl.diode_to_gnd else MINUS
+        s2.add(
+            "math",
+            f"V_K = V_bias {op} V_T = {_volts(cl.v_bias)} {op} {_volts(cl.v_t)} = {_volts(cl.v_k)}",
+        )
+    else:
+        if cl.v_t == 0.0:
+            s2.add("math", f"V_K = {_volts(0.0)} (ideal diyot, seri kaynak yok)")
+        elif cl.diode_to_gnd:
+            s2.add("math", f"V_K = +V_T = {_volts(cl.v_k)}")
+        else:
+            s2.add("math", f"V_K = {MINUS}V_T = {_volts(cl.v_k)}")
+
+    if cl.diode_to_gnd:
+        s2.add(
+            "text",
+            f"{d.id} çıkıştan toprağa doğru bağlandığından v_i > V_K = {_volts(cl.v_k)} olduğunda "
+            f"(üst alternans, v_i,max = {_volts(analysis.clamper_v_i_max)}) iletime geçer.",
+        )
+    else:
+        s2.add(
+            "text",
+            f"{d.id} topraktan çıkışa doğru bağlandığından v_i < V_K = {_volts(cl.v_k)} olduğunda "
+            f"(alt alternans, v_i,min = {_volts(analysis.clamper_v_i_min)}) iletime geçer.",
+        )
+    s2.add(
+        "note",
+        "İncelemeye diyotu iletime götüren alternanstan başlanır, çünkü V_C önce bulunmalıdır.",
+    )
+    if setup.shape != "SQUARE":
+        s2.add(
+            "note",
+            f"{shape_tr.capitalize()} girişte kararlı hâlde diyot periyot boyunca yalıtımdadır; "
+            "yalnızca tepe anında sınırda iletime geçer ve kondansatörü tazeler.",
+        )
+    sections.append(s2)
+
+    # ── 3. İletim Alternansı ──
+    s3 = _Sec("İletim Alternansı")
+    diode_eq = f"{d.id} kısa devre" if cl.v_t == 0.0 else f"{d.id} yerine V_T = {_volts(cl.v_t)} kaynak"
+    if bias is not None:
+        s3.add(
+            "text",
+            f"Eşdeğer devrede {diode_eq} konur ve seri {bias.id} ({_volts(bias.value)}) kaynağı korunur; "
+            f"çıkış V_O = V_K = {_volts(cl.v_k)} değerinde sabitlenir.",
+        )
+    else:
+        s3.add(
+            "text",
+            f"Eşdeğer devrede {diode_eq} konur; çıkış V_O = V_K = {_volts(cl.v_k)} değerinde sabitlenir.",
+        )
+    s3.add(
+        "math",
+        f"KVL: v_i = V_C + V_O ⇒ V_C = v_i {MINUS} V_K = "
+        f"{_volts(analysis.clamper_v_in_cond)} {MINUS} {paren(_volts(cl.v_k))} = {_volts(info.v_c)}",
+    )
+    if info.v_c_plus_side == "INPUT":
+        s3.add(
+            "text",
+            f"V_C = {_volts(info.v_c)} (> 0) olduğundan {ek(c.id, 'in')} + ucu giriş tarafında, "
+            "− ucu çıkış tarafındadır.",
+        )
+    else:
+        s3.add(
+            "text",
+            f"V_C = {_volts(info.v_c)} (büyüklük {_volts(abs(info.v_c))}) olduğundan {ek(c.id, 'in')} "
+            "+ ucu çıkış tarafında, − ucu giriş tarafındadır.",
+        )
+    # Tek eşitlikli sonuç satırı: WPF adım özeti ilk ve son parçayı gösterir.
+    s3.add("result", f"V_O = {_volts(cl.v_k)}")
+    sections.append(s3)
+
+    # ── 4. Yalıtım Alternansı ──
+    s4 = _Sec("Yalıtım Alternansı")
+    s4.add("text", "Diyot yalıtımda; V_C'nin polaritesi korunur.")
+    if setup.shape == "SQUARE":
+        v_off = analysis.clamper_v_in_off
+        v_out_off = v_off - info.v_c
+        s4.add(
+            "math",
+            f"V_O = v_i {MINUS} V_C = {_volts(v_off)} {MINUS} {paren(_volts(info.v_c))} = {_volts(v_out_off)}",
+        )
+        s4.add("result", f"V_O = {_volts(v_out_off)}")
+    else:
+        s4.add(
+            "text",
+            "Diyot yalnızca tepe anında sınırda iletime geçer ve kondansatörü tazeler; "
+            "tüm periyot boyunca V_O(t) = v_i(t) − V_C geçerlidir.",
+        )
+        s4.add(
+            "math",
+            f"V_O,max = v_i,max {MINUS} V_C = {_volts(analysis.clamper_v_i_max)} "
+            f"{MINUS} {paren(_volts(info.v_c))} = {_volts(sm.v_out_max)}",
+        )
+        s4.add(
+            "math",
+            f"V_O,min = v_i,min {MINUS} V_C = {_volts(analysis.clamper_v_i_min)} "
+            f"{MINUS} {paren(_volts(info.v_c))} = {_volts(sm.v_out_min)}",
+        )
+        s4.add("result", f"V_O,max = {_volts(sm.v_out_max)}")
+        s4.add("result", f"V_O,min = {_volts(sm.v_out_min)}")
+    sections.append(s4)
+
+    # ── 5. Kontroller (kitabın 3 kriteri) ──
+    s5 = _Sec("Kontroller (kitabın 3 kriteri)")
+    for ch in info.checks:
+        mark = "✓ " if ch.ok is True else ("✗ " if ch.ok is False else "– ")
+        s5.add("check", f"{mark}{ch.name}: {ch.text}")
+    # Adım özeti tek sonuç satırını gösterir; yoksa "3 kontrol tuttu" deyip uygulanmayan
+    # kriteri de tutmuş sayıyordu. Sayım ok değerine göre yapılır (tek " = " kuralı: eşittir yok).
+    n_ok = sum(1 for ch in info.checks if ch.ok is True)
+    n_bad = sum(1 for ch in info.checks if ch.ok is False)
+    n_na = sum(1 for ch in info.checks if ch.ok is None)
+    parts = [f"{n_ok} kriter uygun ✓"]
+    if n_bad:
+        parts.append(f"{n_bad} kriter uymuyor ✗")
+    if n_na:
+        parts.append(f"{n_na} kriter uygulanmaz")
+    s5.add("result", ", ".join(parts))
+    sections.append(s5)
+
+    # ── 6. Çıkış Dalga Şekli ──
+    s6 = _Sec("Çıkış Dalga Şekli")
+    dir_word = "aşağı" if info.shift == "DOWN" else "yukarı"
+    s6.add(
+        "text",
+        f"Çıkış, girişin {_volts(abs(info.v_c))} {dir_word} kaymış hâlidir "
+        f"(V_O,max = {_volts(sm.v_out_max)}, V_O,min = {_volts(sm.v_out_min)}).",
+    )
+    if info.rc_note:
+        s6.add("note", info.rc_note)
+    s6.add("text", "Bir periyot üzerinden sayısal ortalama (DC) çıkış gerilimi:")
+    s6.add("math", f"V_DC (sayısal) = {_volts(sm.v_dc_numeric)}")
+    s6.add("result", f"V_DC = {_volts(sm.v_dc_numeric)}")
+    sections.append(s6)
+
+    return [s.build() for s in sections if s.blocks]
+
+
 def build_waveform_sections(analysis) -> List[ExplanationSection]:
     """WaveformAnalysis → kitap sırasıyla Türkçe ExplanationSection listesi."""
     setup = analysis.setup
+    if setup.clamper is not None and analysis.summary.clamper is not None:
+        return _build_clamper_sections(analysis)
     sm = analysis.summary
     sections: List[_Sec] = []
 

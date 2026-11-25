@@ -141,13 +141,16 @@ namespace CircuitAnalyzer.WPF.Views
             _lastResponse = response;
 
             var results = response.Results;
+            var elementCurrents = results?.ElementCurrents ?? new Dictionary<string, ElementCurrentDto>();
+            var nodeVoltages = results?.NodeVoltages ?? new Dictionary<string, NodeVoltageDto>();
+            var probeList = results?.ProbeResults ?? new List<ProbeResultDto>();
 
             // Akım ışığı: DC'de akar, AC'de yavaşlatılmış salınır. Etiketlerin altında kalsın diye önce
             bool isDc = string.Equals(response.Mode, AnalysisModes.Dc, StringComparison.OrdinalIgnoreCase);
             bool isAc = string.Equals(response.Mode, AnalysisModes.AcPhasor, StringComparison.OrdinalIgnoreCase);
             if (isDc || isAc)
             {
-                _flow.Prepare(elements, wires, netlist, results.ElementCurrents, isAc);
+                _flow.Prepare(elements, wires, netlist, elementCurrents, isAc);
                 _flow.Show(_selected != null && elements.Contains(_selected) ? _selected : null);
             }
             else
@@ -157,13 +160,13 @@ namespace CircuitAnalyzer.WPF.Views
 
             foreach (var (node, anchor) in NodeAnchors(netlist, wires))
             {
-                string? voltage = results.NodeVoltages.TryGetValue(node.ToString(), out var nv)
+                string? voltage = nodeVoltages.TryGetValue(node.ToString(), out var nv) && nv != null
                     ? EngFormat.Format(nv.Value, "V")
                     : null;
                 AddNodeBadge(anchor, node, voltage);
             }
 
-            var probeValues = results.ProbeResults.ToDictionary(p => p.ProbeId);
+            var probeValues = probeList.ToDictionary(p => p.ProbeId);
 
             foreach (var element in elements)
             {
@@ -180,7 +183,7 @@ namespace CircuitAnalyzer.WPF.Views
 
                 if (element is TransformerElement tfEl)
                 {
-                    var tf = response.Transformer ?? results.Transformer;
+                    var tf = response.Transformer ?? results?.Transformer;
                     if (tf != null && (string.IsNullOrEmpty(tf.Id) || string.Equals(tf.Id, tfEl.Id, StringComparison.OrdinalIgnoreCase)))
                     {
                         var (pPos, sPos) = TransformerCurrentAnchors(tfEl);
@@ -245,10 +248,10 @@ namespace CircuitAnalyzer.WPF.Views
                     // Akım ve durum tek satırda: iki satır alt alta konunca diyotun kendi adını
                     // ("D2") ve paralel koldaki diyotun model yazısını ("Si") örtüyordu.
                     string? currentText = null;
-                    if (results.ElementCurrents.TryGetValue(diode.Id, out var diodeCurrent) && diodeCurrent != null)
+                    if (elementCurrents.TryGetValue(diode.Id, out var diodeCurrent) && diodeCurrent != null)
                     {
                         var (value, direction) = CurrentDisplay.Format(diode.Id, diodeCurrent);
-                        currentText = $"{value} ({direction})";
+                        currentText = string.IsNullOrEmpty(direction) ? value : $"{value} ({direction})";
                     }
 
                     var diodeRes = response.DiodeResults?.FirstOrDefault(d => string.Equals(d.Id, diode.Id, StringComparison.OrdinalIgnoreCase));
@@ -265,10 +268,31 @@ namespace CircuitAnalyzer.WPF.Views
                     continue;
                 }
 
-                if (results.ElementCurrents.TryGetValue(element.Id, out var current))
+                // Kenetleyicide kondansatör üstünde V_C (varsa akımla birlikte) tek etikette gösterilir
+                if (element is Capacitor cap && response.WaveformResult?.Clamper is { } clamper)
+                {
+                    string vcText = $"V_C = {AnalysisPanel.FormatDiodeVoltage(Math.Abs(clamper.VC))}";
+                    string labelText = vcText;
+                    if (elementCurrents.TryGetValue(cap.Id, out var capCurrent) && capCurrent != null)
+                    {
+                        var (value, direction) = CurrentDisplay.Format(cap.Id, capCurrent);
+                        string curText = string.IsNullOrEmpty(direction) ? value : $"{value} ({direction})";
+                        labelText = $"{vcText} · {curText}";
+                    }
+                    // Yatay kondansatörün kimliği ("C1") gövdenin hemen altında yazılı; uzun V_C
+                    // etiketi aynı yere konunca kimliği örtüyordu, bu yüzden bir satır aşağı iner.
+                    var capAnchor = BelowOrRight(cap);
+                    if (Math.Abs(cap.Rotation % 180 - 90) >= 1)
+                        capAnchor.Offset(0, 14);
+                    AddLabel(capAnchor, labelText, "Brush.Overlay.Current", bold: false);
+                    continue;
+                }
+
+                if (elementCurrents.TryGetValue(element.Id, out var current) && current != null)
                 {
                     var (value, direction) = CurrentDisplay.Format(element.Id, current);
-                    AddLabel(BelowOrRight(element), $"{value} ({direction})", "Brush.Overlay.Current", bold: false);
+                    string text = string.IsNullOrEmpty(direction) ? value : $"{value} ({direction})";
+                    AddLabel(BelowOrRight(element), text, "Brush.Overlay.Current", bold: false);
                 }
             }
             ResolveBadgeCollisions();

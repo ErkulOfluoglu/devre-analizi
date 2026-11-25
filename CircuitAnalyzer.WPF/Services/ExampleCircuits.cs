@@ -67,6 +67,7 @@ namespace CircuitAnalyzer.WPF.Services
             DcSeriesParallelDiodes,
             DcZenerVoltageRegulator,
             AcHalfWaveRectifierSi,
+            AcClamperSiSquare,
         };
 
         // ═══════════════════════════════════════════════════════
@@ -453,5 +454,44 @@ namespace CircuitAnalyzer.WPF.Services
             }, "VAC1",
             new Diode(DiodeModel.Si), "D1",
             new Resistor { Value = 1000 }, "R1");
+
+        /// <summary>
+        /// Kenetleyici (kitap s. 154): kare dalga (10 V / −15 V, 250 Hz, T = 4 ms) → C1 = 10 µF →
+        /// [D1 (Si, anodu GND'de, katodu çıkışta) ∥ R1 = 10 kΩ]. τ = 100 ms ≫ T;
+        /// V_C = 14,3 V (+ ucu çıkış tarafında), çıkış seviyeleri 24,3 V ve −0,7 V.
+        /// </summary>
+        public static ExampleCircuit AcClamperSiSquare()
+        {
+            var c = new ExampleCircuit
+            {
+                Name = "Kenetleyici: Si Diyot (kare dalga)",
+                Description = "Kare dalga (10/−15 V, 250 Hz) → C1 = 10 µF → [D1 (Si) ∥ R1 = 10 kΩ]. V_O: 24,3 V / −0,7 V; V_C = 14,3 V.",
+                SuggestedAnalysisType = AnalysisTypes.Waveform,
+                SuggestedWaveformOutput = "R1",
+            };
+
+            var src = c.Add(new AcVoltageSource
+            {
+                Waveform = AcWaveform.Square,
+                SquareV1 = 10,
+                SquareV2 = -15,
+                Frequency = 250,
+                InputMode = AcInputMode.Physical,
+                ValueKind = AcValueKind.Peak,
+            }, "VAC1", 100, 200, 90);
+            var c1 = c.Add(new Capacitor { Value = 10e-6 }, "C1", 200, 100);
+            // 270° döndürme: Pins[1] (Katot) üstte çıkış düğümünde, Pins[0] (Anot) altta GND'de
+            var d1 = c.Add(new Diode(DiodeModel.Si), "D1", 320, 200, 270);
+            var r1 = c.Add(new Resistor { Value = 10_000 }, "R1", 500, 200, 90);
+            var gnd = c.Add(new GroundElement(), "GND1", 320, 320);
+
+            c.Connect(c1.Pins[0], src.Pins[0]);
+            c.Connect(c1.Pins[1], d1.Pins[1]);
+            c.Connect(d1.Pins[1], r1.Pins[0]);
+            c.Connect(src.Pins[1], gnd.Pins[0]);
+            c.Connect(d1.Pins[0], gnd.Pins[0]);
+            c.Connect(r1.Pins[1], gnd.Pins[0]);
+            return c;
+        }
     }
 }
