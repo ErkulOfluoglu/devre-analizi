@@ -819,6 +819,34 @@ class WaveformSquareLevel(BaseModel):
         default_factory=dict, description="Bu seviyedeki diyot durumları ({id: durum})")
 
 
+class WaveformClamperCheck(BaseModel):
+    """Kenetleme (clamper) devresi için kitabın 3 kontrolünden biri."""
+    name: str = Field(..., description="Kontrol adı (ör: 'Salınım eşitliği')")
+    ok: Optional[bool] = Field(
+        default=None, description="True: sağlandı, False: sağlanmadı, null: uygulanmaz")
+    text: str = Field(..., description="Türkçe kontrol açıklaması")
+
+
+class WaveformClamperInfo(BaseModel):
+    """Kenetleme (clamper) devresi özeti; kenetleme dışındaki Dalga Şekli çözümlerinde null."""
+    v_c: float = Field(..., description="Kondansatör gerilimi V_C = V(giriş) − V(çıkış) (V, işaretli)")
+    v_c_plus_side: Literal["INPUT", "OUTPUT"] = Field(
+        ..., description="Kondansatörün (+) ucunun tarafı: 'INPUT' (V_C > 0) veya 'OUTPUT' (V_C < 0)")
+    v_k: float = Field(..., description="Diyot kolunun kenetleme gerilimi V_K (V)")
+    pinned: Literal["TOP", "BOTTOM"] = Field(
+        ..., description="Sabitlenen uç: 'TOP' (üst kenetleme) veya 'BOTTOM' (alt kenetleme)")
+    shift: Literal["DOWN", "UP"] = Field(
+        ..., description="Çıkışın kayma yönü: 'DOWN' (aşağı) veya 'UP' (yukarı)")
+    input_swing: float = Field(..., description="Giriş salınımı v_i,max − v_i,min (V)")
+    output_swing: float = Field(..., description="Çıkış salınımı V_O,max − V_O,min (V)")
+    checks: List[WaveformClamperCheck] = Field(
+        default_factory=list, description="Kitabın 3 kontrolü (salınım eşitliği, kayma yönü, 0 V seviyesi)")
+    tau: float = Field(..., description="Zaman sabitesi τ = R·C (s)")
+    period: float = Field(..., description="Periyot T = 1/f (s)")
+    rc_note: Optional[str] = Field(
+        default=None, description="τ < 5·T ise kitap varsayımı uyarısı; aksi hâlde null")
+
+
 class WaveformSummary(BaseModel):
     """Dalga Şekli (WAVEFORM) yöntemi özeti: iki periyotluk tarama, iletim aralıkları ve V_DC."""
     source_id: str = Field(..., description="Zamanla değişen gerilim kaynağının kimliği")
@@ -841,6 +869,8 @@ class WaveformSummary(BaseModel):
         default=None, description="İletime geçiş açısı θ (derece); kare dalgada null")
     levels: Optional[List[WaveformSquareLevel]] = Field(
         default=None, description="Yalnızca kare dalgada iki seviyenin giriş/çıkış özeti; aksi hâlde null")
+    clamper: Optional[WaveformClamperInfo] = Field(
+        default=None, description="Yalnızca kenetleme (clamper) devresinde dolu; aksi hâlde null")
 
 
 class AnalysisResults(BaseModel):

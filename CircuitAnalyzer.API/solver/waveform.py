@@ -18,8 +18,9 @@ from typing import Dict, List, Optional, Tuple
 from explainer.formatting import MINUS, eng, num
 from models.request import AnalysisMode, AnalysisType
 from models.response import (
-    AnalysisResults, DiodeResult, ElementCurrent, NodeVoltage,
-    WaveformBookFormula, WaveformDiodeInterval, WaveformDiodeTrace,
+    AnalysisResults, DiodeResult, ElementCurrent, NodeVoltage, ProbeResult,
+    WaveformBookFormula, WaveformClamperCheck, WaveformClamperInfo,
+    WaveformDiodeInterval, WaveformDiodeTrace,
     WaveformSquareLevel, WaveformSummary,
 )
 from parser.netlist_parser import (
@@ -49,6 +50,8 @@ _ALLOWED_ELEMENTS = _TIME_SOURCES + (
     ElementType.RESISTOR,
     ElementType.DIODE,
 )
+_CLAMPER_ALLOWED_ELEMENTS = _ALLOWED_ELEMENTS + (ElementType.CAPACITOR,)
+_CLAMPER_DIODE_MODELS = ("IDEAL", "SI", "GE")
 
 
 def _sig_round(x: float, digits: int = 8) -> float:
@@ -76,6 +79,24 @@ def _volts(x: float) -> str:
 
 
 @dataclass
+class ClamperSetup:
+    """Doğrulanmış kitap kenetleme (clamper) devresi topolojisi."""
+    input_node: str
+    output_node: str
+    capacitor: ParsedElement
+    resistor: ParsedElement
+    diode: ParsedElement
+    diode_to_gnd: bool                       # True: y → 0 (üst kenetleme), False: 0 → y (alt kenetleme)
+    bias_source: Optional[ParsedElement]     # diyotla seri DC kaynak (yoksa None)
+    mid_node: Optional[str]                  # diyot ile seri kaynak arasındaki ara düğüm
+    diode_on_y_side: bool                    # True: y—D—m—V—0, False: y—V—m—D—0 (yalnız bias varsa)
+    v_bias: float                            # seri kaynağın V(y)−V(0) yönündeki işaretli katkısı
+    v_t: float                               # diyot eşik gerilimi V_T (V)
+    v_k: float                               # diyot kolu kenetleme gerilimi V_K = V_bias ± V_T (V)
+    source_reversed: bool = False            # True: kaynak 0 → a ters bağlı, v_i(t) = −src(t)
+
+
+@dataclass
 class WaveformSetup:
     """Doğrulanmış Dalga Şekli devre kurulumu."""
     source: ParsedElement
@@ -92,6 +113,7 @@ class WaveformSetup:
     phase_deg: float = 0.0
     v1: float = 0.0
     v2: float = 0.0
+    clamper: Optional[ClamperSetup] = None
 
 
 @dataclass
@@ -110,8 +132,8 @@ class WaveformAnalysis:
     """Dalga Şekli analizinin tüm sonuçları (özet + anlatım verisi)."""
     setup: WaveformSetup
     summary: WaveformSummary
-    pos_peak: SamplePoint
-    neg_peak: SamplePoint
+    pos_peak: Optional[SamplePoint] = None
+    neg_peak: Optional[SamplePoint] = None
     pattern: Optional[str] = None              # "HALF_WAVE" | "BRIDGE" | None
     pattern_positive: bool = True              # True: çıkış pozitif yarım/tam dalga
     conduction_threshold_v: Optional[float] = None
@@ -119,6 +141,10 @@ class WaveformAnalysis:
     conduction_in_neg_half: bool = False
     path_threshold_v: Optional[float] = None   # tek yolda belirgin toplam eşik (ör. Si+Ge+3V = 4 V)
     path_threshold_expr: Optional[str] = None
+    clamper_v_i_max: float = 0.0
+    clamper_v_i_min: float = 0.0
+    clamper_v_in_cond: float = 0.0
+    clamper_v_in_off: float = 0.0
 
 
 # ═══════════════════════════════════════════════════════
@@ -130,6 +156,235 @@ def _source_peak_sine(src: ParsedElement) -> float:
     in_val = float(src.params.get("input_value", src.params.get("amplitude", src.value)))
     in_basis = str(src.params.get("input_basis", "PEAK")).upper()
     return in_val * math.sqrt(2.0) if in_basis == "RMS" else in_val
+
+
+def _detect_clamper(
+    parsed: ParsedCircuit,
+    frequency: Optional[float],
+    waveform_output: Optional[str],
+    diodes: List[ParsedElement],
+) -> Tuple[Optional[WaveformSetup], str]:
+    """
+    Kondansatör içeren devrede yalnızca ders kitabındaki temel kenetleme (clamper)
+    topolojisini kabul eder; diğer tüm kondansatörlü devreleri Türkçe gerekçeyle reddeder.
+    """
+    for e in parsed.elements:
+        if e.element_type == ElementType.SWITCH:
+            return None, (
+                f"devrede anahtar var ({e.id}); kondansatörlü Dalga Şekli çözümü yalnızca "
+                "anahtarsız temel kenetleme (clamper) devresinde uygulanır"
+            )
+        if e.element_type not in _CLAMPER_ALLOWED_ELEMENTS:
+            return None, (
+                f"devrede {e.id} elemanı var; kondansatörlü Dalga Şekli çözümü yalnızca "
+                "temel kenetleme (clamper) devresinde uygulanır"
+            )
+
+    caps = [e for e in parsed.elements if e.element_type == ElementType.CAPACITOR]
+    if len(caps) != 1:
+        return None, (
+            f"devrede {len(caps)} kondansatör var; kondansatörlü Dalga Şekli çözümü yalnızca "
+            "tek kondansatörlü temel kenetleme (clamper) devresinde uygulanır"
+        )
+    cap = caps[0]
+    if not math.isfinite(cap.value) or cap.value <= 0.0:
+        return None, f"{cap.id} kondansatörünün sığası sıfırdan büyük olmalıdır"
+
+    if len(diodes) != 1:
+        return None, (
+            f"kondansatörlü devrede {len(diodes)} diyot var; temel kenetleme devresi "
+            "yalnızca tek bir diyot içerir"
+        )
+    diode = diodes[0]
+    model = diode.params.get("model")
+    if model not in _CLAMPER_DIODE_MODELS:
+        return None, (
+            f"kondansatörlü devrede zener diyot ({diode.id}) var; kenetleme devresinde "
+            "yalnızca normal diyot (ideal, Si veya Ge) desteklenir"
+        )
+
+    time_srcs = [e for e in parsed.elements if e.element_type in _TIME_SOURCES]
+    if not time_srcs:
+        return None, (
+            "devrede zamanla değişen (sinüs, kare veya üçgen) gerilim kaynağı yok; "
+            "Dalga Şekli yöntemi bir AC/kare/üçgen gerilim kaynağı gerektirir"
+        )
+    if len(time_srcs) > 1:
+        return None, (
+            "devrede birden fazla zamanla değişen kaynak var; "
+            "Dalga Şekli yöntemi tek bir AC/kare/üçgen gerilim kaynağıyla uygulanır"
+        )
+
+    src = time_srcs[0]
+    if src.node_positive == src.node_negative:
+        return None, f"{src.id} giriş kaynağı kısa devre edilmiş"
+    if "0" not in (src.node_positive, src.node_negative):
+        return None, (
+            "giriş kaynağı toprağa (GND) bağlı değil; kondansatörlü kenetleme devresinde "
+            "giriş kaynağı referans toprağa (0) bağlı olmalıdır"
+        )
+    # Ters çizilmiş kaynak (V1 0 a ...): (+) ucu GND'de olduğundan giriş düğümü −src(t) görür.
+    source_reversed = src.node_positive == "0"
+    a = src.node_negative if source_reversed else src.node_positive
+
+    freq = float(src.params.get("frequency", 0.0) or 0.0)
+    if freq <= 0.0 and frequency is not None and frequency > 0.0:
+        freq = float(frequency)
+    if freq <= 0.0:
+        return None, f"{src.id} kaynağının frekansı sıfırdan büyük olmalıdır"
+
+    # Kondansatör giriş düğümü a ile çıkış düğümü y arasında olmalı (uç sırası fark etmez)
+    c_nodes = {cap.node_positive, cap.node_negative}
+    if len(c_nodes) != 2 or a not in c_nodes:
+        return None, (
+            f"{cap.id} kondansatörü giriş düğümü ile çıkış düğümü arasında seri bağlı değil; "
+            "kondansatörlü Dalga Şekli çözümü yalnızca temel kenetleme (clamper) devresinde uygulanır"
+        )
+    y = cap.node_negative if cap.node_positive == a else cap.node_positive
+    if y == "0":
+        return None, (
+            f"{cap.id} kondansatörü toprağa bağlı; kondansatörlü kenetleme devresinde "
+            "kondansatör giriş ile çıkış düğümü arasında seri olmalıdır"
+        )
+
+    resistors = [e for e in parsed.elements if e.element_type == ElementType.RESISTOR]
+    if not resistors:
+        return None, (
+            "devrede çıkış direnci yok; kondansatörlü kenetleme devresinde çıkış ile GND "
+            "arasında tek bir direnç olmalıdır"
+        )
+    if len(resistors) > 1:
+        return None, (
+            f"kondansatörlü devrede {len(resistors)} direnç var; temel kenetleme devresinde "
+            "çıkış ile GND arasında yalnızca tek bir direnç olabilir"
+        )
+    res = resistors[0]
+    if not math.isfinite(res.value) or res.value <= 0.0:
+        return None, f"{res.id} direncinin değeri sıfırdan büyük olmalıdır"
+    if {res.node_positive, res.node_negative} != {y, "0"}:
+        return None, (
+            f"{res.id} direnci çıkış düğümü ile GND arasında değil; kondansatörlü kenetleme "
+            "devresinde tek direnç çıkıştan toprağa bağlı olmalıdır"
+        )
+
+    wanted = (waveform_output or "").strip()
+    if wanted and wanted.upper() != res.id.upper():
+        return None, (
+            f"kenetleme devresinde çıkış gerilimi V_O yalnızca yük direnci ({res.id}) üzerinden "
+            f"alınır; “{wanted}” seçilemez"
+        )
+
+    dc_sources = [e for e in parsed.elements if e.element_type == ElementType.DC_SOURCE]
+    if len(dc_sources) > 1:
+        return None, (
+            f"kondansatörlü devrede {len(dc_sources)} DC kaynak var; temel kenetleme "
+            "devresinde diyot kolunda en fazla bir DC kaynak olabilir"
+        )
+
+    # Diyot kolu: y ile 0 arasında tek diyot (isteğe bağlı olarak tek DC kaynakla seri)
+    if not dc_sources:
+        if {diode.node_positive, diode.node_negative} != {y, "0"}:
+            return None, (
+                f"{diode.id} diyotu çıkış düğümü ile GND arasında değil; kondansatörlü "
+                "kenetleme devresinde diyot kolu çıkıştan toprağa bağlı olmalıdır"
+            )
+        diode_to_gnd = diode.node_positive == y
+        bias_source = None
+        mid_node = None
+        diode_on_y_side = True
+        v_bias = 0.0
+    else:
+        dc = dc_sources[0]
+        d_nodes = {diode.node_positive, diode.node_negative}
+        v_nodes = {dc.node_positive, dc.node_negative}
+        if len(d_nodes) != 2 or len(v_nodes) != 2:
+            return None, "diyot kolundaki elemanlardan biri kısa devre edilmiş"
+
+        # Sıra 1: y — D — m — V — 0   |   Sıra 2: y — V — m — D — 0
+        if y in d_nodes and "0" in v_nodes:
+            m_d = diode.node_negative if diode.node_positive == y else diode.node_positive
+            m_v = dc.node_negative if dc.node_positive == "0" else dc.node_positive
+            if m_d != m_v or m_d in (y, "0", a):
+                return None, (
+                    "diyot kolu çıkış düğümü ile GND arasında kitap kenetleme yapısında değil; "
+                    "kondansatörlü devrede diyot ve seri DC kaynak çıkıştan toprağa tek kolda olmalıdır"
+                )
+            mid_node = m_d
+            diode_on_y_side = True
+            diode_to_gnd = diode.node_positive == y
+            # V(m) − V(0): + ucu m'de ise +dc.value, 0'da ise −dc.value
+            v_bias = float(dc.value) if dc.node_positive == mid_node else -float(dc.value)
+        elif y in v_nodes and "0" in d_nodes:
+            m_v = dc.node_negative if dc.node_positive == y else dc.node_positive
+            m_d = diode.node_negative if diode.node_positive == "0" else diode.node_positive
+            if m_d != m_v or m_d in (y, "0", a):
+                return None, (
+                    "diyot kolu çıkış düğümü ile GND arasında kitap kenetleme yapısında değil; "
+                    "kondansatörlü devrede diyot ve seri DC kaynak çıkıştan toprağa tek kolda olmalıdır"
+                )
+            mid_node = m_d
+            diode_on_y_side = False
+            diode_to_gnd = diode.node_positive == mid_node
+            # V(y) − V(m): + ucu y'de ise +dc.value, m'de ise −dc.value
+            v_bias = float(dc.value) if dc.node_positive == y else -float(dc.value)
+        else:
+            return None, (
+                "diyot kolu çıkış düğümü ile GND arasında kitap kenetleme yapısında değil; "
+                "kondansatörlü devrede diyot ve seri DC kaynak çıkıştan toprağa tek kolda olmalıdır"
+            )
+        bias_source = dc
+
+    v_t = float(diode.params["v_t"])
+    v_k = v_bias + v_t if diode_to_gnd else v_bias - v_t
+    clamper = ClamperSetup(
+        input_node=a,
+        output_node=y,
+        capacitor=cap,
+        resistor=res,
+        diode=diode,
+        diode_to_gnd=diode_to_gnd,
+        bias_source=bias_source,
+        mid_node=mid_node,
+        diode_on_y_side=diode_on_y_side,
+        v_bias=v_bias,
+        v_t=v_t,
+        v_k=v_k,
+        source_reversed=source_reversed,
+    )
+
+    period = 1.0 / freq
+    if src.element_type == ElementType.AC_SOURCE_SINE:
+        amp = _source_peak_sine(src)
+        if amp <= 0.0:
+            return None, f"{src.id} sinüs kaynağının genliği sıfırdan büyük olmalıdır"
+        return WaveformSetup(
+            source=src, shape="SINE", frequency=freq, period=period,
+            output_elem=res, diodes=diodes, dc_sources=dc_sources, resistors=resistors,
+            offset=float(src.params.get("offset", 0.0) or 0.0),
+            amplitude=amp,
+            phase_deg=float(src.params.get("phase", 0.0) or 0.0),
+            clamper=clamper,
+        ), ""
+
+    if src.element_type == ElementType.AC_SOURCE_SQUARE:
+        v1 = float(src.params["v1"])
+        v2 = float(src.params["v2"])
+        return WaveformSetup(
+            source=src, shape="SQUARE", frequency=freq, period=period,
+            output_elem=res, diodes=diodes, dc_sources=dc_sources, resistors=resistors,
+            amplitude=max(abs(v1), abs(v2)), v1=v1, v2=v2,
+            clamper=clamper,
+        ), ""
+
+    amp = float(src.params["amplitude"])
+    if amp <= 0.0:
+        return None, f"{src.id} üçgen kaynağının genliği sıfırdan büyük olmalıdır"
+    return WaveformSetup(
+        source=src, shape="TRIANGLE", frequency=freq, period=period,
+        output_elem=res, diodes=diodes, dc_sources=dc_sources, resistors=resistors,
+        amplitude=amp,
+        clamper=clamper,
+    ), ""
 
 
 def detect_waveform_circuit(
@@ -144,6 +399,11 @@ def detect_waveform_circuit(
     diodes = [e for e in parsed.elements if e.element_type in DIODE_TYPES]
     if not diodes:
         return None, WAVEFORM_NO_DIODE_REASON
+
+    # Kondansatörlü devreler yalnızca kitap kenetleme (clamper) kapısından geçer;
+    # kondansatörsüz devreler Faz 4c-1 davranışını birebir korur.
+    if any(e.element_type == ElementType.CAPACITOR for e in parsed.elements):
+        return _detect_clamper(parsed, frequency, waveform_output, diodes)
 
     if len(diodes) > MAX_DIODES:
         return None, (
@@ -624,6 +884,291 @@ def _numeric_peak_results(
     return res
 
 
+def _solve_clamper(
+    parsed: ParsedCircuit,
+    setup: WaveformSetup,
+    target_probes,
+):
+    """
+    Temel kitap kenetleme (clamper) devresi için kapalı biçimli çözüm.
+    Eşik noktası asla durum çözümleyicisinden geçirilmez; V_C ve tüm örnekler
+    V_O(t) = v_i(t) − V_C bağıntısıyla doğrudan hesaplanır.
+    """
+    from explainer.waveform_narrative import build_waveform_sections
+    from solver.circuit_solver import sig_round
+
+    cl = setup.clamper
+    assert cl is not None
+
+    # Ters bağlı kaynakta giriş düğümünün gördüğü gerilim v_i(t) = −eval_source(t) olur.
+    sign = -1.0 if cl.source_reversed else 1.0
+
+    if setup.shape == "SQUARE":
+        v1 = sign * setup.v1
+        v2 = sign * setup.v2
+        v_i_max = max(v1, v2)
+        v_i_min = min(v1, v2)
+    elif setup.shape == "SINE":
+        v_i_max = sign * setup.offset + setup.amplitude
+        v_i_min = sign * setup.offset - setup.amplitude
+    else:  # TRIANGLE
+        v_i_max = setup.amplitude
+        v_i_min = -setup.amplitude
+
+    if cl.diode_to_gnd:
+        v_in_cond = v_i_max
+        v_in_off = v_i_min
+        v_c = v_i_max - cl.v_k
+        if v_c <= V_TOL:
+            return _unsolvable(
+                f"Diyotun iletime geçmesi için v_i > V_K ({_volts(cl.v_k)}) olmalı; "
+                f"girişin en büyük değeri {_volts(v_i_max)} olduğundan diyot hiç iletime "
+                "geçmez, kenetleme olmaz."
+            )
+        pinned = "TOP"
+        shift = "DOWN"
+    else:
+        v_in_cond = v_i_min
+        v_in_off = v_i_max
+        v_c = v_i_min - cl.v_k
+        if v_c >= -V_TOL:
+            return _unsolvable(
+                f"Diyotun iletime geçmesi için v_i < V_K ({_volts(cl.v_k)}) olmalı; "
+                f"girişin en küçük değeri {_volts(v_i_min)} olduğundan diyot hiç iletime "
+                "geçmez, kenetleme olmaz."
+            )
+        pinned = "BOTTOM"
+        shift = "UP"
+
+    v_c_plus_side = "INPUT" if v_c > 0.0 else "OUTPUT"
+
+    T = setup.period
+    t_total = NUM_PERIODS * T
+    dt = T / SAMPLES_PER_PERIOD
+    ts = [k * dt for k in range(TOTAL_SAMPLES)]
+
+    v_ins: List[float] = []
+    v_outs: List[float] = []
+    levels: Optional[List[WaveformSquareLevel]] = None
+
+    if setup.shape == "SQUARE":
+        st1 = "ON" if abs(v1 - v_in_cond) <= V_TOL else "OFF"
+        st2 = "ON" if abs(v2 - v_in_cond) <= V_TOL else "OFF"
+        v_out1 = v1 - v_c
+        v_out2 = v2 - v_c
+        levels = [
+            WaveformSquareLevel(
+                v_in=_sig_round(v1, 6),
+                v_out=_sig_round(v_out1, 6),
+                states={cl.diode.id: st1},
+            ),
+            WaveformSquareLevel(
+                v_in=_sig_round(v2, 6),
+                v_out=_sig_round(v_out2, 6),
+                states={cl.diode.id: st2},
+            ),
+        ]
+        state_rows: List[Dict[str, str]] = []
+        for k in range(TOTAL_SAMPLES):
+            first_half = (k % SAMPLES_PER_PERIOD) < (SAMPLES_PER_PERIOD // 2)
+            v_ins.append(_sig_round(v1 if first_half else v2, 6))
+            v_outs.append(_sig_round(v_out1 if first_half else v_out2, 6))
+            state_rows.append({cl.diode.id: st1 if first_half else st2})
+        diode_traces = _build_diode_intervals(setup.diodes, ts, state_rows, t_total)
+        v_dc_num = 0.5 * (v_out1 + v_out2)
+    else:
+        raw_v_outs: List[float] = []
+        for t in ts:
+            vin = sign * eval_source(setup, t)
+            vout = vin - v_c
+            v_ins.append(_sig_round(vin, 6))
+            raw_v_outs.append(vout)
+            v_outs.append(_sig_round(vout, 6))
+        # Sinüs/üçgen girişte diyot yalnızca tepe anında sınırda iletime geçer; tüm periyot OFF raporlanır
+        diode_traces = [
+            WaveformDiodeTrace(
+                id=cl.diode.id,
+                intervals=[
+                    WaveformDiodeInterval(t_start=0.0, t_end=_sig_round(t_total, 6), state="OFF")
+                ],
+            )
+        ]
+        v_dc_num = sum(raw_v_outs[:SAMPLES_PER_PERIOD]) / SAMPLES_PER_PERIOD
+
+    v_out_max = v_i_max - v_c
+    v_out_min = v_i_min - v_c
+    input_swing = v_i_max - v_i_min
+    output_swing = v_out_max - v_out_min
+
+    # Kitabın 3 kontrolü (sıra sabit: salınım eşitliği, kayma yönü, 0 V seviyesi)
+    swing_ok = abs(input_swing - output_swing) <= 1e-6 * max(abs(input_swing), 1.0)
+    check_swing = WaveformClamperCheck(
+        name="Salınım eşitliği",
+        ok=swing_ok,
+        text=f"Giriş salınımı {_volts(input_swing)}, çıkış salınımı {_volts(output_swing)}.",
+    )
+
+    expected_shift = "DOWN" if cl.diode_to_gnd else "UP"
+    shift_ok = shift == expected_shift
+    dir_word = "aşağı" if cl.diode_to_gnd else "yukarı"
+    branch_dir = "çıkıştan toprağa" if cl.diode_to_gnd else "topraktan çıkışa"
+    check_shift = WaveformClamperCheck(
+        name="Kayma yönü",
+        ok=shift_ok,
+        text=(
+            f"Diyot {branch_dir} ilettiğinden çıkış {dir_word} kayar "
+            f"(kayma miktarı {_volts(abs(v_c))})."
+        ),
+    )
+
+    is_ideal = cl.diode.params["model"] == "IDEAL"
+    if is_ideal and cl.bias_source is None:
+        zero_ok = abs(v_out_max) <= 1e-9 or abs(v_out_min) <= 1e-9
+        pinned_lbl = "üst seviye" if cl.diode_to_gnd else "alt seviye"
+        check_zero = WaveformClamperCheck(
+            name="0 V seviyesi",
+            ok=zero_ok,
+            text=f"İdeal diyot ve seri kaynak olmadığından çıkışın bir ucu 0 V'a kenetlenir ({pinned_lbl} = 0 V).",
+        )
+    else:
+        reasons = []
+        if cl.bias_source is not None:
+            reasons.append("diyota seri kaynak var")
+        if not is_ideal:
+            reasons.append("diyot ideal değil")
+        check_zero = WaveformClamperCheck(
+            name="0 V seviyesi",
+            ok=None,
+            text=f"Uygulanmaz: {' ve '.join(reasons)}.",
+        )
+
+    tau = cl.resistor.value * cl.capacitor.value
+    if tau < 5.0 * T:
+        rc_note: Optional[str] = (
+            "Kitap yöntemi kondansatörün yalıtım alternansında boşalmadığını (RC ≫ T) varsayar. "
+            f"Bu devrede τ = RC = {eng(tau, 's')}, T = {eng(T, 's')}; gerçek devrede çıkış seviyeleri eğimli olur."
+        )
+    else:
+        rc_note = None
+
+    clamper_info = WaveformClamperInfo(
+        v_c=_sig_round(v_c, 6),
+        v_c_plus_side=v_c_plus_side,
+        v_k=_sig_round(cl.v_k, 6),
+        pinned=pinned,
+        shift=shift,
+        input_swing=_sig_round(input_swing, 6),
+        output_swing=_sig_round(output_swing, 6),
+        checks=[check_swing, check_shift, check_zero],
+        tau=_sig_round(tau, 6),
+        period=_sig_round(T, 6),
+        rc_note=rc_note,
+    )
+
+    summary = WaveformSummary(
+        source_id=setup.source.id,
+        shape=setup.shape,
+        frequency=_sig_round(setup.frequency, 6),
+        period=_sig_round(T, 6),
+        output_id=cl.resistor.id,
+        output_label=f"V_O ({cl.resistor.id})",
+        t=[_sig_round(x, 6) for x in ts],
+        v_in=v_ins,
+        v_out=v_outs,
+        diodes=diode_traces,
+        v_out_max=_sig_round(v_out_max, 6),
+        v_out_min=_sig_round(v_out_min, 6),
+        v_dc_numeric=_sig_round(v_dc_num, 6),
+        book_formula=None,
+        conduction_angle_deg=None,
+        levels=levels,
+        clamper=clamper_info,
+    )
+
+    # Anlık görüntü (iletim alternansı anı): y = V_K, I_D = 0 (sınır), I_R = V_K / R, I_C = I_R
+    volts: Dict[str, float] = {
+        "0": 0.0,
+        cl.input_node: v_in_cond,
+        cl.output_node: cl.v_k,
+    }
+    if cl.mid_node is not None:
+        if cl.diode_on_y_side:
+            # y — D — m — V_bias — 0: V(m) seri kaynağın 0'a göre gerilimidir
+            volts[cl.mid_node] = cl.v_bias
+        else:
+            # y — V_bias — m — D — 0: V(m) iletimdeki diyotun 0'a göre gerilimidir
+            volts[cl.mid_node] = cl.v_t if cl.diode_to_gnd else -cl.v_t
+
+    i_y_to_0 = cl.v_k / cl.resistor.value
+    raw_currents: Dict[str, float] = {}
+    for e in parsed.elements:
+        if e.id == cl.resistor.id:
+            raw_currents[e.id] = i_y_to_0 if e.node_positive == cl.output_node else -i_y_to_0
+        elif e.id == cl.capacitor.id:
+            # y düğümünde KCL: C'den y'ye giren akım = R'den 0'a akan akım (I_D = 0)
+            raw_currents[e.id] = i_y_to_0 if e.node_positive == cl.input_node else -i_y_to_0
+        elif e.id == setup.source.id:
+            # Pasif işaret kuralı: dış devreye a'dan I_C verilir; ters kaynakta (0→a) iç akım +I_C olur
+            raw_currents[e.id] = i_y_to_0 if cl.source_reversed else -i_y_to_0
+        else:
+            # Diyot (ve varsa seri DC kaynak): sınırda I_D = 0
+            raw_currents[e.id] = 0.0
+
+    results = AnalysisResults()
+    results.node_voltages["0"] = NodeVoltage(value=0.0, unit="V", label="GND")
+    for nd, val in sorted(volts.items(), key=lambda kv: (len(kv[0]), kv[0])):
+        if nd != "0":
+            results.node_voltages[nd] = NodeVoltage(value=sig_round(val), unit="V")
+
+    for e in parsed.elements:
+        results.element_currents[e.id] = ElementCurrent(
+            value=sig_round(raw_currents.get(e.id, 0.0)),
+            unit="A",
+            direction=f"{e.node_positive}→{e.node_negative}",
+        )
+
+    v_ak_snap = volts[cl.diode.node_positive] - volts[cl.diode.node_negative]
+    results.diodes = [
+        DiodeResult(
+            id=cl.diode.id,
+            model=cl.diode.params["model"],
+            v_t=cl.v_t,
+            vz=None,
+            izm=None,
+            state="ON",
+            v_ak=sig_round(v_ak_snap),
+            i=0.0,
+        )
+    ]
+
+    all_probes = list(target_probes or [])
+    seen_probes = {p.id for p in all_probes}
+    all_probes += [p for p in parsed.probes if p.id not in seen_probes]
+    for p in all_probes:
+        kind = str(getattr(p, "type", None) or getattr(p, "probe_type", "")).upper()
+        if kind == "V" and p.target in volts:
+            results.probe_results.append(
+                ProbeResult(probe_id=p.id, type="V", value=sig_round(volts[p.target]), unit="V")
+            )
+        elif kind == "I" and p.target in raw_currents:
+            results.probe_results.append(
+                ProbeResult(probe_id=p.id, type="I", value=sig_round(raw_currents[p.target]), unit="A")
+            )
+
+    analysis = WaveformAnalysis(
+        setup=setup,
+        summary=summary,
+        clamper_v_i_max=v_i_max,
+        clamper_v_i_min=v_i_min,
+        clamper_v_in_cond=v_in_cond,
+        clamper_v_in_off=v_in_off,
+    )
+    results.waveform = summary
+    results.explanation = build_waveform_sections(analysis)
+    results.practice = []
+    return results, [], []
+
+
 def solve_waveform(
     parsed: ParsedCircuit,
     mode: AnalysisMode,
@@ -655,6 +1200,9 @@ def solve_waveform(
                 results.explanation.insert(0, fallback_section(reason))
             return results, steps, errors
         return _unsolvable(f"Dalga Şekli uygulanamadı: {reason}.")
+
+    if setup.clamper is not None:
+        return _solve_clamper(parsed, setup, target_probes)
 
     T = setup.period
     t_total = NUM_PERIODS * T

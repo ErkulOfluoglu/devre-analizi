@@ -408,6 +408,9 @@ namespace CircuitAnalyzer.WPF.Services
                     var waveform = input.Response.WaveformResult;
                     var waveformLevelRows = PrintContent.WaveformLevelRows(waveform);
                     var waveformDiodeRows = PrintContent.WaveformDiodeRows(waveform);
+                    var waveformClamperLines = PrintContent.WaveformClamperSummaryLines(waveform);
+                    var waveformClamperCheckRows = PrintContent.WaveformClamperCheckRows(waveform);
+                    var waveformClamperRcNote = PrintContent.WaveformClamperRcNote(waveform);
                     var zenerRange = input.Response.ZenerRangeResult;
                     var zenerStepRows = PrintContent.ZenerRangeStepRows(zenerRange);
                     var zenerCheckRows = PrintContent.ZenerRangeCheckRows(zenerRange);
@@ -505,7 +508,7 @@ namespace CircuitAnalyzer.WPF.Services
                                 PrintContent.UnicodeMinus(Views.AnalysisPanel.FormatWaveformDcNumeric(waveform)), 12.5));
                             doc.Blocks.Add(pDc);
 
-                            if (Views.AnalysisPanel.FormatWaveformBookFormula(waveform.BookFormula) is { } bookText)
+                            if (waveform.Clamper == null && Views.AnalysisPanel.FormatWaveformBookFormula(waveform.BookFormula) is { } bookText)
                             {
                                 var pBook = new Paragraph
                                 {
@@ -517,7 +520,7 @@ namespace CircuitAnalyzer.WPF.Services
                                 doc.Blocks.Add(pBook);
                             }
 
-                            if (Views.AnalysisPanel.FormatWaveformConductionAngle(waveform.ConductionAngleDeg) is { } angleText)
+                            if (waveform.Clamper == null && Views.AnalysisPanel.FormatWaveformConductionAngle(waveform.ConductionAngleDeg) is { } angleText)
                             {
                                 var pAngle = new Paragraph
                                 {
@@ -527,6 +530,65 @@ namespace CircuitAnalyzer.WPF.Services
                                 };
                                 pAngle.Inlines.AddRange(SubscriptText.ToInlines(PrintContent.UnicodeMinus(angleText), 12));
                                 doc.Blocks.Add(pAngle);
+                            }
+
+                            if (waveform.Clamper != null)
+                            {
+                                var pClampHead = TableHeading("Kenetleme", 6);
+
+                                for (int i = 0; i < waveformClamperLines.Count; i++)
+                                {
+                                    var pLine = new Paragraph
+                                    {
+                                        FontSize = i == 0 ? 12.5 : 12,
+                                        Foreground = i <= 1 ? brushPrimary : (i == 2 ? brushBody : brushSecondary),
+                                        Margin = new Thickness(0, 0, 0, i == waveformClamperLines.Count - 1 ? 6 : 2)
+                                    };
+                                    if (i == 0)
+                                    {
+                                        var boldVc = new Bold();
+                                        boldVc.Inlines.AddRange(SubscriptText.ToInlines(waveformClamperLines[i], 12.5));
+                                        pLine.Inlines.Add(boldVc);
+                                    }
+                                    else
+                                    {
+                                        pLine.Inlines.AddRange(SubscriptText.ToInlines(waveformClamperLines[i], 12));
+                                    }
+                                    doc.Blocks.Add(pLine);
+                                }
+
+                                if (waveformClamperCheckRows.Count > 0)
+                                {
+                                    var tblClampChecks = CreateTable(doc,
+                                        new[] { "Kontrol", "Karar", "Açıklama" },
+                                        new[] { 120.0, 95.0, 305.0 });
+                                    var rg = tblClampChecks.RowGroups[0];
+                                    foreach (var (name, verdict, brushKey, text) in waveformClamperCheckRows)
+                                    {
+                                        var row = CreateRow(doc, new[] { name, verdict, text });
+                                        if (row.Cells.Count > 1)
+                                        {
+                                            row.Cells[1].Foreground = GetBrush(doc, brushKey);
+                                            row.Cells[1].FontWeight = FontWeights.SemiBold;
+                                        }
+                                        rg.Rows.Add(row);
+                                    }
+                                    doc.Blocks.Add(tblClampChecks);
+                                    tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pClampHead, pClampHead, tblClampChecks));
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(waveformClamperRcNote))
+                                {
+                                    var pRcNote = new Paragraph
+                                    {
+                                        FontStyle = FontStyles.Italic,
+                                        Foreground = brushSecondary,
+                                        FontSize = 12,
+                                        Margin = new Thickness(0, 2, 0, 6)
+                                    };
+                                    pRcNote.Inlines.AddRange(SubscriptText.ToInlines($"ℹ {waveformClamperRcNote}", 12));
+                                    doc.Blocks.Add(pRcNote);
+                                }
                             }
 
                             if (waveformLevelRows.Count > 0)
