@@ -198,8 +198,8 @@ namespace CircuitAnalyzer.WPF.Views
                 || _data.VOut == null || _data.VOut.Count != _data.T.Count)
                 return;
 
-            var pos = e.GetPosition(PlotWaveform);
-            var coords = PlotWaveform.Plot.GetCoordinates(new ScottPlot.Pixel(pos.X, pos.Y));
+            // Ekran ölçeği (%125/%150) hesaba katılır; bkz. PlotMouse.
+            var coords = PlotWaveform.Plot.GetCoordinates(PlotMouse.ToPlotPixel(PlotWaveform, e));
             double tScaled = coords.X;
 
             double tMin = _data.T[0] * _timeScale;

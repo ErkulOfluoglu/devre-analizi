@@ -322,8 +322,8 @@ namespace CircuitAnalyzer.WPF.Views
                 || _data.Curve.X.Count == 0 || _data.Curve.X.Count != _data.Curve.VY.Count)
                 return;
 
-            var pos = e.GetPosition(PlotZener);
-            var coords = PlotZener.Plot.GetCoordinates(new ScottPlot.Pixel(pos.X, pos.Y));
+            // Ekran ölçeği (%125/%150) hesaba katılır; bkz. PlotMouse.
+            var coords = PlotZener.Plot.GetCoordinates(PlotMouse.ToPlotPixel(PlotZener, e));
             double xScaled = coords.X;
 
             var xList = _data.Curve.X;
