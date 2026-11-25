@@ -45,8 +45,8 @@ from models.response import (
 )
 from parser.netlist_parser import (
     CURRENT_SOURCES, DEPENDENT_CURRENT_OUTPUT, DEPENDENT_SOURCES, DIODE_TYPES, PHASOR_SOURCES,
-    SINE_SOURCES, SWITCH_NOTE, VOLTAGE_SOURCES, ElementType, ParsedCircuit, ParsedElement,
-    ParsedProbe, circuit_at_time, element_nodes, has_switches,
+    SINE_SOURCES, SWITCH_NOTE, VOLTAGE_SOURCES, WAVEFORM_ONLY_SOURCES, ElementType,
+    ParsedCircuit, ParsedElement, ParsedProbe, circuit_at_time, element_nodes, has_switches,
 )
 
 # Aramadaki yalıtım (sızıntı) direnci ve tutarlılık toleransları (sözleşme)
@@ -57,8 +57,7 @@ MAX_DIODES = 6
 
 MODEL_LABELS = {"IDEAL": "ideal", "SI": "Si", "GE": "Ge", "ZENER": "Zener"}
 
-AC_REASON = ("Diyotlu devreler şimdilik yalnızca DC kaynaklarla çözülür; doğrultucu ve kırpıcılar "
-             "(AC) sonraki adımda eklenecek.")
+AC_REASON = "Diyotlu devrelerde AC/kare/üçgen kaynak için 'Dalga Şekli' yöntemini seçin."
 
 # Diyotlu devrede uygulanamayan yöntemler: (bölüm başlığı, cümle içindeki adı)
 _REFUSED = {
@@ -594,9 +593,9 @@ def _unsolvable(reason: str):
 
 
 def gate_reason(parsed: ParsedCircuit, mode: AnalysisMode) -> Optional[str]:
-    """Diyotlu devre bu sürümde çözülemiyorsa (AC, çok diyot, desteklenmeyen eleman) Türkçe sebep."""
+    """Diyotlu devre DC çözümüyle çözülemiyorsa (AC, çok diyot, desteklenmeyen eleman) Türkçe sebep."""
     if mode != AnalysisMode.DC or any(
-            e.element_type in SINE_SOURCES + PHASOR_SOURCES
+            e.element_type in SINE_SOURCES + PHASOR_SOURCES + WAVEFORM_ONLY_SOURCES
             or e.element_type == ElementType.THREE_PHASE_SOURCE for e in parsed.elements):
         return AC_REASON
     count = sum(1 for e in parsed.elements if e.element_type in DIODE_TYPES)
@@ -616,9 +615,18 @@ def solve_with_diodes(parsed: ParsedCircuit, mode: AnalysisMode, frequency, anal
                       thevenin_terminals, target_probes, warnings,
                       zener_range_target: Optional[str] = None,
                       zener_range_given_min: Optional[float] = None,
-                      zener_range_given_max: Optional[float] = None):
+                      zener_range_given_max: Optional[float] = None,
+                      waveform_output: Optional[str] = None):
     """Diyotlu devre: durum araması → eşdeğer devre → mevcut çözücü → sonuçların tamamlanması."""
     from solver.circuit_solver import UNSOLVABLE_PREFIX, _solve_core
+
+    if analysis_type == AnalysisType.WAVEFORM:
+        # Dalga Şekli kendi AC/kare/üçgen uygunluk denetimini yapar; DC kapısından önce ayrılır
+        from solver.waveform import solve_waveform
+        return solve_waveform(
+            parsed, mode, frequency, target_probes, warnings,
+            waveform_output=waveform_output,
+        )
 
     why = gate_reason(parsed, mode)
     if why:

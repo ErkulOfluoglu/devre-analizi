@@ -23,6 +23,19 @@ namespace CircuitAnalyzer.WPF.Models
     }
 
     /// <summary>
+    /// AC gerilim kaynağının dalga biçimi:
+    /// Sine: Sinüs (varsayılan, SINE / AC_PHASOR)
+    /// Square: Kare dalga (SQUARE(V1 V2 f))
+    /// Triangle: Üçgen dalga (TRIANGLE(Vp f))
+    /// </summary>
+    public enum AcWaveform
+    {
+        Sine,
+        Square,
+        Triangle
+    }
+
+    /// <summary>
     /// AC kaynak değer türü:
     /// Peak: Tepe değer (varsayılan)
     /// Rms: Etkin değer
@@ -113,6 +126,15 @@ namespace CircuitAnalyzer.WPF.Models
         /// </summary>
         public AcValueKind ValueKind { get; set; } = AcValueKind.Peak;
 
+        /// <summary>Dalga biçimi: Sinüs (varsayılan), Kare veya Üçgen.</summary>
+        public AcWaveform Waveform { get; set; } = AcWaveform.Sine;
+
+        /// <summary>Kare dalga birinci yarı periyot gerilimi V₁ [V].</summary>
+        public double SquareV1 { get; set; } = 10.0;
+
+        /// <summary>Kare dalga ikinci yarı periyot gerilimi V₂ [V].</summary>
+        public double SquareV2 { get; set; } = -10.0;
+
         public AcVoltageSource()
         {
             Unit = "V";
@@ -181,49 +203,63 @@ namespace CircuitAnalyzer.WPF.Models
             Canvas.SetLeft(circle, circleLeft);
             Canvas.SetTop(circle, centerY - CircleRadius);
 
-            // ── Sinüs dalgası (∿) — AC kaynağın ayırt edici sembolü ──
-            // Dairenin içine sığan 1 tam periyot sinüs çizilir.
-            // Path geometrisi: Cubic Bézier ile pürüzsüz eğri.
-            var sineWave = new Path
+            // ── Dalga biçimi sembolü (sinüs / kare / üçgen) ──
+            var wavePath = new Path
             {
                 StrokeThickness = 2,
                 StrokeStartLineCap = PenLineCap.Round,
                 StrokeEndLineCap = PenLineCap.Round,
                 StrokeLineJoin = PenLineJoin.Round
             };
-            sineWave.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
+            wavePath.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
 
-            double waveLeft = centerX - 10;    // Dalganın sol başlangıcı
-            double waveRight = centerX + 10;   // Dalganın sağ bitişi
-            double waveMid = centerX;          // Dalganın orta noktası
-            double waveAmp = 6.5;              // Dalga yüksekliği (piksel)
+            double waveLeft = centerX - 10;
+            double waveRight = centerX + 10;
+            double waveMid = centerX;
+            double waveAmp = 6.5;
 
-            // Bézier kontrol noktaları ile sinüs eğrisi:
-            // İlk yarım periyot: sol → orta (yukarı tümsek)
-            // İkinci yarım periyot: orta → sağ (aşağı çukur)
             var pathFigure = new PathFigure
             {
                 StartPoint = new Point(waveLeft, centerY),
                 IsClosed = false
             };
 
-            // Yarım periyot 1: yukarı kavis
-            pathFigure.Segments.Add(new BezierSegment(
-                new Point(waveLeft + 3, centerY - waveAmp),    // Kontrol 1
-                new Point(waveMid - 3, centerY - waveAmp),     // Kontrol 2
-                new Point(waveMid, centerY),                     // Bitiş: orta nokta
-                true));
-
-            // Yarım periyot 2: aşağı kavis
-            pathFigure.Segments.Add(new BezierSegment(
-                new Point(waveMid + 3, centerY + waveAmp),     // Kontrol 1
-                new Point(waveRight - 3, centerY + waveAmp),    // Kontrol 2
-                new Point(waveRight, centerY),                    // Bitiş: sağ uç
-                true));
+            if (Waveform == AcWaveform.Square)
+            {
+                // 1 periyot kare dalga: yukarı → sağa → aşağı → sağa → merkeze
+                pathFigure.Segments.Add(new LineSegment(new Point(waveLeft, centerY - waveAmp), true));
+                pathFigure.Segments.Add(new LineSegment(new Point(waveMid, centerY - waveAmp), true));
+                pathFigure.Segments.Add(new LineSegment(new Point(waveMid, centerY + waveAmp), true));
+                pathFigure.Segments.Add(new LineSegment(new Point(waveRight, centerY + waveAmp), true));
+                pathFigure.Segments.Add(new LineSegment(new Point(waveRight, centerY), true));
+            }
+            else if (Waveform == AcWaveform.Triangle)
+            {
+                // 1 periyot üçgen dalga: tepe → çukur → merkeze
+                double q1 = (waveLeft + waveMid) / 2;
+                double q3 = (waveMid + waveRight) / 2;
+                pathFigure.Segments.Add(new LineSegment(new Point(q1, centerY - waveAmp), true));
+                pathFigure.Segments.Add(new LineSegment(new Point(q3, centerY + waveAmp), true));
+                pathFigure.Segments.Add(new LineSegment(new Point(waveRight, centerY), true));
+            }
+            else
+            {
+                // Bézier kontrol noktaları ile sinüs eğrisi
+                pathFigure.Segments.Add(new BezierSegment(
+                    new Point(waveLeft + 3, centerY - waveAmp),
+                    new Point(waveMid - 3, centerY - waveAmp),
+                    new Point(waveMid, centerY),
+                    true));
+                pathFigure.Segments.Add(new BezierSegment(
+                    new Point(waveMid + 3, centerY + waveAmp),
+                    new Point(waveRight - 3, centerY + waveAmp),
+                    new Point(waveRight, centerY),
+                    true));
+            }
 
             var pathGeometry = new PathGeometry();
             pathGeometry.Figures.Add(pathFigure);
-            sineWave.Data = pathGeometry;
+            wavePath.Data = pathGeometry;
 
             // ── Değer etiketi (ör: "10V 50Hz ∠30°") ──
             var label = new TextBlock
@@ -254,7 +290,7 @@ namespace CircuitAnalyzer.WPF.Models
             container.Children.Add(leftLead);
             container.Children.Add(rightLead);
             container.Children.Add(circle);
-            container.Children.Add(sineWave);
+            container.Children.Add(wavePath);
             container.Children.Add(label);
             container.Children.Add(idLabel);
 
@@ -288,6 +324,21 @@ namespace CircuitAnalyzer.WPF.Models
             int nodePlus = nodeMap[Pins[0]];
             int nodeMinus = nodeMap[Pins[1]];
 
+            if (Waveform == AcWaveform.Square)
+            {
+                string v1 = SquareV1.ToString(CultureInfo.InvariantCulture);
+                string v2 = SquareV2.ToString(CultureInfo.InvariantCulture);
+                string freqSq = Frequency.ToString(CultureInfo.InvariantCulture);
+                return $"{Id} {nodePlus} {nodeMinus} SQUARE({v1} {v2} {freqSq})";
+            }
+
+            if (Waveform == AcWaveform.Triangle)
+            {
+                string vp = Amplitude.ToString(CultureInfo.InvariantCulture);
+                string freqTri = Frequency.ToString(CultureInfo.InvariantCulture);
+                return $"{Id} {nodePlus} {nodeMinus} TRIANGLE({vp} {freqTri})";
+            }
+
             string rmsSuffix = ValueKind == AcValueKind.Rms ? " RMS" : "";
 
             // Fiziksel mod → SPICE SINE formatı
@@ -308,10 +359,23 @@ namespace CircuitAnalyzer.WPF.Models
 
         /// <summary>
         /// Değerleri okunabilir formatta gösterir.
-        /// Örnek: "10V 50Hz ∠30°" (Rms) veya "Um 10V 50Hz ∠30°" (Peak)
+        /// Örnek: "10V 50Hz ∠30°" (Sinüs), "Kare 10/−15 V, 1 kHz", "Üçgen 10 V, 1 kHz".
         /// </summary>
         internal string FormatValue()
         {
+            if (Waveform == AcWaveform.Square)
+            {
+                string v1Str = TurkishNumber.FormatDisplay(SquareV1, "G3");
+                string v2Str = TurkishNumber.FormatDisplay(SquareV2, "G3");
+                return $"Kare {v1Str}/{v2Str} V, {FormatFrequencySpaced(Frequency)}";
+            }
+
+            if (Waveform == AcWaveform.Triangle)
+            {
+                string vpStr = TurkishNumber.FormatDisplay(Amplitude, "G3");
+                return $"Üçgen {vpStr} V, {FormatFrequencySpaced(Frequency)}";
+            }
+
             string ampStr;
             if (Amplitude >= 1000)
                 ampStr = $"{TurkishNumber.Format(Amplitude / 1000, "G3")}kV";
@@ -341,6 +405,15 @@ namespace CircuitAnalyzer.WPF.Models
                 return $"{prefix}{ampStr} {freqStr}";
 
             return $"{prefix}{ampStr} {freqStr} ∠{TurkishNumber.Format(Phase, "G3")}°";
+        }
+
+        private static string FormatFrequencySpaced(double frequency)
+        {
+            if (frequency >= 1_000_000)
+                return $"{TurkishNumber.Format(frequency / 1_000_000, "G3")} MHz";
+            if (frequency >= 1000)
+                return $"{TurkishNumber.Format(frequency / 1000, "G3")} kHz";
+            return $"{TurkishNumber.Format(frequency, "G3")} Hz";
         }
     }
 }

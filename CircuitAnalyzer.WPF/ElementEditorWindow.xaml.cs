@@ -53,8 +53,12 @@ namespace CircuitAnalyzer.WPF
 
         // ── Dinamik alan paneli (mod değiştiğinde yeniden oluşturulur) ──
         private StackPanel? _dynamicPanel = null;
+        private ComboBox? _waveformCombo = null;
         private bool _transformerIdealUseRatio = true;
         private bool _transformerCoupledUseK = true;
+
+        internal ComboBox? WaveformCombo => _waveformCombo;
+        internal IReadOnlyList<TextBox> ValueBoxes => _valueBoxes;
 
         // ── Bağımlı kaynak formu: kontrol listesi, işaret kutusu ve onaylanınca uygulanacak işlemler ──
         private readonly IReadOnlyList<CircuitElement> _circuitElements;
@@ -268,40 +272,53 @@ namespace CircuitAnalyzer.WPF
 
         /// <summary>
         /// AC kaynak düzenleme formu:
-        /// - Fiziksel mod: Genlik (V) + Frekans (Hz) + Faz (°)
-        /// - Fazör mod: Tek metin kutusuna "10∠30" veya "10+j5" yazılır
+        /// - Dalga biçimi seçici: Sinüs / Kare / Üçgen
+        /// - Sinüs: Fiziksel (Genlik, Frekans, Faz) veya Fazör (V∠θ°)
+        /// - Kare: V₁, V₂, Frekans f
+        /// - Üçgen: Tepe değeri V_p, Frekans f
         /// </summary>
         private void BuildAcSourceForm(AcVoltageSource ac)
         {
             Title = $"{ac.Id} — AC Kaynak Düzenle";
 
-            // Mod seçici
-            AddModeSelector(
-                "Giriş Modu:",
-                "Fiziksel (Genlik, Frekans, Faz)",
-                "Fazör (V∠θ°)",
-                ac.InputMode == AcInputMode.Physical,
-                isFirst =>
+            var lblShape = new TextBlock
+            {
+                Text = "Dalga biçimi:",
+                Style = TryFindResource("Text.Caption") as Style,
+                Margin = new Thickness(0, 8, 0, 4)
+            };
+            var cmbShape = new ComboBox
+            {
+                Margin = new Thickness(0, 0, 0, 8),
+                ItemsSource = new[] { "Sinüs", "Kare", "Üçgen" },
+                SelectedIndex = ac.Waveform switch
                 {
-                    SyncValuesBeforeRebuild(ac);
-                    ac.InputMode = isFirst ? AcInputMode.Physical : AcInputMode.Phasor;
-                    RebuildAcFields(ac);
-                },
-                "InputMode_" + ac.Id);
+                    AcWaveform.Square => 1,
+                    AcWaveform.Triangle => 2,
+                    _ => 0,
+                }
+            };
+            System.Windows.Automation.AutomationProperties.SetName(cmbShape, "Dalga biçimi");
+            _waveformCombo = cmbShape;
 
-            // Değer türü seçici
-            AddModeSelector(
-                "Değer türü:",
-                "Etkin",
-                "Tepe",
-                ac.ValueKind == AcValueKind.Rms,
-                isEtkin =>
+            cmbShape.SelectionChanged += (_, _) =>
+            {
+                SyncValuesBeforeRebuild(ac);
+                var prev = ac.Waveform;
+                ac.Waveform = cmbShape.SelectedIndex switch
                 {
-                    SyncValuesBeforeRebuild(ac);
-                    ac.ValueKind = isEtkin ? AcValueKind.Rms : AcValueKind.Peak;
-                    RebuildAcFields(ac);
-                },
-                "ValueKind_" + ac.Id);
+                    1 => AcWaveform.Square,
+                    2 => AcWaveform.Triangle,
+                    _ => AcWaveform.Sine,
+                };
+                // Sinüs varsayılanı (50 Hz) dokunulmadan Kare/Üçgen seçildiyse varsayılan 1 kHz olsun
+                if (prev == AcWaveform.Sine && ac.Waveform != AcWaveform.Sine && Math.Abs(ac.Frequency - 50.0) < 1e-9)
+                    ac.Frequency = 1000.0;
+                RebuildAcFields(ac);
+            };
+
+            PropertiesPanel.Children.Add(lblShape);
+            PropertiesPanel.Children.Add(cmbShape);
 
             // Dinamik alanlar paneli
             _dynamicPanel = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
@@ -312,7 +329,18 @@ namespace CircuitAnalyzer.WPF
 
         private void SyncValuesBeforeRebuild(AcVoltageSource ac)
         {
-            if (ac.InputMode == AcInputMode.Physical && _valueBoxes.Count >= 3)
+            if (ac.Waveform == AcWaveform.Square && _valueBoxes.Count >= 3)
+            {
+                if (TryParseFieldValue(_valueBoxes[0].Text, _unitScales[0], out double v1)) ac.SquareV1 = v1;
+                if (TryParseFieldValue(_valueBoxes[1].Text, _unitScales[1], out double v2)) ac.SquareV2 = v2;
+                if (TryParseFieldValue(_valueBoxes[2].Text, _unitScales[2], out double f)) ac.Frequency = f;
+            }
+            else if (ac.Waveform == AcWaveform.Triangle && _valueBoxes.Count >= 2)
+            {
+                if (TryParseFieldValue(_valueBoxes[0].Text, _unitScales[0], out double vp)) ac.Amplitude = vp;
+                if (TryParseFieldValue(_valueBoxes[1].Text, _unitScales[1], out double f)) ac.Frequency = f;
+            }
+            else if (ac.InputMode == AcInputMode.Physical && _valueBoxes.Count >= 3)
             {
                 if (TurkishNumber.TryParse(_valueBoxes[0].Text, out double a)) ac.Amplitude = a;
                 if (TurkishNumber.TryParse(_valueBoxes[1].Text, out double f)) ac.Frequency = f;
@@ -331,7 +359,7 @@ namespace CircuitAnalyzer.WPF
         }
 
         /// <summary>
-        /// AC kaynak alanlarını mod değişikliğinde yeniden oluşturur.
+        /// AC kaynak alanlarını dalga biçimi veya mod değişikliğinde yeniden oluşturur.
         /// </summary>
         private void RebuildAcFields(AcVoltageSource ac)
         {
@@ -341,42 +369,91 @@ namespace CircuitAnalyzer.WPF
             _valueBoxes.Clear();
             _setters.Clear();
             _unitScales.Clear();
+            _anySignBoxes.Clear();
             _complexInputs.Clear();
             _complexInputBox = null;
             _complexSetter = null;
 
-            if (ac.InputMode == AcInputMode.Physical)
+            if (ac.Waveform == AcWaveform.Square)
             {
-                // ── Fiziksel mod: üç ayrı sayısal alan ──
-                string ampLabel = ac.ValueKind == AcValueKind.Rms ? "Etkin değer (V)" : "Tepe değer Um (V)";
-                AddFieldTo(_dynamicPanel, ampLabel, ac.Amplitude,
-                    v => ac.Amplitude = v);
-                AddFieldTo(_dynamicPanel, "Frekans (Hz)", ac.Frequency,
+                AddFieldTo(_dynamicPanel, "Birinci yarı periyot V₁ (V)", ac.SquareV1,
+                    v => ac.SquareV1 = v, anySign: true);
+                AddFieldTo(_dynamicPanel, "İkinci yarı periyot V₂ (V)", ac.SquareV2,
+                    v => ac.SquareV2 = v, anySign: true);
+                AddFieldTo(_dynamicPanel, "Frekans f (Hz)", ac.Frequency,
                     v => ac.Frequency = v);
-                AddFieldTo(_dynamicPanel, "Faz (°)", ac.Phase,
-                    v => ac.Phase = v, anySign: true);
+            }
+            else if (ac.Waveform == AcWaveform.Triangle)
+            {
+                AddFieldTo(_dynamicPanel, "Tepe değeri V_p (V)", ac.Amplitude,
+                    v => ac.Amplitude = v);
+                AddFieldTo(_dynamicPanel, "Frekans f (Hz)", ac.Frequency,
+                    v => ac.Frequency = v);
             }
             else
             {
-                // ── Fazör mod: kutupsal metin girişi ──
-                string phasorLabel = ac.ValueKind == AcValueKind.Rms
-                    ? "Fazör değeri, etkin (V∠θ°)"
-                    : "Fazör değeri, tepe (Um∠θ°)";
-
-                string currentText = $"{TurkishNumber.Format(ac.Amplitude, "G10")}∠{TurkishNumber.Format(ac.Phase, "G10")}";
-
-                AddComplexFieldTo(_dynamicPanel, phasorLabel,
-                    currentText, cv =>
+                // Sinüs: mevcut giriş modu ve değer türü seçicileri
+                AddModeSelectorTo(
+                    _dynamicPanel,
+                    "Giriş Modu:",
+                    "Fiziksel (Genlik, Frekans, Faz)",
+                    "Fazör (V∠θ°)",
+                    ac.InputMode == AcInputMode.Physical,
+                    isFirst =>
                     {
-                        ac.Amplitude = cv.Magnitude;
-                        ac.Phase = cv.AngleDegrees;
-                    });
+                        SyncValuesBeforeRebuild(ac);
+                        ac.InputMode = isFirst ? AcInputMode.Physical : AcInputMode.Phasor;
+                        RebuildAcFields(ac);
+                    },
+                    "InputMode_" + ac.Id);
 
-                AddFieldTo(_dynamicPanel, "Frekans (Hz)", ac.Frequency,
-                    v => ac.Frequency = v);
+                AddModeSelectorTo(
+                    _dynamicPanel,
+                    "Değer türü:",
+                    "Etkin",
+                    "Tepe",
+                    ac.ValueKind == AcValueKind.Rms,
+                    isEtkin =>
+                    {
+                        SyncValuesBeforeRebuild(ac);
+                        ac.ValueKind = isEtkin ? AcValueKind.Rms : AcValueKind.Peak;
+                        RebuildAcFields(ac);
+                    },
+                    "ValueKind_" + ac.Id);
 
-                AddHintTextTo(_dynamicPanel,
-                    "Örnek: 10∠30, 12<45, 7,07+j7,07");
+                if (ac.InputMode == AcInputMode.Physical)
+                {
+                    // ── Fiziksel mod: üç ayrı sayısal alan ──
+                    string ampLabel = ac.ValueKind == AcValueKind.Rms ? "Etkin değer (V)" : "Tepe değer Um (V)";
+                    AddFieldTo(_dynamicPanel, ampLabel, ac.Amplitude,
+                        v => ac.Amplitude = v);
+                    AddFieldTo(_dynamicPanel, "Frekans (Hz)", ac.Frequency,
+                        v => ac.Frequency = v);
+                    AddFieldTo(_dynamicPanel, "Faz (°)", ac.Phase,
+                        v => ac.Phase = v, anySign: true);
+                }
+                else
+                {
+                    // ── Fazör mod: kutupsal metin girişi ──
+                    string phasorLabel = ac.ValueKind == AcValueKind.Rms
+                        ? "Fazör değeri, etkin (V∠θ°)"
+                        : "Fazör değeri, tepe (Um∠θ°)";
+
+                    string currentText = $"{TurkishNumber.Format(ac.Amplitude, "G10")}∠{TurkishNumber.Format(ac.Phase, "G10")}";
+
+                    AddComplexFieldTo(_dynamicPanel, phasorLabel,
+                        currentText, cv =>
+                        {
+                            ac.Amplitude = cv.Magnitude;
+                            ac.Phase = cv.AngleDegrees;
+                        });
+
+                    AddFieldTo(_dynamicPanel, "Frekans (Hz)", ac.Frequency,
+                        v => ac.Frequency = v);
+
+                    AddHintTextTo(_dynamicPanel,
+                        "Örnek: 10∠30, 12<45, 7,07+j7,07");
+                }
             }
 
             // İlk kutuya odaklan
@@ -543,7 +620,7 @@ namespace CircuitAnalyzer.WPF
             var lbl = new TextBlock
             {
                 Text = "Kontrol eden eleman",
-                Style = (Style)FindResource("Text.Caption"),
+                Style = TryFindResource("Text.Caption") as Style,
                 Margin = new Thickness(0, 8, 0, 4)
             };
             _controlCombo = new ComboBox { Margin = new Thickness(0, 0, 0, 8) };
@@ -640,7 +717,7 @@ namespace CircuitAnalyzer.WPF
             var lbl = new TextBlock
             {
                 Text = "Eleman Adı (ID)",
-                Style = (Style)FindResource("Text.Caption"),
+                Style = TryFindResource("Text.Caption") as Style,
                 Margin = new Thickness(0, 4, 0, 4)
             };
 
@@ -675,7 +752,7 @@ namespace CircuitAnalyzer.WPF
             var lbl = new TextBlock
             {
                 Text = "Konum Değişimi (t = 0 anında)",
-                Style = (Style)FindResource("Text.Caption"),
+                Style = TryFindResource("Text.Caption") as Style,
                 Margin = new Thickness(0, 8, 0, 4)
             };
 
@@ -737,7 +814,7 @@ namespace CircuitAnalyzer.WPF
             var lbl = new TextBlock
             {
                 Text = "Diyot Modeli",
-                Style = (Style)FindResource("Text.Caption"),
+                Style = TryFindResource("Text.Caption") as Style,
                 Margin = new Thickness(0, 8, 0, 4)
             };
 
@@ -769,7 +846,7 @@ namespace CircuitAnalyzer.WPF
             var lblVz = new TextBlock
             {
                 Text = "Zener gerilimi V_Z (V)",
-                Style = (Style)FindResource("Text.Caption"),
+                Style = TryFindResource("Text.Caption") as Style,
                 Margin = new Thickness(0, 4, 0, 4)
             };
             var txtVz = new TextBox
@@ -781,7 +858,7 @@ namespace CircuitAnalyzer.WPF
             var lblIzm = new TextBlock
             {
                 Text = "Maks. zener akımı I_ZM (isteğe bağlı)",
-                Style = (Style)FindResource("Text.Caption"),
+                Style = TryFindResource("Text.Caption") as Style,
                 Margin = new Thickness(0, 4, 0, 4)
             };
             var txtIzm = new TextBox
@@ -1092,7 +1169,7 @@ namespace CircuitAnalyzer.WPF
             var lbl = new TextBlock
             {
                 Text = label,
-                Style = (Style)FindResource("Text.Caption"),
+                Style = TryFindResource("Text.Caption") as Style,
                 Margin = new Thickness(0, 8, 0, 4)
             };
 
@@ -1130,7 +1207,7 @@ namespace CircuitAnalyzer.WPF
             var lbl = new TextBlock
             {
                 Text = label,
-                Style = (Style)FindResource("Text.Caption"),
+                Style = TryFindResource("Text.Caption") as Style,
                 Margin = new Thickness(0, 8, 0, 4)
             };
 
@@ -1208,7 +1285,7 @@ namespace CircuitAnalyzer.WPF
             var lbl = new TextBlock
             {
                 Text = label,
-                Style = (Style)FindResource("Text.Caption"),
+                Style = TryFindResource("Text.Caption") as Style,
                 Margin = new Thickness(0, 8, 0, 6)
             };
 
@@ -1257,7 +1334,7 @@ namespace CircuitAnalyzer.WPF
             var tb = new TextBlock
             {
                 Text = text,
-                Style = (Style)FindResource("Text.Caption"),
+                Style = TryFindResource("Text.Caption") as Style,
                 FontStyle = FontStyles.Italic,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 4, 0, 0)
@@ -1292,6 +1369,17 @@ namespace CircuitAnalyzer.WPF
 
         private void BtnApply_Click(object sender, RoutedEventArgs e)
         {
+            if (!TryApplyCore())
+                return;
+            DialogResult = true;
+            Close();
+        }
+
+        /// <summary>Birim testlerde pencereyi göstermeden doğrulama ve uygulamayı çalıştırır.</summary>
+        internal bool TryApplyForTest() => TryApplyCore();
+
+        private bool TryApplyCore()
+        {
             ErrorBar.Visibility = Visibility.Collapsed;
             // ── 0. Ad alanları (aynı ad iki elemanda olursa geri al ve dosya açma bozulur) ──
             foreach (var (nameBox, check) in _nameChecks)
@@ -1302,7 +1390,7 @@ namespace CircuitAnalyzer.WPF
                     ShowInputError(nameError);
                     nameBox.Focus();
                     nameBox.SelectAll();
-                    return;
+                    return false;
                 }
             }
 
@@ -1319,11 +1407,11 @@ namespace CircuitAnalyzer.WPF
 
                     _valueBoxes[i].Focus();
                     _valueBoxes[i].SelectAll();
-                    return;
+                    return false;
                 }
 
-                // Faz açısı dışındaki değerler pozitif olmalı (DC kaynaklar hariç: eksi serbest, sıfır yasak)
-                bool isPhaseField = _anySignBoxes.Contains(_valueBoxes[i]);
+                // Faz açısı ve kare dalga gerilimleri dışındaki değerler pozitif olmalı (DC kaynaklar hariç: eksi serbest, sıfır yasak)
+                bool isAnySignField = _anySignBoxes.Contains(_valueBoxes[i]);
 
                 if (_element is CurrentSource || _element is VoltageSource)
                 {
@@ -1335,7 +1423,7 @@ namespace CircuitAnalyzer.WPF
 
                         _valueBoxes[i].Focus();
                         _valueBoxes[i].SelectAll();
-                        return;
+                        return false;
                     }
                 }
                 else if (_element is DependentSource)
@@ -1347,16 +1435,16 @@ namespace CircuitAnalyzer.WPF
 
                         _valueBoxes[i].Focus();
                         _valueBoxes[i].SelectAll();
-                        return;
+                        return false;
                     }
                 }
-                else if (val <= 0 && !isPhaseField)
+                else if (val <= 0 && !isAnySignField)
                 {
                     ShowInputError("Değer sıfırdan büyük olmalıdır.");
 
                     _valueBoxes[i].Focus();
                     _valueBoxes[i].SelectAll();
-                    return;
+                    return false;
                 }
 
                 try
@@ -1369,7 +1457,7 @@ namespace CircuitAnalyzer.WPF
 
                     _valueBoxes[i].Focus();
                     _valueBoxes[i].SelectAll();
-                    return;
+                    return false;
                 }
             }
 
@@ -1378,7 +1466,7 @@ namespace CircuitAnalyzer.WPF
                 if (tfCheck.K <= 0 || tfCheck.K > 1.0)
                 {
                     ShowInputError("Kuplaj katsayısı k, 0 ile 1 arasında olmalıdır (0 < k ≤ 1).");
-                    return;
+                    return false;
                 }
             }
 
@@ -1400,14 +1488,14 @@ namespace CircuitAnalyzer.WPF
 
                         box.Focus();
                         box.SelectAll();
-                        return;
+                        return false;
                     }
                     if (cv.Magnitude < 1e-12)
                     {
                         ShowInputError("Değer sıfır olamaz.");
                         box.Focus();
                         box.SelectAll();
-                        return;
+                        return false;
                     }
                     validated.Add((setter, cv));
                 }
@@ -1432,7 +1520,7 @@ namespace CircuitAnalyzer.WPF
 
                     _complexInputBox.Focus();
                     _complexInputBox.SelectAll();
-                    return;
+                    return false;
                 }
 
                 _complexSetter(cv);
@@ -1444,27 +1532,56 @@ namespace CircuitAnalyzer.WPF
                 if (tpsCheck.Value <= 0)
                 {
                     ShowInputError("Gerilim sıfırdan büyük olmalıdır.");
-                    return;
+                    return false;
                 }
                 if (tpsCheck.Frequency <= 0)
                 {
                     ShowInputError("Frekans sıfırdan büyük olmalıdır.");
-                    return;
+                    return false;
                 }
             }
 
             // ── 3. AC kaynak ek doğrulaması ──
             if (_element is AcVoltageSource acSrc)
             {
-                if (acSrc.Amplitude <= 0)
+                if (acSrc.Waveform == AcWaveform.Square)
                 {
-                    ShowInputError("Genlik sıfırdan büyük olmalıdır.");
-                    return;
+                    if (acSrc.Frequency <= 0)
+                    {
+                        ShowInputError("Frekans sıfırdan büyük olmalıdır.");
+                        return false;
+                    }
+                    if (Math.Abs(acSrc.SquareV1 - acSrc.SquareV2) < 1e-15)
+                    {
+                        ShowInputError("V₁ ve V₂ birbirinden farklı olmalıdır.");
+                        return false;
+                    }
                 }
-                if (acSrc.InputMode == AcInputMode.Physical && acSrc.Frequency <= 0)
+                else if (acSrc.Waveform == AcWaveform.Triangle)
                 {
-                    ShowInputError("Frekans sıfırdan büyük olmalıdır.");
-                    return;
+                    if (acSrc.Amplitude <= 0)
+                    {
+                        ShowInputError("Tepe değeri sıfırdan büyük olmalıdır.");
+                        return false;
+                    }
+                    if (acSrc.Frequency <= 0)
+                    {
+                        ShowInputError("Frekans sıfırdan büyük olmalıdır.");
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (acSrc.Amplitude <= 0)
+                    {
+                        ShowInputError("Genlik sıfırdan büyük olmalıdır.");
+                        return false;
+                    }
+                    if (acSrc.InputMode == AcInputMode.Physical && acSrc.Frequency <= 0)
+                    {
+                        ShowInputError("Frekans sıfırdan büyük olmalıdır.");
+                        return false;
+                    }
                 }
             }
             if (_element is AcCurrentSource acCurrentSrc)
@@ -1472,12 +1589,12 @@ namespace CircuitAnalyzer.WPF
                 if (acCurrentSrc.Amplitude <= 0)
                 {
                     ShowInputError("Genlik sıfırdan büyük olmalıdır.");
-                    return;
+                    return false;
                 }
                 if (acCurrentSrc.InputMode == AcInputMode.Physical && acCurrentSrc.Frequency <= 0)
                 {
                     ShowInputError("Frekans sıfırdan büyük olmalıdır.");
-                    return;
+                    return false;
                 }
             }
 
@@ -1491,15 +1608,14 @@ namespace CircuitAnalyzer.WPF
             foreach (var validate in _customValidations)
             {
                 if (!validate())
-                    return;
+                    return false;
             }
 
             // ── 5. Bağımlı kaynağın liste/işaret kutusu ──
             foreach (var commit in _commitActions)
                 commit();
 
-            DialogResult = true;
-            Close();
+            return true;
         }
 
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
@@ -1586,7 +1702,7 @@ namespace CircuitAnalyzer.WPF
             var lbl = new TextBlock
             {
                 Text = label,
-                Style = (Style)FindResource("Text.Caption"),
+                Style = TryFindResource("Text.Caption") as Style,
                 Margin = new Thickness(0, 8, 0, 4)
             };
 

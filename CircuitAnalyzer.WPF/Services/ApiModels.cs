@@ -32,6 +32,7 @@ namespace CircuitAnalyzer.WPF.Services
         public const string Transformer = "TRANSFORMER";
         public const string ThreePhase = "THREE_PHASE";
         public const string ZenerRange = "ZENER_RANGE";
+        public const string Waveform = "WAVEFORM";
     }
 
     public sealed class TerminalsDto
@@ -61,6 +62,9 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("zener_range_given_max")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public double? ZenerRangeGivenMax { get; set; }
+        [JsonPropertyName("waveform_output")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? WaveformOutput { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -264,6 +268,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("wattmeters")] public List<WattmeterResultDto>? Wattmeters { get; set; }
         [JsonPropertyName("diodes")] public List<DiodeResultDto>? Diodes { get; set; }
         [JsonPropertyName("zener_range")] public ZenerRangeDto? ZenerRange { get; set; }
+        [JsonPropertyName("waveform")] public WaveformResultDto? Waveform { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -481,6 +486,9 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("zener_range_given_max")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public double? ZenerRangeGivenMax { get; set; }
+        [JsonPropertyName("waveform_output")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? WaveformOutput { get; set; }
         [JsonPropertyName("question")] public string Question { get; set; } = "";
         /// <summary>Boşsa sunucu seçer (önerilen ya da ilk kurulu model).</summary>
         [JsonPropertyName("model")] public string? Model { get; set; }
@@ -506,6 +514,7 @@ namespace CircuitAnalyzer.WPF.Services
             ZenerRangeTarget = analysis.ZenerRangeTarget,
             ZenerRangeGivenMin = analysis.ZenerRangeGivenMin,
             ZenerRangeGivenMax = analysis.ZenerRangeGivenMax,
+            WaveformOutput = analysis.WaveformOutput,
             Question = question,
         };
     }
@@ -745,6 +754,53 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonIgnore] public bool IsInverse => string.Equals(Mode, "INVERSE", StringComparison.OrdinalIgnoreCase);
     }
 
+    public sealed class WaveformIntervalDto
+    {
+        [JsonPropertyName("t_start")] public double TStart { get; set; }
+        [JsonPropertyName("t_end")] public double TEnd { get; set; }
+        [JsonPropertyName("state")] public string State { get; set; } = "";
+    }
+
+    public sealed class WaveformDiodeDto
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("intervals")] public List<WaveformIntervalDto> Intervals { get; set; } = new();
+    }
+
+    public sealed class WaveformBookFormulaDto
+    {
+        [JsonPropertyName("name")] public string Name { get; set; } = "";
+        [JsonPropertyName("text")] public string Text { get; set; } = "";
+        [JsonPropertyName("value")] public double Value { get; set; }
+    }
+
+    public sealed class WaveformLevelDto
+    {
+        [JsonPropertyName("v_in")] public double VIn { get; set; }
+        [JsonPropertyName("v_out")] public double VOut { get; set; }
+        [JsonPropertyName("states")] public Dictionary<string, string> States { get; set; } = new();
+    }
+
+    public sealed class WaveformResultDto
+    {
+        [JsonPropertyName("source_id")] public string SourceId { get; set; } = "";
+        [JsonPropertyName("shape")] public string Shape { get; set; } = "";
+        [JsonPropertyName("frequency")] public double Frequency { get; set; }
+        [JsonPropertyName("period")] public double Period { get; set; }
+        [JsonPropertyName("output_id")] public string OutputId { get; set; } = "";
+        [JsonPropertyName("output_label")] public string OutputLabel { get; set; } = "";
+        [JsonPropertyName("t")] public List<double> T { get; set; } = new();
+        [JsonPropertyName("v_in")] public List<double> VIn { get; set; } = new();
+        [JsonPropertyName("v_out")] public List<double> VOut { get; set; } = new();
+        [JsonPropertyName("diodes")] public List<WaveformDiodeDto> Diodes { get; set; } = new();
+        [JsonPropertyName("v_out_max")] public double VOutMax { get; set; }
+        [JsonPropertyName("v_out_min")] public double VOutMin { get; set; }
+        [JsonPropertyName("v_dc_numeric")] public double VDcNumeric { get; set; }
+        [JsonPropertyName("book_formula")] public WaveformBookFormulaDto? BookFormula { get; set; }
+        [JsonPropertyName("conduction_angle_deg")] public double? ConductionAngleDeg { get; set; }
+        [JsonPropertyName("levels")] public List<WaveformLevelDto>? Levels { get; set; }
+    }
+
     public sealed class AnalysisResponseDto
     {
         /// <summary>"success" veya "warning".</summary>
@@ -764,12 +820,14 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("wattmeters")] public List<WattmeterResultDto>? Wattmeters { get; set; }
         [JsonPropertyName("diodes")] public List<DiodeResultDto>? Diodes { get; set; }
         [JsonPropertyName("zener_range")] public ZenerRangeDto? ZenerRange { get; set; }
+        [JsonPropertyName("waveform")] public WaveformResultDto? Waveform { get; set; }
 
         [JsonIgnore] public TransformerResultDto? TransformerResult => Transformer ?? Results?.Transformer;
         [JsonIgnore] public ThreePhaseResultDto? ThreePhaseResult => ThreePhase ?? Results?.ThreePhase;
         [JsonIgnore] public List<WattmeterResultDto>? WattmeterResults => Wattmeters ?? Results?.Wattmeters;
         [JsonIgnore] public List<DiodeResultDto>? DiodeResults => Diodes ?? Results?.Diodes;
         [JsonIgnore] public ZenerRangeDto? ZenerRangeResult => ZenerRange ?? Results?.ZenerRange;
+        [JsonIgnore] public WaveformResultDto? WaveformResult => Waveform ?? Results?.Waveform;
     }
 
     public sealed class HealthDto

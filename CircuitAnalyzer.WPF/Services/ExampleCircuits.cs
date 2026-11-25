@@ -16,6 +16,7 @@ namespace CircuitAnalyzer.WPF.Services
         /// <summary>Önerilen analiz (ör: Thevenin örneği için port).</summary>
         public string SuggestedAnalysisType { get; init; } = AnalysisTypes.Nodal;
         public string? SuggestedTerminal { get; init; }
+        public string? SuggestedWaveformOutput { get; init; }
 
         /// <summary>Rastgele üretilmiş sorunun kodu (hazır örneklerde null).</summary>
         public int? ProblemCode { get; init; }
@@ -65,6 +66,7 @@ namespace CircuitAnalyzer.WPF.Services
             DcLadderSourceTransform,
             DcSeriesParallelDiodes,
             DcZenerVoltageRegulator,
+            AcHalfWaveRectifierSi,
         };
 
         // ═══════════════════════════════════════════════════════
@@ -427,5 +429,29 @@ namespace CircuitAnalyzer.WPF.Services
             c.Connect(ry.Pins[1], gnd.Pins[0]);
             return c;
         }
+
+        /// <summary>
+        /// Yarım dalga doğrultucu: 10 V tepe, 50 Hz sinüs kaynak → seri Si diyot (0,7 V) → R1 = 1 kΩ yük.
+        /// Pozitif yarı periyotta iletim (V_O,max = 9,3 V), negatif yarı periyotta yalıtım (V_O,min = 0 V).
+        /// </summary>
+        public static ExampleCircuit AcHalfWaveRectifierSi() => LayoutSeriesShunt(
+            new ExampleCircuit
+            {
+                Name = "Doğrultucu: Yarım Dalga (Si)",
+                Description = "10 V tepe, 50 Hz sinüs → Si diyot (0,7 V) → R1 = 1 kΩ yük. V_O,max = 9,3 V, V_O,min = 0 V.",
+                SuggestedAnalysisType = AnalysisTypes.Waveform,
+                SuggestedWaveformOutput = "R1",
+            },
+            new AcVoltageSource
+            {
+                Waveform = AcWaveform.Sine,
+                Amplitude = 10,
+                Frequency = 50,
+                Phase = 0,
+                InputMode = AcInputMode.Physical,
+                ValueKind = AcValueKind.Peak,
+            }, "VAC1",
+            new Diode(DiodeModel.Si), "D1",
+            new Resistor { Value = 1000 }, "R1");
     }
 }

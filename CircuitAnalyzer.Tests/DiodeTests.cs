@@ -485,9 +485,9 @@ public class DiodeTests
     }
 
     [Fact]
-    public void ExampleCircuit_DcZenerVoltageRegulator_IsLastAndHasValidNetlist()
+    public void ExampleCircuit_DcZenerVoltageRegulator_ExistsAndHasValidNetlist()
     {
-        Assert.Equal((Func<ExampleCircuit>)ExampleCircuits.DcZenerVoltageRegulator, ExampleCircuits.All[^1]);
+        Assert.Contains((Func<ExampleCircuit>)ExampleCircuits.DcZenerVoltageRegulator, ExampleCircuits.All);
 
         var c = ExampleCircuits.DcZenerVoltageRegulator();
         Assert.Equal("Zener: Gerilim Regülatörü", c.Name);

@@ -54,6 +54,7 @@
                         <ComboBoxItem Content="Transformatör" ToolTip="İdeal veya kuplajlı transformatör analizi"/>
                         <ComboBoxItem Content="Üç Faz" ToolTip="Üç fazlı devrelerin hat/faz gerilim ve akımları, güç ve kompanzasyon hesabı"/>
                         <ComboBoxItem Content="Zener Aralığı" ToolTip="Zener regülatöründe yük direncinin veya giriş geriliminin çalışma aralığı"/>
+                        <ComboBoxItem Content="Dalga Şekli" ToolTip="Diyotlu devrelerde giriş/çıkış dalga şekli, iletim aralıkları ve ortalama (DC) değer"/>
                     </ComboBox>
 
                     <Button x:Name="BtnSolve"
@@ -274,6 +275,20 @@
                                TextWrapping="Wrap"
                                Margin="0,4,0,0"
                                Visibility="Collapsed"/>
+                </StackPanel>
+
+                <!-- Çıkış elemanı (Dalga Şekli için) -->
+                <StackPanel x:Name="RowWaveformOutput"
+                            Margin="0,8,0,0"
+                            Visibility="Collapsed">
+                    <TextBlock x:Name="TxtWaveformOutputLabel"
+                               Text="Çıkış elemanı"
+                               Style="{DynamicResource Text.Caption}"
+                               Margin="0,0,0,2"
+                               ToolTip="Çıkış gerilimi ölçülecek yük direnci. Boş bırakılırsa son direnç otomatik seçilir."/>
+                    <ComboBox x:Name="CmbWaveformOutput"
+                              AutomationProperties.Name="Çıkış elemanı"
+                              ToolTip="Çıkış gerilimi ölçülecek yük direnci. Boş bırakılırsa son direnç otomatik seçilir."/>
                 </StackPanel>
 
                 <!-- Değer Gösterimi (AC için: Etkin / Tepe) -->

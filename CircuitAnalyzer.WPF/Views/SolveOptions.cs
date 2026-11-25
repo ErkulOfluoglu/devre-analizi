@@ -17,4 +17,5 @@ public sealed record SolveOptions(
     string? ReciprocityTarget = null,
     string? ZenerRangeTarget = null,
     double? ZenerRangeGivenMin = null,
-    double? ZenerRangeGivenMax = null);
+    double? ZenerRangeGivenMax = null,
+    string? WaveformOutput = null);

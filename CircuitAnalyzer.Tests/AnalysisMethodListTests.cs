@@ -45,12 +45,13 @@ public class AnalysisMethodListTests
     [InlineData(11, "Transformatör", AnalysisTypes.Transformer, false)]
     [InlineData(12, "Üç Faz", AnalysisTypes.ThreePhase, false)]
     [InlineData(13, "Zener Aralığı", AnalysisTypes.ZenerRange, false)]
+    [InlineData(14, "Dalga Şekli", AnalysisTypes.Waveform, false)]
     public void ComboItem_MapsToApiTypeAndTerminalsRow(int index, string label, string apiType, bool showsTerminals)
     {
         RunOnSta(() =>
         {
             var panel = new AnalysisPanel();
-            Assert.Equal(14, panel.CmbAnalysisType.Items.Count);
+            Assert.Equal(15, panel.CmbAnalysisType.Items.Count);
             Assert.Equal(label, (panel.CmbAnalysisType.Items[index] as ComboBoxItem)?.Content as string);
 
             panel.CmbAnalysisType.SelectedIndex = index;
@@ -73,6 +74,7 @@ public class AnalysisMethodListTests
         Assert.Equal("TRANSFORMER", AnalysisTypes.Transformer);
         Assert.Equal("THREE_PHASE", AnalysisTypes.ThreePhase);
         Assert.Equal("ZENER_RANGE", AnalysisTypes.ZenerRange);
+        Assert.Equal("WAVEFORM", AnalysisTypes.Waveform);
     }
 
     [Fact]

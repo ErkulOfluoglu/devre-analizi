@@ -64,6 +64,16 @@ namespace CircuitAnalyzer.WPF.Views
             ShowContent(plotView, "Zener Aralığı Grafiği", animate);
         }
 
+        public void Show(WaveformResultDto data, bool animate = true)
+        {
+            var plotView = new WaveformPlotView
+            {
+                IsEnlarged = true
+            };
+            plotView.LoadData(data);
+            ShowContent(plotView, "Dalga Şekli Grafiği", animate);
+        }
+
         private void ShowContent(UIElement content, string title, bool animate)
         {
             TxtOverlayTitle.Text = title;

@@ -61,6 +61,12 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("target")] public string? Target { get; set; }
             [JsonPropertyName("value_kind")] public string? ValueKind { get; set; }
 
+            // ── AC kaynak dalga biçimi ("SINE" | "SQUARE" | "TRIANGLE"); eski dosyalarda yok → sinüs ──
+            [JsonPropertyName("waveform")] public string? Waveform { get; set; }
+            [JsonPropertyName("v1")] public double? V1 { get; set; }
+            [JsonPropertyName("v2")] public double? V2 { get; set; }
+            [JsonPropertyName("vp")] public double? Vp { get; set; }
+
             // ── Bağımlı kaynak ("DEP"): türü, kazancı, kontrol elemanı. Eski dosyalarda yoktur (varsayılanlar geçerli). ──
             [JsonPropertyName("kind")] public string? Kind { get; set; }
             [JsonPropertyName("gain")] public double? Gain { get; set; }
@@ -122,6 +128,7 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("zener_range_target")] public string? ZenerRangeTarget { get; set; }
             [JsonPropertyName("zener_range_given_min")] public string? ZenerRangeGivenMin { get; set; }
             [JsonPropertyName("zener_range_given_max")] public string? ZenerRangeGivenMax { get; set; }
+            [JsonPropertyName("waveform_output")] public string? WaveformOutput { get; set; }
         }
 
         private static readonly JsonSerializerOptions JsonOptions = new()
@@ -174,6 +181,17 @@ namespace CircuitAnalyzer.WPF.Services
                     d.Type = "VAC"; d.Amplitude = ac.Amplitude; d.Frequency = ac.Frequency; d.Phase = ac.Phase;
                     d.InputMode = ac.InputMode.ToString();
                     d.ValueKind = ac.ValueKind == AcValueKind.Rms ? "rms" : "peak";
+                    if (ac.Waveform == AcWaveform.Square)
+                    {
+                        d.Waveform = "SQUARE";
+                        d.V1 = ac.SquareV1;
+                        d.V2 = ac.SquareV2;
+                    }
+                    else if (ac.Waveform == AcWaveform.Triangle)
+                    {
+                        d.Waveform = "TRIANGLE";
+                        d.Vp = ac.Amplitude;
+                    }
                     break;
                 case AcCurrentSource aci:
                     d.Type = "IAC"; d.Amplitude = aci.Amplitude; d.Frequency = aci.Frequency; d.Phase = aci.Phase;
@@ -364,14 +382,35 @@ namespace CircuitAnalyzer.WPF.Services
                 case "GND": return new GroundElement();
                 case "J": return new JunctionElement();
                 case "VAC":
-                    return new AcVoltageSource
                     {
-                        Amplitude = V(d.Amplitude, "genlik"), Frequency = V(d.Frequency, "frekans"),
-                        Phase = d.Phase ?? 0, InputMode = ParseEnum(d.InputMode, AcInputMode.Physical),
-                        ValueKind = string.Equals(d.ValueKind, "rms", StringComparison.OrdinalIgnoreCase)
-                            ? AcValueKind.Rms
-                            : AcValueKind.Peak,
-                    };
+                        var waveform = (d.Waveform ?? "").Trim().ToUpperInvariant() switch
+                        {
+                            "SQUARE" => AcWaveform.Square,
+                            "TRIANGLE" => AcWaveform.Triangle,
+                            _ => AcWaveform.Sine,
+                        };
+                        double v1 = d.V1 ?? 10.0;
+                        double v2 = d.V2 ?? -10.0;
+                        double amp = waveform switch
+                        {
+                            AcWaveform.Square => d.Amplitude ?? Math.Max(Math.Abs(v1), Math.Abs(v2)),
+                            AcWaveform.Triangle => d.Vp ?? d.Amplitude ?? 10.0,
+                            _ => V(d.Amplitude, "genlik"),
+                        };
+                        return new AcVoltageSource
+                        {
+                            Waveform = waveform,
+                            Amplitude = amp,
+                            SquareV1 = v1,
+                            SquareV2 = v2,
+                            Frequency = V(d.Frequency, "frekans"),
+                            Phase = d.Phase ?? 0,
+                            InputMode = ParseEnum(d.InputMode, AcInputMode.Physical),
+                            ValueKind = string.Equals(d.ValueKind, "rms", StringComparison.OrdinalIgnoreCase)
+                                ? AcValueKind.Rms
+                                : AcValueKind.Peak,
+                        };
+                    }
                 case "IAC":
                     return new AcCurrentSource
                     {

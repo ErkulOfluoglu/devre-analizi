@@ -789,6 +789,60 @@ class ZenerRangeSummary(BaseModel):
     y_label: str = Field(..., description="Düşey eksen etiketi ('V_Y (V)')")
 
 
+class WaveformDiodeInterval(BaseModel):
+    """Dalga Şekli analizinde bir diyotun sabit durumda kaldığı zaman aralığı."""
+    t_start: float = Field(..., description="Aralık başlangıç zamanı (s)")
+    t_end: float = Field(..., description="Aralık bitiş zamanı (s)")
+    state: Literal["ON", "ZENER", "OFF"] = Field(..., description="Bu aralıktaki diyot durumu")
+
+
+class WaveformDiodeTrace(BaseModel):
+    """Bir diyotun iki periyot boyunca iletim/yalıtım aralıkları."""
+    id: str = Field(..., description="Diyot kimliği (ör: D1)")
+    intervals: List[WaveformDiodeInterval] = Field(
+        default_factory=list, description="Ardışık sabit durum aralıkları")
+
+
+class WaveformBookFormula(BaseModel):
+    """Ders kitabı doğrultucu V_DC formülü (yalnızca tanınan sinüs doğrultucu topolojilerinde)."""
+    name: Literal["Yarım dalga doğrultucu", "Tam dalga (köprü) doğrultucu"] = Field(
+        ..., description="Tanınan doğrultucu türü")
+    text: str = Field(..., description="Türkçe kitap formülü ve sayısal sonucu")
+    value: float = Field(..., description="Kitap formülünden hesaplanan V_DC değeri (V)")
+
+
+class WaveformSquareLevel(BaseModel):
+    """Kare dalga girişinin iki sabit seviyesinden biri için giriş/çıkış ve diyot durumları."""
+    v_in: float = Field(..., description="Giriş gerilimi seviyesi (V)")
+    v_out: float = Field(..., description="Bu seviyedeki çıkış gerilimi V_O (V)")
+    states: Dict[str, Literal["ON", "ZENER", "OFF"]] = Field(
+        default_factory=dict, description="Bu seviyedeki diyot durumları ({id: durum})")
+
+
+class WaveformSummary(BaseModel):
+    """Dalga Şekli (WAVEFORM) yöntemi özeti: iki periyotluk tarama, iletim aralıkları ve V_DC."""
+    source_id: str = Field(..., description="Zamanla değişen gerilim kaynağının kimliği")
+    shape: Literal["SINE", "SQUARE", "TRIANGLE"] = Field(..., description="Giriş dalga biçimi")
+    frequency: float = Field(..., description="Kaynak frekansı f (Hz)")
+    period: float = Field(..., description="Periyot T = 1/f (s)")
+    output_id: str = Field(..., description="Çıkış gerilimi V_O'nun alındığı elemanın kimliği")
+    output_label: str = Field(..., description="Çıkış etiketi (ör: 'V_O (R1)')")
+    t: List[float] = Field(..., description="Örnekleme zamanları (s, 2 periyot)")
+    v_in: List[float] = Field(..., description="Her örnekteki giriş gerilimi v_in(t) (V)")
+    v_out: List[float] = Field(..., description="Her örnekteki çıkış gerilimi V_O(t) (V)")
+    diodes: List[WaveformDiodeTrace] = Field(
+        default_factory=list, description="Her diyotun iletim/yalıtım aralıkları")
+    v_out_max: float = Field(..., description="Çıkış geriliminin en büyük değeri (V)")
+    v_out_min: float = Field(..., description="Çıkış geriliminin en küçük değeri (V)")
+    v_dc_numeric: float = Field(..., description="Bir periyot üzerinden sayısal ortalama (DC) çıkış gerilimi (V)")
+    book_formula: Optional[WaveformBookFormula] = Field(
+        default=None, description="Tanınan sinüs doğrultucu için kitap V_DC formülü; değilse null")
+    conduction_angle_deg: Optional[float] = Field(
+        default=None, description="İletime geçiş açısı θ (derece); kare dalgada null")
+    levels: Optional[List[WaveformSquareLevel]] = Field(
+        default=None, description="Yalnızca kare dalgada iki seviyenin giriş/çıkış özeti; aksi hâlde null")
+
+
 class AnalysisResults(BaseModel):
     """Tüm analiz sonuçlarını birleştiren konteyner."""
     node_voltages: Dict[str, NodeVoltage] = Field(
@@ -850,6 +904,9 @@ class AnalysisResults(BaseModel):
     zener_range: SkipJsonSchema[Optional[ZenerRangeSummary]] = Field(
         default=None, exclude=True,
         description="İç kullanım: Zener Aralığı özeti; API yanıtına AnalysisResponse.zener_range olarak taşınır")
+    waveform: SkipJsonSchema[Optional[WaveformSummary]] = Field(
+        default=None, exclude=True,
+        description="İç kullanım: Dalga Şekli özeti; API yanıtına AnalysisResponse.waveform olarak taşınır")
 
 
 # ═══════════════════════════════════════════════════════
@@ -922,6 +979,10 @@ class AnalysisResponse(BaseModel):
         default=None,
         description=("Zener Aralığı (ZENER_RANGE) yöntemi özeti: min/max aralığı, adımlar, "
                      "3 değerli sağlama ve V_Y/I_Z eğrisi; yalnızca uygulanabildiyse dolu, aksi hâlde null"))
+    waveform: SkipJsonSchema[Optional[WaveformSummary]] = Field(
+        default=None,
+        description=("Dalga Şekli (WAVEFORM) yöntemi özeti: iki periyotluk v_in/v_out taraması, "
+                     "diyot iletim aralıkları ve V_DC; yalnızca uygulanabildiyse dolu, aksi hâlde null"))
     warnings: List[str] = Field(
         default_factory=list,
         description=(

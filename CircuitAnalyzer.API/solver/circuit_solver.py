@@ -42,7 +42,7 @@ from models.request import (
 )
 from parser.netlist_parser import (
     ParsedCircuit, ParsedElement, ParsedProbe,
-    ElementType, to_lcapy_netlist, lcapy_sense_map, lcapy_name, has_diodes,
+    ElementType, to_lcapy_netlist, lcapy_sense_map, lcapy_name, has_diodes, has_waveform_sources,
     ALL_SOURCES, CURRENT_SOURCES, DC_SOURCES, SINE_SOURCES, PHASOR_SOURCES,
     DEPENDENT_SOURCES, DEPENDENT_CURRENT_OUTPUT, VOLTAGE_SOURCES,
     SWITCH_NOTE, circuit_at_time, has_switches, apply_value_basis,
@@ -497,6 +497,7 @@ def solve_circuit(
     zener_range_target: Optional[str] = None,
     zener_range_given_min: Optional[float] = None,
     zener_range_given_max: Optional[float] = None,
+    waveform_output: Optional[str] = None,
 ) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
     """
     Devreyi çözer (anahtarlı devreler için giriş noktası).
@@ -509,6 +510,15 @@ def solve_circuit(
     """
     if value_display is not None:
         parsed = apply_value_basis(parsed, value_display)
+    if has_waveform_sources(parsed) and not parsed.errors:
+        # Kare/üçgen dalga kaynakları yalnızca WAVEFORM (Dalga Şekli) yöntemiyle geçerlidir
+        from solver.waveform import WAVEFORM_NO_DIODE_REASON, WAVEFORM_ONLY_SOURCE_REASON
+        if analysis_type != AnalysisType.WAVEFORM:
+            return AnalysisResults(), [], [UNSOLVABLE_PREFIX + WAVEFORM_ONLY_SOURCE_REASON]
+        if not has_diodes(parsed):
+            return AnalysisResults(), [], [
+                UNSOLVABLE_PREFIX + f"{WAVEFORM_NO_DIODE_REASON}; kare/üçgen dalga kaynağı diyotsuz devrede başka bir yöntemle çözülemez."
+            ]
     if has_diodes(parsed) and not parsed.errors:
         # Diyot doğrusal değildir: durumları bulunur, devre eşdeğeriyle çözülür (solver.diode).
         # Ham diyot asla _solve_core'a gitmez (lcapy netlistine yazılamaz).
@@ -519,6 +529,7 @@ def solve_circuit(
             zener_range_target=zener_range_target,
             zener_range_given_min=zener_range_given_min,
             zener_range_given_max=zener_range_given_max,
+            waveform_output=waveform_output,
         )
     if (has_three_phase(parsed) or has_wattmeters(parsed)) and not parsed.errors:
         return _solve_three_phase(parsed, mode, frequency, analysis_type, thevenin_terminals,
@@ -575,7 +586,7 @@ def _solve_three_phase(
     freq = exp.frequency or frequency
     core_type = (AnalysisType.NODAL if three or analysis_type in (
         AnalysisType.THREE_PHASE, AnalysisType.TRANSFORMER, AnalysisType.RECIPROCITY,
-        AnalysisType.ZENER_RANGE)
+        AnalysisType.ZENER_RANGE, AnalysisType.WAVEFORM)
         else analysis_type)
     results, steps, errors = solve_circuit(
         exp.flat, mode, freq, core_type, None if three else thevenin_terminals, target_probes,
@@ -586,6 +597,10 @@ def _solve_three_phase(
     elif analysis_type == AnalysisType.ZENER_RANGE:
         from explainer.zener_range_narrative import fallback_note
         errors.append(fallback_note("devrede üç fazlı eleman ya da wattmetre var"))
+    elif analysis_type == AnalysisType.WAVEFORM:
+        from explainer.waveform_narrative import fallback_note as wf_fallback_note
+        from solver.waveform import WAVEFORM_NO_DIODE_REASON
+        errors.append(wf_fallback_note(WAVEFORM_NO_DIODE_REASON))
     if any(m.startswith(UNSOLVABLE_PREFIX) for m in errors) or not results.node_voltages:
         return results, steps, errors
 
@@ -1262,6 +1277,14 @@ def _solve_core(
         if zener_range_inapplicable_reason:
             errors.append(fallback_note(zener_range_inapplicable_reason))
 
+    # ── Adım 6.69: Dalga Şekli (WAVEFORM) — diyotsuz devrede her zaman NODAL'a döner ──
+    waveform_inapplicable_reason: Optional[str] = None
+    if analysis_type == AnalysisType.WAVEFORM:
+        from explainer.waveform_narrative import fallback_note as wf_fallback_note
+        from solver.waveform import WAVEFORM_NO_DIODE_REASON
+        waveform_inapplicable_reason = WAVEFORM_NO_DIODE_REASON
+        errors.append(wf_fallback_note(waveform_inapplicable_reason))
+
     # ── Adım 6.7: Bağımlı kaynaklı Thevenin/Norton için ek sayılar ──
     port_extras = None
     if (has_dependent and thevenin_terminals is not None
@@ -1300,6 +1323,7 @@ def _solve_core(
             reciprocity_analysis=reciprocity_analysis,
             reciprocity_inapplicable_reason=reciprocity_inapplicable_reason,
             zener_range_inapplicable_reason=zener_range_inapplicable_reason,
+            waveform_inapplicable_reason=waveform_inapplicable_reason,
         )
     except Exception as e:
         errors.append(f"ℹ Anlatım oluşturulamadı: {turkish_error(e, 'anlatım')}")
