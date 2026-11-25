@@ -114,15 +114,28 @@ _NOTES_THREE_PHASE = [
     "Dengeli yükte üç faz akımı eşit büyüklükte ve aralarında 120° vardır; fazör toplamları sıfır olduğu için "
     "nötr akımı sıfırdır. Yük dengesizse nötrden akım geçer.",
 ]
+_NOTES_DIODE = [
+    "Diyot doğrusal olmayan bir elemandır. Önce durumu belirlenir: doğru polarmada (anot katottan daha pozitif) ve "
+    "V_AK eşik gerilimine (V_T) ulaşıyorsa İLETİMDEDİR, yerine V_T değerinde bir gerilim kaynağı konur (+ ucu anotta); "
+    "akımı anottan katoda doğru pozitiftir. Ters polarmada ya da V_AK < V_T ise YALITIMDADIR, açık devredir (I = 0).",
+    "Eşik gerilimleri: ideal diyot V_T = 0 V, silisyum (Si) V_T = 0,7 V, germanyum (Ge) V_T = 0,3 V. İletimdeki "
+    "diyotun harcadığı güç P = V_T·I'dır.",
+    "Süperpozisyon, Thevenin, Norton, Millman ve kaynak dönüşümü yalnızca doğrusal devrelerde geçerlidir; diyotlu "
+    "devre, diyot durumları belirlendikten sonra elde edilen elektriksel eşdeğer devre üzerinde düğüm ya da çevre "
+    "yöntemiyle çözülür.",
+]
 
 
 def concept_notes(analysis_type: AnalysisType, is_dc: bool,
-                  has_c: bool = False, has_l: bool = False) -> str:
+                  has_c: bool = False, has_l: bool = False, has_d: bool = False) -> str:
     """
     Yönteme uygun kısa ve doğru kavram notları (yalnız ilgili olanlar: bağlam kısa kalsın).
     has_c / has_l: devrede kondansatör / bobin var mı (seri RC ve RL notları yalnız kendi devresine).
+    has_d: devrede diyot var mı.
     """
     notes = list(_NOTES_GENERAL)
+    if has_d:
+        notes += _NOTES_DIODE
     if not is_dc:
         notes += _NOTES_AC
         if has_c and not has_l:
@@ -225,6 +238,18 @@ def describe_element(e: ParsedElement, value_basis: str = "PEAK") -> str:
                     f"{_node(p['pos1'])} ile, t = 0'da {_node(p['pos2'])} ile bağlanır")
         what = "t < 0'da açık, t = 0'da kapanır" if kind == "NO" else "t < 0'da kapalı, t = 0'da açılır"
         return f"{eid}: anahtar, {between}; {what}"
+    if t == ElementType.DIODE:
+        model = {"IDEAL": "ideal", "SI": "silisyum (Si)", "GE": "germanyum (Ge)"}.get(p.get("model"), p.get("model"))
+        state = p.get("state")
+        state_txt = ""
+        if state == "ON":
+            i = p.get("i")
+            state_txt = "; program çözdü: İLETİMDE (yerine V_T'lik gerilim kaynağı konur" + (
+                f", I_D = {eng(i, 'A')} anot → katot)" if isinstance(i, (int, float)) else ")")
+        elif state == "OFF":
+            state_txt = "; program çözdü: YALITIMDA (açık devre, I_D = 0)"
+        return (f"{eid}: diyot, {model}, eşik gerilimi V_T = {num(p.get('v_t', e.value))} V; "
+                f"anot {_node(e.node_positive)}, katot {_node(e.node_negative)}{state_txt}")
     if t in DEPENDENT_SOURCES:
         # Ters kontrolde eksi yazılmaz; V_R2 / I_R2 ekrandaki işaretlere göre tanımlanır
         ctrl_id = _eid(p['control_id'])
@@ -342,7 +367,8 @@ def build_messages(
     basis = getattr(parsed, "value_basis", "PEAK")
     kinds = {e.element_type for e in parsed.elements}
     notes = concept_notes(analysis_type, is_dc,
-                          has_c=ElementType.CAPACITOR in kinds, has_l=ElementType.INDUCTOR in kinds)
+                          has_c=ElementType.CAPACITOR in kinds, has_l=ElementType.INDUCTOR in kinds,
+                          has_d=ElementType.DIODE in kinds)
     ctx = [_rules_for(basis), "", notes, "",
            circuit_text(parsed, is_dc, frequency), f"Yöntem: {method}", ""]
     if practice:
@@ -387,7 +413,8 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
         return None
 
     element_unit = {ElementType.RESISTOR: "Ω", ElementType.CAPACITOR: "F",
-                    ElementType.INDUCTOR: "H", ElementType.IMPEDANCE: "Ω"}
+                    ElementType.INDUCTOR: "H", ElementType.IMPEDANCE: "Ω",
+                    ElementType.DIODE: "V"}
     for e in parsed.elements:
         if e.element_type == ElementType.IMPEDANCE:
             put(complex(e.params.get("impedance", e.value)), "Ω")

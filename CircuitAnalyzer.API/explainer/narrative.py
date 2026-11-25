@@ -183,8 +183,17 @@ class _Ctx:
                 if e.element_type not in _SOURCES and e.element_type not in DEPENDENT_SOURCES]
 
     def sources(self) -> List[ParsedElement]:
-        """Bağımsız kaynaklar (bağımlı kaynaklar için dependents())."""
-        return [e for e in self.elements if e.element_type in _SOURCES]
+        """
+        Bağımsız kaynaklar (bağımlı kaynaklar için dependents()). İletimdeki diyotun eşdeğer
+        kaynağı (params["diode_of"]) kaynak sayılmaz: güç verMEZ, diyot olarak ayrıca anlatılır.
+        """
+        return [e for e in self.elements
+                if e.element_type in _SOURCES and not e.params.get("diode_of")]
+
+    @property
+    def diodes(self):
+        """Diyotlu devrenin eşdeğerinde diyot raporu (solver.diode.DiodeReport), yoksa None."""
+        return getattr(self.parsed, "diode_report", None)
 
     def dependents(self) -> List[ParsedElement]:
         return [e for e in self.elements if e.element_type in DEPENDENT_SOURCES]
@@ -577,6 +586,9 @@ def _intro(ctx: _Ctx) -> List[_Section]:
                            f"{p_sym} = √2·{r_sym} = {eng(shown_val, unit)} (tepe)")
     if passives:
         s.text(f"Pasif elemanlar: {', '.join(passives)}.")
+    if ctx.diodes is not None:
+        from explainer.diode_narrative import intro_line
+        s.text(intro_line(ctx.diodes))
     if ctx.has_dependent:
         s.text("Bağımlı (kontrollü) kaynaklar: çıkışları başka bir elemanın gerilimi veya "
                "akımıyla orantılıdır (çıkış = kazanç · kontrol büyüklüğü).")
@@ -768,6 +780,12 @@ def _known_nodes(ctx: _Ctx) -> List[_Section]:
                 s.text(f"{elem.id} bu adımda sıfırlandı (kısa devre), bu yüzden uçları "
                        "arasında gerilim farkı yoktur:")
                 s.math(f"{node_v(other)} = {node_v(node)} = {ctx.val(vo, 'V')}")
+            elif elem.params.get("diode_of"):
+                # İletimdeki diyot: eşik gerilimi kadar kaynak (ideal diyotta 0 V, kısa devre)
+                from explainer.diode_narrative import known_node_texts
+                text, eq = known_node_texts(elem, node, other, ctx.val(vo, 'V'))
+                s.text(text)
+                s.math(eq)
             elif elem.element_type in _SOURCES and abs(value) < 1e-15:
                 # Bu analizde sıfırlanan kaynak (AC'de DC kaynak / DC'de AC kaynak)
                 kind = "DC" if elem.element_type in DC_SOURCES else "AC"
@@ -1408,6 +1426,13 @@ def _currents(ctx: _Ctx, mark: str = "", passive_only: bool = False,
     if any(e.id in ctx.i and e.element_type not in CURRENT_SOURCES for e in ctx.sources()) or any(
             e.id in ctx.i and e.element_type not in DEPENDENT_CURRENT_OUTPUT for e in ctx.dependents()):
         s.note("Gerilim kaynağının akımı, kaynağa bağlı elemanların akımlarından KCL ile bulunur.")
+    if ctx.diodes is not None:
+        from explainer.diode_narrative import current_lines
+        for line in current_lines(ctx.diodes, ctx.i):
+            s.math(line)
+        if any(d.state == "ON" for d in ctx.diodes.diodes):
+            s.note("İletimdeki diyotun akımı, eşdeğer kaynağa bağlı elemanların akımlarından KCL "
+                   "ile bulunur; akım anottan katoda doğru pozitiftir.")
     return [s] if len(s.blocks) > 1 else []
 
 
@@ -2116,6 +2141,13 @@ def _power(ctx: _Ctx) -> List[_Section]:
             s.math(f"S_{e.id} = {s_form} = {rect(net, 'VA')} → P = {eng(net.real, 'W')}, "
                    f"Q = {eng(net.imag, 'VAR')} (bağımlı kaynağın net verdiği)")
 
+    if ctx.diodes is not None and ctx.is_dc:
+        from explainer.diode_narrative import power_lines
+        for line, p_d in power_lines(ctx.diodes, ctx.i):
+            s.math(line)
+            if abs(p_d) > 1e-15:
+                absorbed_terms.append(p_d)
+
     sup = complex(pw.total_supplied.real, pw.total_supplied.imaginary)
     absb = complex(pw.total_absorbed.real, pw.total_absorbed.imaginary)
     if ctx.is_dc:
@@ -2289,10 +2321,14 @@ def _kcl_check(ctx: _Ctx) -> List[_Section]:
         for e in ctx.elements:
             if e.id not in ctx.i:
                 continue
+            name = e.id
+            if ctx.diodes is not None and e.params.get("diode_of"):
+                from explainer.diode_narrative import kcl_label
+                name = kcl_label(ctx.diodes, e.id)
             if e.node_positive == node:
-                flows.append((e.id, ctx.i[e.id]))
+                flows.append((name, ctx.i[e.id]))
             elif e.node_negative == node:
-                flows.append((e.id, -ctx.i[e.id]))
+                flows.append((name, -ctx.i[e.id]))
         if len(flows) < 2:
             continue
         total = sum(f for _, f in flows)
@@ -2314,6 +2350,11 @@ def _kcl_check(ctx: _Ctx) -> List[_Section]:
         s.blocks.insert(0, ExplanationBlock(
             kind="text",
             text="Bulduğumuz akımlar KCL'yi sağlamalı: her düğüme giren akım, çıkan akıma eşittir."))
+        if ctx.diodes is not None:
+            from explainer.diode_narrative import kcl_note
+            note = kcl_note(ctx.diodes)
+            if note:
+                s.note(note)
         return [s]
     return []
 
@@ -2372,6 +2413,10 @@ def _summary(ctx: _Ctx) -> List[_Section]:
                      f"(çevre akımı) = {ctx.val(current, 'A')}")
     for n in sorted((n for n in ctx.v if n != "0"), key=lambda n: (len(n), n)):
         s.result(f"{node_v(n)} = {ctx.val(ctx.node_value(n), 'V')}")
+    if ctx.diodes is not None:
+        from explainer.diode_narrative import summary_lines
+        for line in summary_lines(ctx.diodes, ctx.i):
+            s.result(line)
     for pr in ctx.results.probe_results:
         value = pr.value
         z = complex(value) if isinstance(value, (int, float)) else complex(value.real, value.imaginary)

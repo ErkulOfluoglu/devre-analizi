@@ -31,6 +31,7 @@ namespace CircuitAnalyzer.WPF
         private int _threePhaseSourceCounter = 0;
         private int _threePhaseLoadCounter = 0;
         private int _wattmeterCounter = 0;
+        private int _diodeCounter = 0;
 
         private Point? _contextMenuCanvasPos = null;
         private ContextMenu? _canvasContextMenu = null;
@@ -271,6 +272,17 @@ namespace CircuitAnalyzer.WPF
             };
 
             BeginPlacement(spdt, $"{spdt.Id} (İki konumlu anahtar) eklendi — Sürükle/Sağ-tık/Çift-tık");
+        }
+
+        private void BtnAddDiode_Click(object sender, RoutedEventArgs e)
+        {
+            var diode = new Diode
+            {
+                Id = $"D{_diodeCounter + 1}",
+                Model = DiodeModel.Si
+            };
+
+            BeginPlacement(diode, $"{diode.Id} (Diyot — Si) eklendi — Sürükle/Sağ-tık/Çift-tık");
         }
 
         /// <summary>
@@ -893,6 +905,7 @@ namespace CircuitAnalyzer.WPF
             _threePhaseSourceCounter = 0;
             _threePhaseLoadCounter = 0;
             _wattmeterCounter = 0;
+            _diodeCounter = 0;
             _pendingStartSplit = null;
 
             _controlMarkers.Clear();

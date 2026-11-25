@@ -315,6 +315,7 @@ def analyze_circuit(
         transformer=results.transformer,
         three_phase=results.three_phase,
         wattmeters=results.wattmeters,
+        diodes=results.diodes,
     )
 
     # Güvenlik ağı: sonsuz/NaN sayı JSON'a çevrilemez ve 500 hatası verir;
@@ -679,6 +680,11 @@ def llm_ask(request: LlmAskRequest):
     # Geçici durum çözüldüyse asistan anahtarlı devreyi görür; diğer durumlarda devre t > 0
     # konumuyla çözülmüştür, asistan da aynı devreyi görsün
     shown = parsed if results.transient is not None else circuit_at_time(parsed, "after")
+    if results.diodes and not request.practice:
+        # Diyotların çözümdeki durumu (iletimde/yalıtımda) asistanın devre tarifine yazılır.
+        # Alıştırmada yazılmaz: durum ve akım çözümün parçasıdır (I_D = I_R gibi cevabı verir).
+        from solver.diode import with_diode_states
+        shown = with_diode_states(shown, results.diodes)
     try:
         r = devices.route(request.device, model)
     except devices.DeviceUnavailable as e:

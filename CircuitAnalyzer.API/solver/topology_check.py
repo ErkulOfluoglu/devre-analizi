@@ -319,7 +319,7 @@ def fault_reasons(parsed: ParsedCircuit, is_dc: bool) -> Optional[str]:
 
 _DANGLING_TYPES = (
     ElementType.RESISTOR, ElementType.CAPACITOR, ElementType.INDUCTOR, ElementType.IMPEDANCE,
-) + VOLTAGE_SOURCES + CURRENT_SOURCES + DEPENDENT_SOURCES
+) + VOLTAGE_SOURCES + CURRENT_SOURCES + DEPENDENT_SOURCES + (ElementType.DIODE,)
 
 
 def dangling_warnings(parsed: ParsedCircuit, ignore_nodes: Iterable[str] = ()) -> List[str]:

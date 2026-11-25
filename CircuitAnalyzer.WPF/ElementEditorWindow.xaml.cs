@@ -194,6 +194,10 @@ namespace CircuitAnalyzer.WPF
                 case Wattmeter wm:
                     BuildWattmeterForm(wm);
                     break;
+
+                case Diode diode:
+                    BuildDiodeForm(diode);
+                    break;
             }
 
             // İlk TextBox'a odaklan
@@ -692,6 +696,48 @@ namespace CircuitAnalyzer.WPF
 
             AddHintText("NO (Normalde Açık): t < 0 açık, t ≥ 0 kapalı.\n" +
                         "NC (Normalde Kapalı): t < 0 kapalı, t ≥ 0 açık.");
+        }
+
+        private void BuildDiodeForm(Diode diode)
+        {
+            Title = $"{diode.Id} — Diyot Düzenle";
+            AddNameField(diode.Id, id => diode.Id = id);
+
+            var lbl = new TextBlock
+            {
+                Text = "Diyot Modeli",
+                Style = (Style)FindResource("Text.Caption"),
+                Margin = new Thickness(0, 8, 0, 4)
+            };
+
+            var combo = new ComboBox
+            {
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            combo.Items.Add(new ComboBoxItem { Content = "İdeal (0 V)" });
+            combo.Items.Add(new ComboBoxItem { Content = "Silisyum – Si (0,7 V)" });
+            combo.Items.Add(new ComboBoxItem { Content = "Germanyum – Ge (0,3 V)" });
+            combo.SelectedIndex = diode.Model switch
+            {
+                DiodeModel.Ideal => 0,
+                DiodeModel.Ge => 2,
+                _ => 1,
+            };
+
+            PropertiesPanel.Children.Add(lbl);
+            PropertiesPanel.Children.Add(combo);
+
+            _commitActions.Add(() =>
+            {
+                diode.Model = combo.SelectedIndex switch
+                {
+                    0 => DiodeModel.Ideal,
+                    2 => DiodeModel.Ge,
+                    _ => DiodeModel.Si,
+                };
+            });
+
+            AddHintText("Anot sol uçta, katot çizgili uçta. Si 0,7 V, Ge 0,3 V eşik gerilimi.");
         }
 
         private void BuildSpdtSwitchForm(SpdtSwitch spdt)

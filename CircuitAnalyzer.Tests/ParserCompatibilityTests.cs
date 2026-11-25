@@ -30,7 +30,8 @@ public class ParserCompatibilityTests : IClassFixture<BackendFixture>
         string expectedType,
         double expectedValue,
         bool isAc = false,
-        double? frequency = null)
+        double? frequency = null,
+        string? expectedDiodeModel = null)
     {
         string netlist = BuildTinyGroundedNetlist(element);
 
@@ -68,11 +69,23 @@ public class ParserCompatibilityTests : IClassFixture<BackendFixture>
         Assert.Equal(expectedId, parsedElem.GetProperty("id").GetString());
         Assert.Equal(expectedType, parsedElem.GetProperty("type").GetString());
 
-        // Sayısal değer %0.1 bağıl tolerans içinde eşleşmeli
+        // Sayısal değer %0.1 bağıl tolerans içinde eşleşmeli (ideal diyot gibi 0 değerde sıfıra bölünmez)
         double parsedVal = parsedElem.GetProperty("value").GetDouble();
-        double relDiff = Math.Abs(parsedVal - expectedValue) / Math.Abs(expectedValue);
-        Assert.True(relDiff <= 0.001,
-            $"Eleman {expectedId} için beklenen: {expectedValue}, ayrıştırılan: {parsedVal}, bağıl fark: {relDiff:P3}");
+        if (expectedValue == 0)
+        {
+            Assert.Equal(0.0, parsedVal, 12);
+        }
+        else
+        {
+            double relDiff = Math.Abs(parsedVal - expectedValue) / Math.Abs(expectedValue);
+            Assert.True(relDiff <= 0.001,
+                $"Eleman {expectedId} için beklenen: {expectedValue}, ayrıştırılan: {parsedVal}, bağıl fark: {relDiff:P3}");
+        }
+
+        if (expectedDiodeModel != null)
+        {
+            Assert.Equal(expectedDiodeModel, parsedElem.GetProperty("params").GetProperty("model").GetString());
+        }
     }
 
     [Fact]
@@ -170,6 +183,14 @@ public class ParserCompatibilityTests : IClassFixture<BackendFixture>
         };
         return AssertParseOnlyAsync(vac, "VAC1", "V_AC_PHASOR", 12, isAc: true, frequency: 50);
     }
+
+    [Fact]
+    public Task ParseOnly_Diode_Si() =>
+        AssertParseOnlyAsync(new Diode(DiodeModel.Si) { Id = "D1" }, "D1", "D", 0.7, expectedDiodeModel: "SI");
+
+    [Fact]
+    public Task ParseOnly_Diode_Ideal() =>
+        AssertParseOnlyAsync(new Diode(DiodeModel.Ideal) { Id = "D1" }, "D1", "D", 0.0, expectedDiodeModel: "IDEAL");
 
     [Fact]
     public async Task FullAnalyze_AcPhysicalSource_InfresFrequencyFromSource()

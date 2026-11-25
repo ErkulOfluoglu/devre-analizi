@@ -402,20 +402,22 @@ namespace CircuitAnalyzer.WPF.Services
                 // ═══════════════════════════════════════════════════════
                 //  6. SONUÇ TABLOSU
                 // ═══════════════════════════════════════════════════════
-                if (input.Response?.Results != null || input.Response?.ThreePhaseResult != null || input.Response?.WattmeterResults != null)
+                if (input.Response?.Results != null || input.Response?.ThreePhaseResult != null || input.Response?.WattmeterResults != null || input.Response?.DiodeResults != null)
                 {
                     var results = input.Response.Results;
                     var threePhaseTables = PrintContent.ThreePhaseTables(input.Response.ThreePhaseResult);
                     var wattmeterRows = PrintContent.WattmeterRows(input.Response.WattmeterResults);
+                    var diodeRows = PrintContent.DiodeRows(input.Response.DiodeResults);
                     var probeRows = PrintContent.ProbeRows(results?.ProbeResults);
                     bool hasThreePhase = threePhaseTables.Count > 0;
                     bool hasVoltages = results?.NodeVoltages != null && results.NodeVoltages.Count > 0;
                     bool hasWattmeters = wattmeterRows.Count > 0;
+                    bool hasDiodes = diodeRows.Count > 0;
                     bool hasCurrents = results?.ElementCurrents != null && results.ElementCurrents.Count > 0;
                     bool hasProbes = probeRows.Count > 0;
                     bool hasPower = results?.Power?.Elements != null && results.Power.Elements.Count > 0;
 
-                    if (hasThreePhase || hasVoltages || hasWattmeters || hasCurrents || hasProbes || hasPower)
+                    if (hasThreePhase || hasVoltages || hasWattmeters || hasDiodes || hasCurrents || hasProbes || hasPower)
                     {
                         Paragraph TableHeading(string text, double top)
                         {
@@ -509,6 +511,21 @@ namespace CircuitAnalyzer.WPF.Services
                             }
                             doc.Blocks.Add(tblWatt);
                             tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pSub, pSub, tblWatt));
+                        }
+
+                        // Diyotlar Tablosu
+                        if (hasDiodes)
+                        {
+                            var pSub = TableHeading("Diyotlar", tableGroups.Count == 0 ? 4 : 8);
+
+                            var tblDiodes = CreateTable(doc, new[] { "Diyot", "Durum", "V_AK", "Akım" }, new[] { 120.0, 110.0, 110.0, 110.0 });
+                            var rg = tblDiodes.RowGroups[0];
+                            foreach (var (name, state, vAk, current) in diodeRows)
+                            {
+                                rg.Rows.Add(CreateRow(doc, new[] { name, state, vAk, current }));
+                            }
+                            doc.Blocks.Add(tblDiodes);
+                            tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pSub, pSub, tblDiodes));
                         }
 
                         // Eleman Akımları Tablosu

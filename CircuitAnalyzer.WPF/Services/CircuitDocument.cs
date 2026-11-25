@@ -83,6 +83,11 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("sequence")] public string? Sequence { get; set; }
             [JsonPropertyName("balanced")] public bool? Balanced { get; set; }
             [JsonPropertyName("z")] public List<double[]>? Z { get; set; }
+
+            // ── Diyot ("DIODE"): model ("IDEAL", "SI", "GE") ──
+            [JsonPropertyName("model")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string? Model { get; set; }
         }
 
         public sealed class WireData
@@ -226,6 +231,10 @@ namespace CircuitAnalyzer.WPF.Services
                     break;
                 case Wattmeter:
                     d.Type = "W";
+                    break;
+                case Diode diode:
+                    d.Type = "DIODE";
+                    d.Model = diode.NetlistModel;
                     break;
                 default:
                     throw new NotSupportedException($"Kaydedilemeyen eleman türü: {e.GetType().Name}");
@@ -466,6 +475,17 @@ namespace CircuitAnalyzer.WPF.Services
                     }
                 case "W":
                     return new Wattmeter();
+                case "DIODE":
+                case "D":
+                    {
+                        var model = (d.Model ?? "").Trim().ToUpperInvariant() switch
+                        {
+                            "IDEAL" => DiodeModel.Ideal,
+                            "GE" => DiodeModel.Ge,
+                            _ => DiodeModel.Si,
+                        };
+                        return new Diode(model);
+                    }
                 default:
                     throw new CircuitFileException($"Tanınmayan eleman türü: “{d.Type}”. Dosya daha yeni bir sürümle kaydedilmiş olabilir.");
             }

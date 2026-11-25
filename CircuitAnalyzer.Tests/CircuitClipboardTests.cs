@@ -194,6 +194,7 @@ public class CircuitClipboardTests
             new AcCurrentSource { Id = "IAC1", Position = new Point(280, 140), Amplitude = 2.5, Phase = -45, Rotation = 90 },
             new GroundElement { Id = "GND1", Position = new Point(40, 240), Rotation = 90 },
             new TestProbe { Id = "VP1", Position = new Point(120, 240), Type = ProbeType.Voltage, TargetElementId = "R1", Rotation = 90 },
+            new Diode(DiodeModel.Ge) { Id = "D1", Position = new Point(200, 240), Rotation = 180 },
         };
 
         string payload = CircuitClipboard.Copy(elements, Array.Empty<Wire>());
@@ -254,6 +255,11 @@ public class CircuitClipboardTests
         Assert.Equal(ProbeType.Voltage, vp.Type);
         Assert.Equal("R2", vp.TargetElementId);
         Assert.Equal(90, vp.Rotation);
+
+        var d = pasted.Elements.OfType<Diode>().Single();
+        Assert.Equal("D2", d.Id);
+        Assert.Equal(DiodeModel.Ge, d.Model);
+        Assert.Equal(180, d.Rotation);
     }
 
     [Fact]

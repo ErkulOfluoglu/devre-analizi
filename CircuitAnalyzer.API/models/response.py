@@ -704,6 +704,21 @@ class WattmeterReading(BaseModel):
     p: float = Field(..., description="Okunan aktif güç (W)")
 
 
+class DiodeResult(BaseModel):
+    """
+    Diyotun çözümdeki durumu (Faz 4a, DC). Akım anottan katoda doğru pozitiftir.
+    İletimde (ON) diyot yerine V_T değerinde kaynak, yalıtımda (OFF) açık devre konur.
+    """
+    id: str = Field(..., description="Diyot kimliği (ör: D1)")
+    model: Literal["IDEAL", "SI", "GE"] = Field(..., description="Diyot modeli")
+    v_t: float = Field(..., description="Eşik gerilimi V_T (V): ideal 0, Si 0,7, Ge 0,3")
+    state: Literal["ON", "OFF"] = Field(..., description="ON: iletimde, OFF: yalıtımda")
+    v_ak: Optional[float] = Field(
+        default=None,
+        description="Anot–katot gerilimi V_AK = V_A − V_K (V); bir ucu boşta kalan düğümdeyse null")
+    i: float = Field(..., description="Diyot akımı I_AK (A), anot → katot; yalıtımda 0")
+
+
 class AnalysisResults(BaseModel):
     """Tüm analiz sonuçlarını birleştiren konteyner."""
     node_voltages: Dict[str, NodeVoltage] = Field(
@@ -759,6 +774,9 @@ class AnalysisResults(BaseModel):
     wattmeters: SkipJsonSchema[List[WattmeterReading]] = Field(
         default_factory=list, exclude=True,
         description="İç kullanım: wattmetre okumaları; API yanıtına AnalysisResponse.wattmeters olarak taşınır")
+    diodes: SkipJsonSchema[List[DiodeResult]] = Field(
+        default_factory=list, exclude=True,
+        description="İç kullanım: diyot durumları; API yanıtına AnalysisResponse.diodes olarak taşınır")
 
 
 # ═══════════════════════════════════════════════════════
@@ -823,6 +841,10 @@ class AnalysisResponse(BaseModel):
     wattmeters: SkipJsonSchema[List[WattmeterReading]] = Field(
         default_factory=list,
         description="Devredeki wattmetrelerin okumaları (yalnızca AC çözümde ve wattmetre varsa dolu)")
+    diodes: SkipJsonSchema[List[DiodeResult]] = Field(
+        default_factory=list,
+        description=("Diyotların durumu (iletimde/yalıtımda), V_AK ve akımı; yalnızca diyotlu devre "
+                     "çözüldüyse dolu, aksi hâlde boş liste"))
     warnings: List[str] = Field(
         default_factory=list,
         description=(

@@ -63,6 +63,7 @@ namespace CircuitAnalyzer.WPF.Services
             DcWheatstoneBridgeThevenin,
             DcMillmanThreeSources,
             DcLadderSourceTransform,
+            DcSeriesParallelDiodes,
         };
 
         // ═══════════════════════════════════════════════════════
@@ -366,5 +367,35 @@ namespace CircuitAnalyzer.WPF.Services
             new Resistor { Value = 4000 }, "R2",
             new Resistor { Value = 2000 }, "R3",
             new Resistor { Value = 4000 }, "R4");
+
+        /// <summary>
+        /// Seri ve paralel diyotlar: V1 = 12 V → D3 (Si, 0,7 V) → [D2 (Ge, 0,3 V) ∥ ters yönlü D1 (Si)] → R1 = 3 kΩ → GND.
+        /// D3 ve D2 iletimde, D1 yalıtımda; V_O = 12 − 0,7 − 0,3 = 11 V.
+        /// </summary>
+        public static ExampleCircuit DcSeriesParallelDiodes()
+        {
+            var c = new ExampleCircuit
+            {
+                Name = "Diyot: Seri ve Paralel Diyotlar",
+                Description = "Si diyot 0,7 V, Ge diyot 0,3 V düşürür; ters yönlü diyot yalıtımdadır. V_O = 11 V.",
+                SuggestedAnalysisType = AnalysisTypes.Nodal,
+            };
+
+            var v1 = c.Add(new VoltageSource { Value = 12 }, "V1", 100, 200, 90);
+            var d3 = c.Add(new Diode(DiodeModel.Si), "D3", 200, 120);
+            var d2 = c.Add(new Diode(DiodeModel.Ge), "D2", 340, 80);
+            var d1 = c.Add(new Diode(DiodeModel.Si), "D1", 340, 180, 180);
+            var r1 = c.Add(new Resistor { Value = 3000 }, "R1", 460, 200, 90);
+            var gnd = c.Add(new GroundElement(), "GND1", 300, 300);
+
+            c.Connect(d3.Pins[0], v1.Pins[0]);
+            c.Connect(d2.Pins[0], d3.Pins[1]);
+            c.Connect(d1.Pins[1], d3.Pins[1]);
+            c.Connect(d2.Pins[1], r1.Pins[0]);
+            c.Connect(d1.Pins[0], r1.Pins[0]);
+            c.Connect(v1.Pins[1], gnd.Pins[0]);
+            c.Connect(r1.Pins[1], gnd.Pins[0]);
+            return c;
+        }
     }
 }

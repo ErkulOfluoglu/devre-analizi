@@ -19,3 +19,4 @@ TestResults/
 
 # graphify bilgi grafiği çıktıları (yerel analiz, GitHub'a gitmez)
 graphify-out/
+.idea/

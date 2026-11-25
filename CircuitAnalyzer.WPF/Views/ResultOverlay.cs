@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using CircuitAnalyzer.WPF.Models;
 using CircuitAnalyzer.WPF.Services;
@@ -236,6 +237,29 @@ namespace CircuitAnalyzer.WPF.Views
                     {
                         AddLabel(BelowOrRight(wm), $"P = {EngFormat.Format(wmRes.P, "W")}", "Brush.Overlay.Current", bold: true);
                     }
+                    continue;
+                }
+
+                if (element is Diode diode)
+                {
+                    // Akım ve durum tek satırda: iki satır alt alta konunca diyotun kendi adını
+                    // ("D2") ve paralel koldaki diyotun model yazısını ("Si") örtüyordu.
+                    string? currentText = null;
+                    if (results.ElementCurrents.TryGetValue(diode.Id, out var diodeCurrent) && diodeCurrent != null)
+                    {
+                        var (value, direction) = CurrentDisplay.Format(diode.Id, diodeCurrent);
+                        currentText = $"{value} ({direction})";
+                    }
+
+                    var diodeRes = response.DiodeResults?.FirstOrDefault(d => string.Equals(d.Id, diode.Id, StringComparison.OrdinalIgnoreCase));
+                    string? stateText = diodeRes?.State?.Trim().ToUpperInvariant() switch
+                    {
+                        "ON" => "iletimde",
+                        "OFF" => "yalıtımda",
+                        _ => null
+                    };
+                    if (currentText != null || stateText != null)
+                        AddDiodeLabel(DiodeLabelAnchor(diode), currentText, stateText);
                     continue;
                 }
 
@@ -478,6 +502,54 @@ namespace CircuitAnalyzer.WPF.Views
                 Place(badge, new Point(pinPosition.X + 4, pinPosition.Y - 20));
                 _badges.Add((badge, pinPosition));
             }
+        }
+
+        /// <summary>
+        /// Yatay diyotta gövdenin hemen altı ve üstü diyotun kendi yazılarına ayrılmıştır
+        /// (ad ve Si/Ge; 180° döndürülünce yer değiştirirler). Etiket bu yazıların altından başlar.
+        /// </summary>
+        internal static Point DiodeLabelAnchor(Diode diode)
+        {
+            bool vertical = Math.Abs(diode.Rotation % 180 - 90) < 1;
+            if (vertical)
+                return BelowOrRight(diode);
+            double cy = diode.Position.Y + diode.VisualHeight / 2;
+            return new Point(diode.Position.X, cy + Diode.TextZoneBelow);
+        }
+
+        /// <summary>"3,667 mA (2→3) · iletimde": akım akım renginde, durum kendi renginde ve kalın.</summary>
+        private void AddDiodeLabel(Point position, string? currentText, string? stateText)
+        {
+            var label = new Border
+            {
+                CornerRadius = new CornerRadius(999),
+                Padding = new Thickness(6, 2, 6, 2),
+            };
+            label.SetResourceReference(Border.BackgroundProperty, "Brush.Overlay.BadgeBg");
+
+            var tb = new TextBlock { FontSize = 12, FontWeight = FontWeights.SemiBold };
+            tb.SetResourceReference(TextBlock.FontFamilyProperty, "Font.UI");
+            if (currentText != null)
+            {
+                var run = new Run(currentText);
+                run.SetResourceReference(TextElement.ForegroundProperty, "Brush.Overlay.Current");
+                tb.Inlines.Add(run);
+            }
+            if (stateText != null)
+            {
+                if (currentText != null)
+                {
+                    var sep = new Run(" · ");
+                    sep.SetResourceReference(TextElement.ForegroundProperty, "Brush.Text.Secondary");
+                    tb.Inlines.Add(sep);
+                }
+                var state = new Run(stateText) { FontWeight = FontWeights.Bold };
+                state.SetResourceReference(TextElement.ForegroundProperty,
+                    stateText == "iletimde" ? "Brush.Success" : "Brush.Text.Secondary");
+                tb.Inlines.Add(state);
+            }
+            label.Child = tb;
+            Place(label, position);
         }
 
         private void AddLabel(Point position, string text, string foregroundToken, bool bold)
