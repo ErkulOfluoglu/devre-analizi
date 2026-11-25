@@ -26,4 +26,7 @@ lcapy==1.26
 sympy==1.14.0
 
 # ── Sayısal Hesaplama ──
-numpy==2.2.6
+# Kurulum paketi Python 3.14 ile hazırlanır; numpy 2.2.x'in 3.14 sürümü yok,
+# 2.3.5 en küçük uyumlu adım. Eski 3.10 ortamı bozulmasın diye orada 2.2.6 kalır.
+numpy==2.3.5; python_version >= "3.11"
+numpy==2.2.6; python_version < "3.11"

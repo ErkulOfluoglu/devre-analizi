@@ -25,8 +25,12 @@ EXCLUDES = [
     'notebook', 'nbformat', 'PyQt5', 'PyQt6', 'PySide2', 'PySide6',
     'wordcloud', 'zmq', 'lxml', 'jinja2', 'markupsafe', 'pygments', 'rich',
     'markdown_it', 'mdurl', 'psutil', 'pyparsing', 'pkg_resources',
-    'setuptools', 'tomli', 'charset_normalizer', 'pyreadline3',
+    'setuptools', 'charset_normalizer', 'pyreadline3',
+    'py',  # pytest'in py.py uyumluluk dosyası; çözücü kullanmıyor
 ]
+# 'tomli' bilerek listede yok: Python 3.14 + PyInstaller 6.22'de setuptools
+# kancası tomli'yi takma adla eşlemeye çalışıyor; dışlanmışsa paketleme
+# "already imported as ExcludedModule('tomli')" hatasıyla duruyor.
 
 a = Analysis(
     [os.path.join(API_DIR, 'run_server.py')],

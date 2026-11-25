@@ -261,8 +261,8 @@ namespace CircuitAnalyzer.WPF.Views
             if (_data?.Curve == null || _crosshair == null || _data.Curve.F == null || _data.Curve.Y == null || _data.Curve.F.Count == 0)
                 return;
 
-            var pos = e.GetPosition(PlotResonance);
-            var pixel = new ScottPlot.Pixel(pos.X, pos.Y);
+            // Ekran ölçeği (%125/%150) hesaba katılır; bkz. PlotMouse.
+            var pixel = PlotMouse.ToPlotPixel(PlotResonance, e);
             var coords = PlotResonance.Plot.GetCoordinates(pixel);
 
             double fScaled = coords.X;

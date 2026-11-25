@@ -55,6 +55,15 @@ https://github.com/user-attachments/assets/6a0aa370-13cc-41c2-84c5-b9b9a4e97656
 | **Transformatör** | İdeal trafo ve kuplajlı bobinler: yansıyan empedans, sekonder değerleri, güç | [Wiki](../../wiki/Transformatör) |
 | **Üç faz** | Yıldız/üçgen, dengeli/dengesiz yük, nötr akımı, P, Q, S, Aron ve kompanzasyon | [Wiki](../../wiki/Üç-Faz) |
 
+**Elektronik 1 (yarıiletkenler):**
+
+| Konu | Ne bulursunuz? |
+|---|---|
+| **Diyotlu DC devreler** | İdeal, Si (0,7 V) ve Ge (0,3 V) diyot; her diyotun iletimde mi yalıtımda mı olduğu gerekçesiyle, elektriksel eşdeğer devre ve çıkış gerilimi |
+| **Zener diyot** | Üç durum (iletim, yalıtım, kırılma), regülatör devresi, I_ZM aşım uyarısı |
+| **Zener aralığı** | Regülasyonun sürdüğü yük direnci ya da giriş gerilimi aralığı, grafikle; ters soru: verilen aralık için R_Y ya da V_İ |
+| **Dalga şekli** | Doğrultucu, kırpıcı ve kenetleyici devrelerde sinüs, kare ve üçgen giriş için bir periyotluk giriş/çıkış grafiği, iletim aralıkları, ortalama (DC) değer |
+
 DC ve AC (fazör) devrelerin hepsinde çalışır; AC değerleri [etkin ya da tepe](../../wiki/Etkin-ve-Tepe-Değer) olarak girip gösterebilirsiniz. Köprü gibi seri/paralele indirgenemeyen devrelerde **Δ–Y (üçgen–yıldız) dönüşümü** kendiliğinden devreye girer.
 
 ## Öne çıkanlar
@@ -87,7 +96,7 @@ DC ve AC (fazör) devrelerin hepsinde çalışır; AC değerleri [etkin ya da te
 
 > **"Windows kişisel bilgisayarınızı korudu" uyarısı çıkarsa:** Program ücretsiz olduğu için pahalı bir dijital imza sertifikasıyla imzalanmamıştır; Windows bu yüzden uyarır. **Ek bilgi → Yine de çalıştır**'a basabilirsiniz. Her sürümün notlarında dosyanın SHA-256 doğrulama kodu da yazar.
 
-**Sistem gereksinimleri:** Windows 10 veya 11 (64 bit), yaklaşık 270 MB boş disk alanı (indirme yaklaşık 75 MB). İnternet gerekmez.
+**Sistem gereksinimleri:** Windows 10 veya 11 (64 bit), yaklaşık 290 MB boş disk alanı (indirme yaklaşık 80 MB). İnternet gerekmez.
 
 ## Hızlı başlangıç
 
@@ -142,7 +151,7 @@ Program iki parçadan oluşur:
 
 Arayüz, çözücüyü arka planda kendisi başlatır (geliştirme sırasında `python -m uvicorn main:app`, kurulu sürümde `backend\CircuitAnalyzerAPI.exe`).
 
-**Kaynaktan çalıştırma:** .NET 10 SDK ve Python 3.10+ gerekir.
+**Kaynaktan çalıştırma:** .NET 10 SDK ve Python gerekir (3.14 önerilir, en az 3.10).
 
 ```bash
 pip install -r CircuitAnalyzer.API/requirements-dev.txt

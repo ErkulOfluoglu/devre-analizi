@@ -346,8 +346,8 @@ namespace CircuitAnalyzer.WPF.Views
         {
             if (_data == null || q == null || crosshair == null) return;
 
-            var pos = e.GetPosition(wpfPlot);
-            var pixel = new ScottPlot.Pixel(pos.X, pos.Y);
+            // Ekran ölçeği (%125/%150) hesaba katılır; bkz. PlotMouse.
+            var pixel = PlotMouse.ToPlotPixel(wpfPlot, e);
             var coords = wpfPlot.Plot.GetCoordinates(pixel);
 
             double tScaled = coords.X;
