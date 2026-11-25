@@ -93,6 +93,7 @@ namespace CircuitAnalyzer.WPF
             var state = _placement;
             _placement = null;
             CircuitCanvas.Children.Remove(state.Preview);
+            ClearDropConnectPreviews();
             CircuitCanvas.Cursor = Cursors.Arrow;
 
             if (announce)
@@ -112,11 +113,15 @@ namespace CircuitAnalyzer.WPF
             var state = _placement;
             _placement = null;
             CircuitCanvas.Children.Remove(state.Preview);
+            ClearDropConnectPreviews();
             CircuitCanvas.Cursor = Cursors.Arrow;
 
             state.Element.Position = PlacementPositionFor(state.Element, canvasPoint);
-            AddElementToCanvas(state.Element);
-            TxtStatus.Text = state.DoneStatus;
+            AddElementToCanvasCore(state.Element);
+            var dropResult = AutoConnectOnCanvas(new[] { state.Element });
+            SyncCountersFromIds();
+            OnCircuitChanged();
+            TxtStatus.Text = WireDropConnector.FormatStatusMessage(dropResult) ?? state.DoneStatus;
             return true;
         }
 
@@ -152,6 +157,7 @@ namespace CircuitAnalyzer.WPF
             _placement.Element.Position = position;
             Canvas.SetLeft(_placement.Preview, position.X);
             Canvas.SetTop(_placement.Preview, position.Y);
+            UpdateDropConnectPreviews(new[] { _placement.Element });
         }
 
         /// <summary>Elemanın merkezi verilen noktada olacak biçimde, ızgaraya oturmuş sol-üst konum.</summary>

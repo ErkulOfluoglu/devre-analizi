@@ -260,6 +260,7 @@ namespace CircuitAnalyzer.WPF
 
                 RefreshControlMarkers();
                 UpdateSelectionHighlight();
+                UpdateDropConnectPreviews(_dragInitialPositions.Keys);
                 return;
             }
 
@@ -323,20 +324,24 @@ namespace CircuitAnalyzer.WPF
                 _draggedVisual.ReleaseMouseCapture();
                 bool moved = _dragInitialPositions.Any(kv => kv.Key.Position != kv.Value);
                 var clickedElement = _draggedElement;
-                int movedCount = _dragInitialPositions.Count;
+                var movedElements = _dragInitialPositions.Keys.ToList();
+                int movedCount = movedElements.Count;
 
                 _isDragging = false;
                 _draggedVisual = null;
                 _draggedElement = null;
                 _dragInitialPositions.Clear();
                 _dragInitialWaypoints.Clear();
+                ClearDropConnectPreviews();
 
                 if (moved)
                 {
+                    var dropResult = AutoConnectOnCanvas(movedElements);
                     OnCircuitChanged();
-                    TxtStatus.Text = movedCount > 1
-                        ? $"{movedCount} eleman taşındı"
-                        : $"{clickedElement.Id} → Konum: ({clickedElement.Position.X:F0}, {clickedElement.Position.Y:F0})";
+                    TxtStatus.Text = WireDropConnector.FormatStatusMessage(dropResult)
+                        ?? (movedCount > 1
+                            ? $"{movedCount} eleman taşındı"
+                            : $"{clickedElement.Id} → Konum: ({clickedElement.Position.X:F0}, {clickedElement.Position.Y:F0})");
                 }
                 else
                 {

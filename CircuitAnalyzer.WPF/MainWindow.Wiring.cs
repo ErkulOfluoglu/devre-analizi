@@ -29,6 +29,7 @@ namespace CircuitAnalyzer.WPF
         private Polyline? _wirePreview = null;
         private Ellipse? _pinHighlight = null;
         private Ellipse? _junctionPreview = null;
+        private readonly List<Ellipse> _dropConnectPreviews = new();
         private readonly List<Point> _currentWaypoints = new();
         private readonly Stack<int> _waypointCommitCounts = new();
         private bool _liveLegVerticalFirst = false;
@@ -446,6 +447,97 @@ namespace CircuitAnalyzer.WPF
             CircuitCanvas.Children.Add(_junctionPreview);
         }
 
+        /// <summary>Sürükleme veya yerleştirme sırasında gösterilen bağlantı önizleme halkaları.</summary>
+        internal IReadOnlyList<Ellipse> DropConnectPreviews => _dropConnectPreviews;
+
+        /// <summary>
+        /// Sürüklenen / yerleştirilen elemanların serbest uçları bir tel veya başka bir uç üzerine
+        /// denk geldiğinde o noktalarda bağlantı önizleme halkası gösterir.
+        /// </summary>
+        private void UpdateDropConnectPreviews(IEnumerable<CircuitElement> candidateElements)
+        {
+            ClearDropConnectPreviews();
+            if (_isWireMode || _isPinWiring)
+                return;
+
+            var points = WireDropConnector.FindPreviewPoints(_elements, _wires, candidateElements, GetWireTolerance());
+            foreach (var pt in points)
+            {
+                var ring = new Ellipse
+                {
+                    Width = 10,
+                    Height = 10,
+                    Fill = Brushes.Transparent,
+                    StrokeThickness = 2,
+                    IsHitTestVisible = false
+                };
+                ring.SetResourceReference(Shape.StrokeProperty, "Brush.Accent");
+                Canvas.SetLeft(ring, pt.X - 5);
+                Canvas.SetTop(ring, pt.Y - 5);
+                Panel.SetZIndex(ring, 900);
+                CircuitCanvas.Children.Add(ring);
+                _dropConnectPreviews.Add(ring);
+            }
+        }
+
+        private void ClearDropConnectPreviews()
+        {
+            if (_dropConnectPreviews.Count == 0)
+                return;
+
+            foreach (var ring in _dropConnectPreviews)
+            {
+                CircuitCanvas.Children.Remove(ring);
+            }
+            _dropConnectPreviews.Clear();
+        }
+
+        /// <summary>
+        /// Bırakılan, taşınan, döndürülen veya yapıştırılan elemanların serbest uçlarını
+        /// üstüne düştükleri tellere / uçlara bağlar ve tuval görsellerini günceller.
+        /// OnCircuitChanged çağırmaz; çağıran işlem tek geri-al adımı üretmek için kendisi çağırır.
+        /// </summary>
+        private WireDropResult AutoConnectOnCanvas(IEnumerable<CircuitElement> movedElements)
+        {
+            if (_isWireMode || _isPinWiring)
+                return new WireDropResult();
+
+            var result = WireDropConnector.Connect(_elements, _wires, movedElements, GetWireTolerance());
+            if (!result.AnyConnected)
+                return result;
+
+            foreach (var junction in result.AddedJunctions)
+            {
+                AttachElementVisual(junction);
+            }
+
+            foreach (var oldWire in result.RemovedWires)
+            {
+                if (oldWire.Visual != null)
+                {
+                    CircuitCanvas.Children.Remove(oldWire.Visual);
+                }
+                if (ReferenceEquals(_hoveredWire, oldWire))
+                {
+                    _hoveredWire = null;
+                }
+                if (_selection.IsSelected(oldWire))
+                {
+                    _selection.Toggle(oldWire);
+                }
+            }
+
+            foreach (var newWire in result.AddedWires)
+            {
+                CircuitCanvas.Children.Add(newWire.CreateOrUpdateVisual());
+            }
+
+            RefreshJunctionWireCounts();
+            SyncCountersFromIds();
+            UpdateSelectionHighlight();
+            return result;
+        }
+
         private PendingWireSplit SplitWireOnCanvasCore(Wire hitWire, Point snappedPoint)
         {
             _junctionCounter++;
@@ -672,6 +764,7 @@ namespace CircuitAnalyzer.WPF
                 CircuitCanvas.Children.Remove(_junctionPreview);
                 _junctionPreview = null;
             }
+            ClearDropConnectPreviews();
         }
 
         private void UpdateConnectedWires(CircuitElement element)

@@ -336,6 +336,12 @@ namespace CircuitAnalyzer.WPF
         private UIElement AddElementToCanvasCore(CircuitElement element)
         {
             _elements.Add(element);
+            return AttachElementVisual(element);
+        }
+
+        /// <summary>Listeye zaten eklenmiş bir elemanın görselini ve olaylarını tuvale bağlar.</summary>
+        private UIElement AttachElementVisual(CircuitElement element)
+        {
             UIElement visual = element.CreateVisual();
             MakeBodyGrabbable(element, visual);
 
@@ -593,10 +599,12 @@ namespace CircuitAnalyzer.WPF
             ApplyRotationTransform(visual, element.Rotation);
 
             UpdateConnectedWires(element);
+            var dropResult = AutoConnectOnCanvas(new[] { element });
             UpdateSelectionHighlight();
             OnCircuitChanged();
 
-            TxtStatus.Text = $"{element.Id} → {element.Rotation}° döndürüldü";
+            TxtStatus.Text = WireDropConnector.FormatStatusMessage(dropResult)
+                ?? $"{element.Id} → {element.Rotation}° döndürüldü";
         }
 
         /// <summary>Seçili tüm elemanları kendi merkezleri etrafında 90° döndürür (tek geri-al adımı).</summary>
@@ -625,9 +633,11 @@ namespace CircuitAnalyzer.WPF
                 UpdateConnectedWires(element);
             }
 
+            var dropResult = AutoConnectOnCanvas(selected);
             UpdateSelectionHighlight();
             OnCircuitChanged();
-            TxtStatus.Text = $"{selected.Count} eleman 90° döndürüldü";
+            TxtStatus.Text = WireDropConnector.FormatStatusMessage(dropResult)
+                ?? $"{selected.Count} eleman 90° döndürüldü";
         }
 
         /// <summary>
