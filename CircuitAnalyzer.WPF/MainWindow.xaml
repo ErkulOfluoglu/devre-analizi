@@ -19,7 +19,7 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <!-- Sol şerit: 5 eleman kategorisi -->
+                <!-- Sol şerit: 6 eleman kategorisi -->
                 <ColumnDefinition Width="72"/>
                 <!-- Orta alan: devre çizim tuvali -->
                 <ColumnDefinition Width="*"/>
@@ -169,6 +169,17 @@
                     <StackPanel>
                         <controls:Icon Data="{DynamicResource Icon.Switch}" Width="22" Height="22" HorizontalAlignment="Center"/>
                         <TextBlock Text="Anahtar" Margin="0,4,0,0" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </ToggleButton>
+                <ToggleButton x:Name="RailSemiconductor"
+                              Style="{DynamicResource Toggle.Rail}"
+                              Tag="Yarıiletken"
+                              AutomationProperties.Name="Yarıiletken"
+                              Checked="RailButton_Checked"
+                              Unchecked="RailButton_Unchecked">
+                    <StackPanel>
+                        <controls:Icon Data="{DynamicResource Icon.Diode}" Width="22" Height="22" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Yarıiletken" Margin="0,4,0,0" HorizontalAlignment="Center"/>
                     </StackPanel>
                 </ToggleButton>
                 <ToggleButton x:Name="RailMeasure"
@@ -452,6 +463,26 @@
                                 <StackPanel Orientation="Horizontal">
                                     <controls:Icon Data="{DynamicResource Icon.SpdtSwitch}" Width="20" Height="20" Margin="0,0,12,0"/>
                                     <TextBlock Text="İki konumlu anahtar" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel x:Name="DrawerSemiconductor" Visibility="Collapsed">
+                            <Button x:Name="BtnAddDiode"
+                                    Style="{DynamicResource Button.Nav}"
+                                    ToolTip="Diyot (İdeal, Si 0,7 V veya Ge 0,3 V). Devrede D1, D2… diye adlandırılır."
+                                    Click="BtnAddDiode_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <controls:Icon Data="{DynamicResource Icon.Diode}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                    <TextBlock Text="Diyot" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="BtnAddZener"
+                                    Style="{DynamicResource Button.Nav}"
+                                    ToolTip="Zener diyot (varsayılan V_Z = 5,1 V). Devrede D1, D2… diye adlandırılır."
+                                    Click="BtnAddZener_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <controls:Icon Data="{DynamicResource Icon.Zener}" Width="20" Height="20" Margin="0,0,12,0"/>
+                                    <TextBlock Text="Zener" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
                         </StackPanel>

@@ -1299,6 +1299,50 @@ public partial class AnalysisPanel : UserControl
         return string.IsNullOrWhiteSpace(label) || label == "GND" ? $"V{key}" : $"V{key} · {label}";
     }
 
+    internal static string FormatDiodeModel(string? model) => (model ?? "").Trim().ToUpperInvariant() switch
+    {
+        "SI" => "Si",
+        "GE" => "Ge",
+        "IDEAL" => "İdeal",
+        "ZENER" => "Zener",
+        var m when !string.IsNullOrEmpty(m) => model!.Trim(),
+        _ => "Si",
+    };
+
+    internal static string FormatDiodeState(string? state) => (state ?? "").Trim().ToUpperInvariant() switch
+    {
+        "ON" => "iletimde",
+        "ZENER" => "ters iletimde (V_Z)",
+        "OFF" => "yalıtımda",
+        _ => state?.Trim() ?? "",
+    };
+
+    internal static string FormatDiodeLine(DiodeResultDto diode)
+    {
+        bool isZener = string.Equals(diode.Model?.Trim(), "ZENER", StringComparison.OrdinalIgnoreCase);
+        string model = isZener && diode.Vz.HasValue
+            ? $"Zener, V_Z = {FormatDiodeVoltage(diode.Vz.Value)}"
+            : FormatDiodeModel(diode.Model);
+        string state = FormatDiodeState(diode.State);
+        string vAk = FormatDiodeVoltage(diode.VAk);
+        string current = EngFormat.Format(diode.I, "A");
+        string currentSymbol = isZener ? "I_Z" : "I";
+        return $"{diode.Id} ({model}): {state} · V_AK = {vAk} · {currentSymbol} = {current}";
+    }
+
+    /// <summary>
+    /// Diyot gerilimi kitaptaki gibi volt olarak: 0,7 V (700 mV değil), 4,3 V, −8 V.
+    /// 1 mV altı ve 1000 V üstü değerler olağan önekli biçimde kalır.
+    /// </summary>
+    internal static string FormatDiodeVoltage(double v)
+    {
+        double a = Math.Abs(v);
+        if (a < 1e-3 || a >= 1000 || double.IsNaN(v))
+            return EngFormat.Format(v, "V");
+        string s = a.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture).Replace('.', ',');
+        return (v < 0 ? "−" : "") + s + " V";
+    }
+
     /// <summary>
     /// Üç faz sonuçları, anlatımdaki adlarla (V_RN, V_RS, I_R, I_N, V_N′N, I_RS) bölüm bölüm.
     /// Değerler kutupsal (büyüklük∠açı), önekli birimle.
@@ -1380,6 +1424,29 @@ public partial class AnalysisPanel : UserControl
             panel.Children.Add(CreateTwoColumnGrid(wattmeters
                 .Select(w => CreateValueTile(w.Id, EngFormat.Format(w.P, "W")))
                 .ToList<UIElement>()));
+        }
+
+        if (response.DiodeResults is { Count: > 0 } diodes)
+        {
+            AddSectionHeader(panel, "Diyotlar");
+            var diodeList = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
+            foreach (var d in diodes)
+            {
+                var rowCard = new Border { Margin = new Thickness(0, 0, 0, 6) };
+                rowCard.SetResourceReference(StyleProperty, "Card.Inset");
+
+                var tb = new TextBlock
+                {
+                    Text = FormatDiodeLine(d),
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 13.5
+                };
+                tb.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+                SubscriptText.Apply(tb);
+                rowCard.Child = tb;
+                diodeList.Children.Add(rowCard);
+            }
+            panel.Children.Add(diodeList);
         }
 
         // 4. Eleman Akımları

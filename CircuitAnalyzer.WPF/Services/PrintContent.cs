@@ -108,6 +108,26 @@ namespace CircuitAnalyzer.WPF.Services
                 .ToList();
         }
 
+        /// <summary>Diyot sonuçları tablosu: ekrandaki ad, model, durum, V_AK ve akımla.</summary>
+        public static List<(string Name, string State, string VAk, string Current)> DiodeRows(IReadOnlyList<DiodeResultDto>? diodes)
+        {
+            if (diodes == null)
+                return new();
+            return diodes
+                .Select(d =>
+                {
+                    string modelText = AnalysisPanel.FormatDiodeModel(d.Model);
+                    if (string.Equals(d.Model?.Trim(), "ZENER", StringComparison.OrdinalIgnoreCase) && d.Vz.HasValue)
+                        modelText = $"{modelText} {AnalysisPanel.FormatDiodeVoltage(d.Vz.Value)}";
+                    return (
+                        $"{d.Id} ({modelText})",
+                        AnalysisPanel.FormatDiodeState(d.State),
+                        AnalysisPanel.FormatDiodeVoltage(d.VAk),
+                        UnicodeMinus(EngFormat.Format(d.I, "A")));
+                })
+                .ToList();
+        }
+
         /// <summary>Ölçüm probları tablosu: ekrandaki sırayla, önekli birimle.</summary>
         public static List<(string Name, string Value)> ProbeRows(IReadOnlyList<ProbeResultDto>? probes)
         {

@@ -384,6 +384,7 @@ namespace CircuitAnalyzer.WPF.Services
             ThreePhaseSource => "U",
             ThreePhaseLoad => "Y",
             Wattmeter => "W",
+            Diode => "D",
             TestProbe { Type: ProbeType.Current } => "IP",
             TestProbe => "VP",
             JunctionElement => "J",

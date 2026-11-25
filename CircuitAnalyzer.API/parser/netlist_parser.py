@@ -90,6 +90,11 @@ class ElementType(str, Enum):
     THREE_PHASE_SOURCE = "U3"
     THREE_PHASE_LOAD = "Y3"
     WATTMETER = "W"
+    # Diyot (Faz 4a — yalnızca DC). node_positive = anot, node_negative = katot.
+    #   D1 <anot> <katot> IDEAL|SI|GE      → params: model ("IDEAL"|"SI"|"GE"), v_t (eşik gerilimi, V)
+    # Doğrusal değildir: çözücü (solver.diode) her diyotun iletim/yalıtım durumunu bulur ve
+    # devreyi eşdeğeriyle (iletimde V_T kaynağı, yalıtımda açık devre) çözer.
+    DIODE = "D"
 
 
 # ── Kaynak grupları (tüm modüller buradan kullanır) ──
@@ -113,6 +118,10 @@ DEPENDENT_SOURCES = (
 DEPENDENT_VOLTAGE_OUTPUT = (ElementType.VCVS, ElementType.CCVS)
 DEPENDENT_CURRENT_OUTPUT = (ElementType.VCCS, ElementType.CCCS)
 DEPENDENT_CURRENT_CONTROLLED = (ElementType.CCVS, ElementType.CCCS)
+# Yarıiletken elemanlar (Faz 4a: diyot; zener ve BJT sonra). Doğrusal değildirler.
+DIODE_TYPES = (ElementType.DIODE,)
+# Diyot modelleri ve kitaptaki eşik gerilimleri V_T (Selek, Elektronik-1: Si 0,7 V, Ge 0,3 V)
+DIODE_MODELS = {"IDEAL": 0.0, "SI": 0.7, "GE": 0.3}
 
 # Bağımlı kaynakların Türkçe adı ve kontrol cümlesi (anlatım / asistan için)
 DEPENDENT_NAMES = {
@@ -180,6 +189,9 @@ class ParsedCircuit:
     node_positions: Dict[str, Tuple[float, float]] = field(default_factory=dict)
     # AC büyüklüklerin gösterim tabanı: "PEAK" (tepe) veya "RMS" (etkin)
     value_basis: str = "PEAK"
+    # Diyotlu devrenin EŞDEĞER devresinde: diyot durumlarının raporu (solver.diode.DiodeReport).
+    # Anlatım bunu okur (yalıtımdaki diyotlar eşdeğer devrede yoktur); sıradan devrede None.
+    diode_report: Optional[object] = None
 
 
 # ═══════════════════════════════════════════════════════
@@ -317,6 +329,13 @@ _PATTERNS = {
     # S1 c a b SPDT   (c = ortak uç, a = konum 1, b = konum 2)
     "switch_spdt": re.compile(
         r"^(S\w*)\s+(\w+)\s+(\w+)\s+(\w+)\s+SPDT\s*$", re.IGNORECASE
+    ),
+
+    # ── Diyot (Faz 4a / 4b) ──
+    # D1 <anot> <katot> IDEAL|SI|GE
+    # D1 <anot> <katot> ZENER VZ=<değer> [IZM=<değer>]
+    "diode": re.compile(
+        r"^(D\w*)\s+(\w+)\s+(\w+)\s+(\w+)(?:\s+(.*))?$", re.IGNORECASE
     ),
 
     # ── Transformatör ──
@@ -617,6 +636,10 @@ def _parse_element_line(
     if line[0].upper() == "S":
         return _parse_switch(line, line_num, circuit)
 
+    # ── Diyot: D1 1 2 SI ──
+    if line[0].upper() == "D":
+        return _parse_diode(line, line_num, circuit)
+
     # ── Transformatör: T1 1 0 2 0 IDEAL 0.5  /  T1 1 0 2 0 COUPLED 0.1 0.1 0.5 ──
     if line[0].upper() == "T":
         return _parse_transformer(line, line_num, circuit)
@@ -692,6 +715,112 @@ def _parse_switch(
         )
     _reject(circuit, f"Satır {line_num}: Anahtar satırı anlaşılamadı → '{line}'. {expected}")
     return None
+
+
+def _parse_diode(
+    line: str, line_num: int, circuit: ParsedCircuit
+) -> Optional[ParsedElement]:
+    """
+    Diyot ve zener diyot satırını ayrıştırır (Faz 4a / 4b sözleşmesi).
+
+    D1 <anot> <katot> IDEAL|SI|GE   (büyük/küçük harf fark etmez)
+        → node_positive = anot, node_negative = katot, value = V_T,
+          params: model ("IDEAL" | "SI" | "GE"), v_t (0 / 0,7 / 0,3 V)
+    D1 <anot> <katot> ZENER VZ=<değer> [IZM=<değer>]
+        → node_positive = anot, node_negative = katot, value = V_Z,
+          params: model = "ZENER", v_t = 0.7, v_f = 0.7, v_z = V_Z, i_zm = I_ZM | None
+    Bilinmeyen model, eksik/geçersiz VZ veya IZM ve iki ucu aynı düğümde olan diyot reddedilir.
+    """
+    m = _PATTERNS["diode"].match(line)
+    if not m:
+        _reject(circuit,
+                f"Satır {line_num}: Diyot satırı anlaşılamadı → '{line}'. Beklenen biçim: "
+                "D1 <anot> <katot> IDEAL|SI|GE  ya da  D1 <anot> <katot> ZENER VZ=<değer> [IZM=<değer>].")
+        return None
+    did, anode, cathode, model = m.group(1), m.group(2), m.group(3), m.group(4).upper()
+    rest = (m.group(5) or "").strip()
+
+    if model == "ZENER":
+        if anode == cathode:
+            _reject(circuit,
+                    f"Satır {line_num}: {did} zener diyotunun anot ve katodu aynı düğüme (Düğüm {anode}) "
+                    "bağlı; böyle bir eleman devreyi değiştirmez. Uçlarını farklı düğümlere bağlayın.")
+            return None
+        if not rest:
+            _reject(circuit,
+                    f"Satır {line_num}: {did} zener diyotu için VZ (zener gerilimi) belirtilmeli. "
+                    "Beklenen biçim: D1 <anot> <katot> ZENER VZ=<değer> [IZM=<değer>] (örnek: VZ=20 IZM=30m).")
+            return None
+        kv: Dict[str, float] = {}
+        for tok in rest.split():
+            if "=" not in tok:
+                _reject(circuit,
+                        f"Satır {line_num}: {did} zener diyotunda '{tok}' parametresi anlaşılamadı; "
+                        "anahtar=değer biçiminde yazılmalı (örnek: VZ=20 IZM=30m).")
+                return None
+            k_raw, v_raw = tok.split("=", 1)
+            k = k_raw.upper()
+            if k not in ("VZ", "IZM"):
+                _reject(circuit,
+                        f"Satır {line_num}: {did} zener diyotunda '{k_raw}' parametresi tanınmadı; "
+                        "yalnızca VZ ve isteğe bağlı IZM kullanılabilir.")
+                return None
+            if k in kv:
+                _reject(circuit,
+                        f"Satır {line_num}: {did} zener diyotunda {k} parametresi birden fazla kez yazılmış.")
+                return None
+            try:
+                val = parse_spice_value(v_raw)
+            except ValueError:
+                val = float("nan")
+            if not math.isfinite(val) or val <= 0:
+                what = "VZ (zener gerilimi)" if k == "VZ" else "IZM (en büyük zener akımı)"
+                ex = "VZ=20" if k == "VZ" else "IZM=30m"
+                _reject(circuit,
+                        f"Satır {line_num}: {did} zener diyotunun {what} değeri pozitif bir sayı olmalı "
+                        f"(örnek: {ex}).")
+                return None
+            kv[k] = val
+        if "VZ" not in kv:
+            _reject(circuit,
+                    f"Satır {line_num}: {did} zener diyotu için VZ (zener gerilimi) zorunludur "
+                    "(örnek: D1 0 2 ZENER VZ=20 IZM=30m).")
+            return None
+        vz = kv["VZ"]
+        izm = kv.get("IZM")
+        return ParsedElement(
+            id=did, element_type=ElementType.DIODE,
+            node_positive=anode, node_negative=cathode, value=vz,
+            params={"model": "ZENER", "v_t": 0.7, "v_f": 0.7, "v_z": vz, "i_zm": izm},
+        )
+
+    if model not in DIODE_MODELS:
+        _reject(circuit,
+                f"Satır {line_num}: {did} diyotunun modeli '{m.group(4)}' tanınmadı. Model IDEAL "
+                "(ideal diyot, V_T = 0 V), SI (silisyum, V_T = 0,7 V), GE (germanyum, "
+                "V_T = 0,3 V) ya da ZENER (VZ=<değer> [IZM=<değer>]) olmalı.")
+        return None
+    if rest:
+        _reject(circuit,
+                f"Satır {line_num}: {did} ({model}) diyotu ek parametre almaz → '{line}'. "
+                "Beklenen biçim: D1 <anot> <katot> IDEAL|SI|GE.")
+        return None
+    if anode == cathode:
+        _reject(circuit,
+                f"Satır {line_num}: {did} diyotunun anot ve katodu aynı düğüme (Düğüm {anode}) "
+                "bağlı; böyle bir diyot devreyi değiştirmez. Uçlarını farklı düğümlere bağlayın.")
+        return None
+    v_t = DIODE_MODELS[model]
+    return ParsedElement(
+        id=did, element_type=ElementType.DIODE,
+        node_positive=anode, node_negative=cathode, value=v_t,
+        params={"model": model, "v_t": v_t},
+    )
+
+
+def has_diodes(circuit: ParsedCircuit) -> bool:
+    """Devrede en az bir diyot var mı?"""
+    return any(e.element_type in DIODE_TYPES for e in circuit.elements)
 
 
 def _parse_transformer(
@@ -972,6 +1101,10 @@ def _validate_dependents(circuit: ParsedCircuit) -> None:
             elif ctrl.element_type == ElementType.TRANSFORMER:
                 bad = (e, f"{e.id} bağımlı kaynağı bir transformatörü ({ctrl.id}) kontrol "
                           "edemez; kontrol elemanı olarak iki uçlu bir eleman seçin.")
+            elif ctrl.element_type in DIODE_TYPES:
+                bad = (e, f"{e.id} bağımlı kaynağının kontrol elemanı bir diyot ({ctrl.id}) "
+                          "olamaz: diyot doğrusal olmayan bir elemandır. Kontrol elemanı olarak "
+                          "bir direnç ya da kaynak seçin.")
             else:
                 e.params["control_id"] = ctrl.id    # büyük/küçük harfi eleman kimliğine uydur
             if bad:
@@ -1481,11 +1614,18 @@ def to_lcapy_netlist(circuit: ParsedCircuit, frequency: float = None) -> str:
             )
 
         elif elem.element_type == ElementType.DC_SOURCE:
-            # lcapy DC formatı: sadece değer (DC anahtar kelimesi yok)
+            # lcapy DC formatı: sadece değer (DC anahtar kelimesi yok).
+            # İletimdeki diyotun eşdeğer kaynağı (kimliği "D1"): lcapy eleman türünü adın ilk
+            # harfinden seçer (D = diyot), bu yüzden gizli V… adıyla yazılır (bkz. lcapy_name).
             lines.append(
-                f"{elem.id} {elem.node_positive} {elem.node_negative} "
+                f"{lcapy_name(elem)} {elem.node_positive} {elem.node_negative} "
                 f"{{{elem.value}}}"
             )
+
+        elif elem.element_type in DIODE_TYPES:
+            # Diyot doğrusal değildir; lcapy'ye gitmeden önce solver.diode eşdeğeriyle değiştirir.
+            # Buraya ancak /parse-only gibi çözümsüz yollardan gelir: satır yazılmaz.
+            continue
 
         elif elem.element_type == ElementType.AC_SOURCE_SINE:
             # lcapy AC formatı: ac {Magnitude * exp(j*phase_rad)}
@@ -1576,6 +1716,11 @@ def to_lcapy_netlist(circuit: ParsedCircuit, frequency: float = None) -> str:
         lines.append(f"{name} {node} 0")
 
     return "\n".join(lines)
+
+
+def lcapy_name(elem: ParsedElement) -> str:
+    """Elemanın lcapy netlistindeki adı: diyot eşdeğer kaynağında gizli V… adı, diğerlerinde kimliği."""
+    return elem.params.get("lcapy_name") or elem.id
 
 
 def lcapy_sense_map(circuit: ParsedCircuit) -> Dict[str, Tuple[str, str]]:

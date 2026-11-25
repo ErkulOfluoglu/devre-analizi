@@ -152,6 +152,7 @@ namespace CircuitAnalyzer.WPF.Models
             => element is not GroundElement and not TestProbe and not JunctionElement
                and not SwitchElement and not SpdtSwitch and not TransformerElement
                and not ThreePhaseSource and not ThreePhaseLoad and not Wattmeter
+               and not Diode
                && element.Pins.Count == 2;
 
         // ═══════════════════════════════════════════════════════

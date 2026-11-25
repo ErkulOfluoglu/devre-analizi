@@ -194,6 +194,7 @@ public class CircuitClipboardTests
             new AcCurrentSource { Id = "IAC1", Position = new Point(280, 140), Amplitude = 2.5, Phase = -45, Rotation = 90 },
             new GroundElement { Id = "GND1", Position = new Point(40, 240), Rotation = 90 },
             new TestProbe { Id = "VP1", Position = new Point(120, 240), Type = ProbeType.Voltage, TargetElementId = "R1", Rotation = 90 },
+            new Diode(DiodeModel.Ge) { Id = "D1", Position = new Point(200, 240), Rotation = 180 },
         };
 
         string payload = CircuitClipboard.Copy(elements, Array.Empty<Wire>());
@@ -254,6 +255,34 @@ public class CircuitClipboardTests
         Assert.Equal(ProbeType.Voltage, vp.Type);
         Assert.Equal("R2", vp.TargetElementId);
         Assert.Equal(90, vp.Rotation);
+
+        var d = pasted.Elements.OfType<Diode>().Single();
+        Assert.Equal("D2", d.Id);
+        Assert.Equal(DiodeModel.Ge, d.Model);
+        Assert.Equal(180, d.Rotation);
+    }
+
+    [Fact]
+    public void CopyPaste_ZenerDiode_PreservesVzAndIzm()
+    {
+        var zener = new Diode(DiodeModel.Zener)
+        {
+            Id = "D1",
+            ZenerVoltage = 6.8,
+            ZenerMaxCurrent = 0.05,
+            Position = new Point(100, 100),
+            Rotation = 270
+        };
+
+        string payload = CircuitClipboard.Copy(new CircuitElement[] { zener }, Array.Empty<Wire>());
+        var pasted = CircuitClipboard.Paste(payload, new[] { "D1" }, new Point(40, 20));
+
+        var copy = Assert.Single(pasted.Elements.OfType<Diode>());
+        Assert.Equal("D2", copy.Id);
+        Assert.Equal(DiodeModel.Zener, copy.Model);
+        Assert.Equal(6.8, copy.ZenerVoltage, 6);
+        Assert.Equal(0.05, copy.ZenerMaxCurrent!.Value, 6);
+        Assert.Equal(270, copy.Rotation);
     }
 
     [Fact]

@@ -252,6 +252,7 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("transformer")] public TransformerResultDto? Transformer { get; set; }
         [JsonPropertyName("three_phase")] public ThreePhaseResultDto? ThreePhase { get; set; }
         [JsonPropertyName("wattmeters")] public List<WattmeterResultDto>? Wattmeters { get; set; }
+        [JsonPropertyName("diodes")] public List<DiodeResultDto>? Diodes { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -646,6 +647,18 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("p")] public double P { get; set; }
     }
 
+    public sealed class DiodeResultDto
+    {
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("model")] public string Model { get; set; } = "SI";
+        [JsonPropertyName("v_t")] public double VT { get; set; }
+        [JsonPropertyName("vz")] public double? Vz { get; set; }
+        [JsonPropertyName("izm")] public double? Izm { get; set; }
+        [JsonPropertyName("state")] public string State { get; set; } = "";
+        [JsonPropertyName("v_ak")] public double VAk { get; set; }
+        [JsonPropertyName("i")] public double I { get; set; }
+    }
+
     public sealed class AnalysisResponseDto
     {
         /// <summary>"success" veya "warning".</summary>
@@ -663,10 +676,12 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("transformer")] public TransformerResultDto? Transformer { get; set; }
         [JsonPropertyName("three_phase")] public ThreePhaseResultDto? ThreePhase { get; set; }
         [JsonPropertyName("wattmeters")] public List<WattmeterResultDto>? Wattmeters { get; set; }
+        [JsonPropertyName("diodes")] public List<DiodeResultDto>? Diodes { get; set; }
 
         [JsonIgnore] public TransformerResultDto? TransformerResult => Transformer ?? Results?.Transformer;
         [JsonIgnore] public ThreePhaseResultDto? ThreePhaseResult => ThreePhase ?? Results?.ThreePhase;
         [JsonIgnore] public List<WattmeterResultDto>? WattmeterResults => Wattmeters ?? Results?.Wattmeters;
+        [JsonIgnore] public List<DiodeResultDto>? DiodeResults => Diodes ?? Results?.Diodes;
     }
 
     public sealed class HealthDto

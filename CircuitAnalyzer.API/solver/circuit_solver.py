@@ -42,7 +42,7 @@ from models.request import (
 )
 from parser.netlist_parser import (
     ParsedCircuit, ParsedElement, ParsedProbe,
-    ElementType, to_lcapy_netlist, lcapy_sense_map,
+    ElementType, to_lcapy_netlist, lcapy_sense_map, lcapy_name, has_diodes,
     ALL_SOURCES, CURRENT_SOURCES, DC_SOURCES, SINE_SOURCES, PHASOR_SOURCES,
     DEPENDENT_SOURCES, DEPENDENT_CURRENT_OUTPUT, VOLTAGE_SOURCES,
     SWITCH_NOTE, circuit_at_time, has_switches, apply_value_basis,
@@ -409,7 +409,8 @@ def lcapy_element_current(
     """
     if elem.element_type in DEPENDENT_CURRENT_OUTPUT:
         return _extract_numeric(cct[sense[elem.id][0]].I, is_dc, frequency)
-    i_val = _extract_numeric(cct[elem.id].I, is_dc, frequency)
+    # Diyot eşdeğer kaynağı lcapy'de gizli V… adıyla durur (bkz. netlist_parser.lcapy_name)
+    i_val = _extract_numeric(cct[lcapy_name(elem)].I, is_dc, frequency)
     if elem.element_type in CURRENT_SOURCES:
         i_val = -i_val
     return i_val
@@ -505,6 +506,12 @@ def solve_circuit(
     """
     if value_display is not None:
         parsed = apply_value_basis(parsed, value_display)
+    if has_diodes(parsed) and not parsed.errors:
+        # Diyot doğrusal değildir: durumları bulunur, devre eşdeğeriyle çözülür (solver.diode).
+        # Ham diyot asla _solve_core'a gitmez (lcapy netlistine yazılamaz).
+        from solver.diode import solve_with_diodes
+        return solve_with_diodes(parsed, mode, frequency, analysis_type, thevenin_terminals,
+                                 target_probes, warnings)
     if (has_three_phase(parsed) or has_wattmeters(parsed)) and not parsed.errors:
         return _solve_three_phase(parsed, mode, frequency, analysis_type, thevenin_terminals,
                                   target_probes, warnings, power_factor_target)
@@ -926,6 +933,11 @@ def _solve_core(
             model_note = (
                 "\nBağımlı kaynakların kontrol akımlarını ölçmek için çözücünün içinde 0 V'luk "
                 "yardımcı ölçüm kaynakları kullanıldı; bunlar sonuçlarda görünmez."
+            )
+        if any(e.params.get("diode_of") for e in parsed.elements):
+            model_note += (
+                "\nİletimdeki diyotlar çözücüde eşik gerilimi (V_T) değerinde bir gerilim kaynağıyla "
+                "modellendi; yalıtımdaki diyotlar açık devre olduğundan devreden çıkarıldı."
             )
         if trafo:
             model_note += (
@@ -2228,7 +2240,8 @@ def _compute_power(
         )
         p, q, s_mag = s.real, s.imag, abs(s)
 
-        is_source = elem.element_type in _SOURCE_TYPES
+        # İletimdeki diyotun eşdeğer kaynağı (V_T) güç VERMEZ, çeker: P = V_T·I (yük)
+        is_source = elem.element_type in _SOURCE_TYPES and not elem.params.get("diode_of")
         if is_source:
             supplied -= s
         else:
@@ -2416,7 +2429,7 @@ def _compute_superposition_power(
         )
         p, q, s_mag = s.real, s.imag, abs(s)
 
-        is_source = elem.element_type in _SOURCE_TYPES
+        is_source = elem.element_type in _SOURCE_TYPES and not elem.params.get("diode_of")
         if is_source:
             supplied -= s
         else:

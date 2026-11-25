@@ -19,6 +19,7 @@ namespace CircuitAnalyzer.WPF
             (RailSources, DrawerSources),
             (RailDependent, DrawerDependent),
             (RailSwitches, DrawerSwitches),
+            (RailSemiconductor, DrawerSemiconductor),
             (RailMeasure, DrawerMeasure),
         ];
 

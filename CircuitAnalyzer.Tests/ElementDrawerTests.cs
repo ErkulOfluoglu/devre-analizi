@@ -101,4 +101,35 @@ public class ElementDrawerTests
             Assert.True(win.HandleKeyDown(Key.Escape));
         });
     }
+
+    [Fact]
+    public void CheckingSemiconductorRail_OpensDrawerAndStartsDiodePlacement()
+    {
+        RunOnSta(() =>
+        {
+            var win = new MainWindow();
+            win.RailSemiconductor.IsChecked = true;
+
+            Assert.True(win.IsElementDrawerOpen);
+            Assert.Equal(Visibility.Visible, win.DrawerSemiconductor.Visibility);
+            Assert.Equal(Visibility.Collapsed, win.DrawerPassive.Visibility);
+            Assert.Equal("Yarıiletken", win.TxtDrawerTitle.Text);
+
+            win.BtnAddDiode.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+
+            Assert.False(win.IsElementDrawerOpen);
+            Assert.False(win.RailSemiconductor.IsChecked);
+            Assert.True(win.HandleKeyDown(Key.Escape));
+
+            // Zener düğmesi de aynı çekmeceden yerleştirmeyi başlatır
+            win.RailSemiconductor.IsChecked = true;
+            Assert.True(win.IsElementDrawerOpen);
+
+            win.BtnAddZener.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+
+            Assert.False(win.IsElementDrawerOpen);
+            Assert.False(win.RailSemiconductor.IsChecked);
+            Assert.True(win.HandleKeyDown(Key.Escape));
+        });
+    }
 }

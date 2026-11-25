@@ -30,6 +30,13 @@ def mesh_symbol(k: int) -> str:
     return f"I{sub(str(k))}"
 
 
+def _voltage_symbol(e) -> str:
+    """KVL denklemindeki gerilim sembolü: iletimdeki diyot eşdeğeri çıplak D1 değil V_D1 yazılır."""
+    if e.params and e.params.get("diode_of"):
+        return f"V_{e.id}"
+    return e.id
+
+
 def _combo(coeffs: Dict[int, int], paren_multi: bool = True) -> str:
     """{1: +1, 2: −1} → '(I₁ − I₂)'; tek terim '+1' → 'I₁'."""
     terms = []
@@ -341,6 +348,16 @@ def _element_currents_section(ctx: _Ctx, ma: MeshAnalysis, signs, elements) -> _
                     if eid in ma.dependents else "akım kaynağı — bilinen")
             s.math(f"I_{eid} = {ctx.val(ib, 'A')} ({kind}, {_flow_text(p, n)} kaynak içinden)")
             continue
+        if e.params.get("diode_of"):
+            if e.params.get("zener_state") == "ZENER":
+                # Ters iletimdeki zenerin eşdeğer kaynağı: + ucu katotta, akım katot → anot (I_Z) pozitif
+                s.math(f"I_{eid} (I_Z) = {_combo(sg_map, paren_multi=False)} = {ctx.val(ib, 'A')}  "
+                       f"(ters iletimde zener; katot → anot, {_flow_text(p, n)})")
+            else:
+                # İletimdeki diyotun eşdeğer kaynağı: + ucu anotta, akım anot → katot pozitif
+                s.math(f"I_{eid} = {_combo(sg_map, paren_multi=False)} = {ctx.val(ib, 'A')}  "
+                       f"(iletimdeki diyot; anot → katot, {_flow_text(p, n)})")
+            continue
         if e.element_type in vs_types:
             # Kaynağın VERDİĞİ akım: içinden − uçtan + uca (pasif kuralın tersi)
             delivered = {k: -sg for k, sg in sg_map.items()}
@@ -452,7 +469,8 @@ def _kvl_terms(ctx: _Ctx, ma: MeshAnalysis, signs, elements, mset, dep_numeric: 
             num_terms.append(f"{ctx.z_num(z)}·{_combo(coeffs)}")
         elif eid in ma.voltages and abs(ma.voltages[eid]) > 1e-15:
             vs = ma.voltages[eid]
-            rhs_sym.append(e.id if -sigma > 0 else f"{MINUS}{e.id}")
+            vsym = _voltage_symbol(e)
+            rhs_sym.append(vsym if -sigma > 0 else f"{MINUS}{vsym}")
             rhs_num.append(_cnum(-sigma * vs))
         elif eid in ma.dependents and not ma.dependents[eid].is_current_output:
             d = ma.dependents[eid]
@@ -774,7 +792,8 @@ def build_mesh_sections(ctx: _Ctx, ma: MeshAnalysis) -> List[_Section]:
                 num_terms.append(f"{ctx.z_num(z)}·{_combo(coeffs)}")
             elif eid in ma.voltages and abs(ma.voltages[eid]) > 1e-15:
                 vs = ma.voltages[eid]
-                rhs_sym.append(e.id if -sigma > 0 else f"{MINUS}{e.id}")
+                vsym = _voltage_symbol(e)
+                rhs_sym.append(vsym if -sigma > 0 else f"{MINUS}{vsym}")
                 rhs_num.append(_cnum(-sigma * vs))
         if len(members) == 1:
             title = f"Çevre {members[0]}"
@@ -807,9 +826,11 @@ def build_mesh_sections(ctx: _Ctx, ma: MeshAnalysis) -> List[_Section]:
         ztot = sum(ma.impedances[eid] for eid, _ in e_terms)
         vs_tot = sum(-sg_map[1] * ma.voltages[eid] for eid, sg_map in signs.items()
                      if eid in ma.voltages)
-        rhs_sym = [eid if -sg_map[1] > 0 else f"{MINUS}{eid}"
-                   for eid, sg_map in signs.items()
-                   if eid in ma.voltages and abs(ma.voltages[eid]) > 1e-15]
+        rhs_sym = [
+            _voltage_symbol(elements[eid]) if -sg_map[1] > 0 else f"{MINUS}{_voltage_symbol(elements[eid])}"
+            for eid, sg_map in signs.items()
+            if eid in ma.voltages and abs(ma.voltages[eid]) > 1e-15
+        ]
         lbls = " + ".join(ctx.label(elements[eid]) for eid, _ in e_terms)
         nums = " + ".join(ctx.z_num(ma.impedances[eid]) for eid, _ in e_terms)
         s.text("Tek çevre olduğu için çevre akımı, toplam kaynak geriliminin toplam "

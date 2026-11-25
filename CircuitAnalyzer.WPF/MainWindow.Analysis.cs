@@ -578,6 +578,7 @@ namespace CircuitAnalyzer.WPF
             _threePhaseSourceCounter = Max("U");
             _threePhaseLoadCounter = Max("Y");
             _wattmeterCounter = Max("W");
+            _diodeCounter = Max("D");
         }
 
         // ═══════════════════════════════════════════════════════

@@ -168,7 +168,7 @@ Akım ışığı teldeki gerçek akımı gösterir; süs değildir. İlk sürüm
 
 **Başlık çubuğu.** 48 px yüksek, zeminin üstünde. Solda program adı ve dosya adı (soluk), sağda Dosya, Örnekler, Yeni soru, ince bir ayraç, Yardım ve tema seçici. Tema seçici yazısızdır: üç simge yan yana (güneş: açık, ay: koyu, ekran: Windows'a uy); seçili olan dolgulu, her birinin ipucu ve erişilebilir adı vardır. Düğmeler kenarsızdır. Dosya menüsünde: Yeni, Aç…, Kaydet, Farklı kaydet…, Yazdır / PDF, Son açılanlar (yalnız daha önce dosya açıldıysa), Netlist oluştur, Temizle.
 
-**Sol şerit.** 5 kategori: Pasif, Kaynak, Bağımlı, Anahtar, Ölçüm. Her öğede 22 px simge ve altında 12 px ad. Seçili öğenin hafif bir dolgusu ve solunda 3×16 px mavi çizgisi vardır. Seçili kategoriye yeniden tıklamak listeyi kapatır.
+**Sol şerit.** 6 kategori: Pasif, Kaynak, Bağımlı, Anahtar, Yarıiletken, Ölçüm. Her öğede 22 px simge ve altında 12 px ad. Seçili öğenin hafif bir dolgusu ve solunda 3×16 px mavi çizgisi vardır. Seçili kategoriye yeniden tıklamak listeyi kapatır.
 
 **Açılan eleman listesi.** 220 px genişliğinde, tuvalin sol üstünde yüzer. Başında kategori adı (12 px, soluk), altında 40 px yüksekliğinde satırlar. Bir eleman seçilince liste kapanır ve eleman yerleştirilmeye başlar. Tuvale tıklamak, Esc ya da aynı kategoriye yeniden basmak da listeyi kapatır. Liste devrenin bir kısmını kısa süre örter; devre kaydırılmaz.
 
