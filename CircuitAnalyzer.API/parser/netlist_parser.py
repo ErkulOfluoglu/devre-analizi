@@ -49,6 +49,9 @@ class ElementType(str, Enum):
     DC_SOURCE = "V_DC"
     AC_SOURCE_SINE = "V_AC_SINE"
     AC_SOURCE_PHASOR = "V_AC_PHASOR"
+    # Kare ve üçgen dalga kaynakları (Faz 4c): yalnızca WAVEFORM (Dalga Şekli) yöntemiyle geçerlidir
+    AC_SOURCE_SQUARE = "V_AC_SQUARE"
+    AC_SOURCE_TRIANGLE = "V_AC_TRIANGLE"
     IMPEDANCE = "Z"
     # Akım kaynakları — SPICE kuralı: "I1 n+ n- değer" → akım kaynağın
     # İÇİNDEN n+'dan n-'ye akar, yani dış devreye n- ucundan çıkar.
@@ -98,8 +101,12 @@ class ElementType(str, Enum):
 
 
 # ── Kaynak grupları (tüm modüller buradan kullanır) ──
+WAVEFORM_ONLY_SOURCES = (
+    ElementType.AC_SOURCE_SQUARE, ElementType.AC_SOURCE_TRIANGLE,
+)
 VOLTAGE_SOURCES = (
     ElementType.DC_SOURCE, ElementType.AC_SOURCE_SINE, ElementType.AC_SOURCE_PHASOR,
+    ElementType.AC_SOURCE_SQUARE, ElementType.AC_SOURCE_TRIANGLE,
 )
 CURRENT_SOURCES = (
     ElementType.CURRENT_DC, ElementType.CURRENT_AC_SINE, ElementType.CURRENT_AC_PHASOR,
@@ -300,6 +307,14 @@ _PATTERNS = {
     # AC_PHASOR(Magnitude, Phase_degrees) [RMS]
     "ac_phasor": re.compile(
         r"^([VI]\w+)\s+(\w+)\s+(\w+)\s+AC_PHASOR\(([^)]*)\)(?:\s+(RMS))?\s*$", re.IGNORECASE
+    ),
+    # SQUARE(V1 V2 f) — ilk yarı periyot V1, ikinci yarı V2 (yalnızca WAVEFORM)
+    "ac_square": re.compile(
+        r"^(V\w+)\s+(\w+)\s+(\w+)\s+SQUARE\(([^)]*)\)\s*$", re.IGNORECASE
+    ),
+    # TRIANGLE(Vp f) — simetrik ±Vp, t=0'da 0'dan yükselerek başlar (yalnızca WAVEFORM)
+    "ac_triangle": re.compile(
+        r"^(V\w+)\s+(\w+)\s+(\w+)\s+TRIANGLE\(([^)]*)\)\s*$", re.IGNORECASE
     ),
 
     # ── Empedans (Özel uzantı) ──
@@ -599,6 +614,15 @@ def _parse_element_line(
     if m:
         return _parse_ac_phasor(m, line_num, circuit)
 
+    # ── Kare / Üçgen Dalga Kaynağı (Faz 4c): V1 1 0 SQUARE(10 -15 1k) / TRIANGLE(10 1k) ──
+    m = _PATTERNS["ac_square"].match(line)
+    if m:
+        return _parse_ac_square(m, line_num, circuit)
+
+    m = _PATTERNS["ac_triangle"].match(line)
+    if m:
+        return _parse_ac_triangle(m, line_num, circuit)
+
     # ── Üç faz: U1 … 3PH_SOURCE (RMS eki alabilir), Y1 … 3PH_LOAD, W1 … WATTMETER ──
     if line[0].upper() == "U":
         return _parse_three_phase_source(line, line_num, circuit)
@@ -821,6 +845,11 @@ def _parse_diode(
 def has_diodes(circuit: ParsedCircuit) -> bool:
     """Devrede en az bir diyot var mı?"""
     return any(e.element_type in DIODE_TYPES for e in circuit.elements)
+
+
+def has_waveform_sources(circuit: ParsedCircuit) -> bool:
+    """Devrede yalnızca WAVEFORM yöntemiyle çözülebilen kare/üçgen dalga kaynağı var mı?"""
+    return any(e.element_type in WAVEFORM_ONLY_SOURCES for e in circuit.elements)
 
 
 def _parse_transformer(
@@ -1203,6 +1232,60 @@ def _parse_ac_sine(m: re.Match, line_num: int, circuit: ParsedCircuit) -> Option
             "input_value": amplitude,
             "input_basis": input_basis,
         }
+    )
+
+
+def _parse_ac_square(m: re.Match, line_num: int, circuit: ParsedCircuit) -> Optional[ParsedElement]:
+    """
+    SQUARE(V1 V2 f) formatını ayrıştırır (Faz 4c).
+    İlk yarı periyot V1, ikinci yarı periyot V2; SI önekleri desteklenir.
+    """
+    eid = m.group(1)
+    fields = _read_fields(
+        m.group(4), line_num, circuit, eid, "kare dalga kaynağı (SQUARE)",
+        ["birinci yarı seviyesi (V1)", "ikinci yarı seviyesi (V2)", "frekans (f)"], 3)
+    if fields is None:
+        return None
+    v1, v2, freq = fields
+    if freq <= 0:
+        _reject(circuit, f"Satır {line_num}: {eid} kare dalga kaynağının frekansı sıfırdan büyük olmalıdır.")
+        return None
+    amp = max(abs(v1), abs(v2))
+    return ParsedElement(
+        id=eid,
+        element_type=ElementType.AC_SOURCE_SQUARE,
+        node_positive=m.group(2),
+        node_negative=m.group(3),
+        value=amp,
+        params={"v1": v1, "v2": v2, "frequency": freq, "amplitude": amp},
+    )
+
+
+def _parse_ac_triangle(m: re.Match, line_num: int, circuit: ParsedCircuit) -> Optional[ParsedElement]:
+    """
+    TRIANGLE(Vp f) formatını ayrıştırır (Faz 4c).
+    Simetrik ±Vp, t = 0'da 0'dan yükselerek başlar; SI önekleri desteklenir.
+    """
+    eid = m.group(1)
+    fields = _read_fields(
+        m.group(4), line_num, circuit, eid, "üçgen dalga kaynağı (TRIANGLE)",
+        ["tepe değeri (Vp)", "frekans (f)"], 2)
+    if fields is None:
+        return None
+    vp, freq = fields
+    if vp <= 0:
+        _reject(circuit, f"Satır {line_num}: {eid} üçgen dalga kaynağının tepe değeri (Vp) sıfırdan büyük olmalıdır.")
+        return None
+    if freq <= 0:
+        _reject(circuit, f"Satır {line_num}: {eid} üçgen dalga kaynağının frekansı sıfırdan büyük olmalıdır.")
+        return None
+    return ParsedElement(
+        id=eid,
+        element_type=ElementType.AC_SOURCE_TRIANGLE,
+        node_positive=m.group(2),
+        node_negative=m.group(3),
+        value=vp,
+        params={"amplitude": vp, "frequency": freq},
     )
 
 
@@ -1622,9 +1705,8 @@ def to_lcapy_netlist(circuit: ParsedCircuit, frequency: float = None) -> str:
                 f"{{{elem.value}}}"
             )
 
-        elif elem.element_type in DIODE_TYPES:
-            # Diyot doğrusal değildir; lcapy'ye gitmeden önce solver.diode eşdeğeriyle değiştirir.
-            # Buraya ancak /parse-only gibi çözümsüz yollardan gelir: satır yazılmaz.
+        elif elem.element_type in DIODE_TYPES or elem.element_type in WAVEFORM_ONLY_SOURCES:
+            # Diyot ve kare/üçgen kaynak lcapy netlistine doğrudan yazılamaz (/parse-only için atlanır).
             continue
 
         elif elem.element_type == ElementType.AC_SOURCE_SINE:

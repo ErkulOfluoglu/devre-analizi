@@ -294,6 +294,7 @@ def analyze_circuit(
             zener_range_target=request.zener_range_target,
             zener_range_given_min=request.zener_range_given_min,
             zener_range_given_max=request.zener_range_given_max,
+            waveform_output=request.waveform_output,
         )
 
     # Tekil devre: sonuç yok, tek Türkçe açıklamayla "Devre çözülemedi"
@@ -320,6 +321,7 @@ def analyze_circuit(
         wattmeters=results.wattmeters,
         diodes=results.diodes,
         zener_range=results.zener_range,
+        waveform=results.waveform,
     )
 
     # Güvenlik ağı: sonsuz/NaN sayı JSON'a çevrilemez ve 500 hatası verir;
@@ -669,6 +671,7 @@ def llm_ask(request: LlmAskRequest):
             zener_range_target=request.zener_range_target,
             zener_range_given_min=request.zener_range_given_min,
             zener_range_given_max=request.zener_range_given_max,
+            waveform_output=request.waveform_output,
         )
     # Çözülemeyen devre: model sonuçsuz kalır ve sayı uydurur; /analyze ile aynı açıklama
     unsolvable = next((m for m in solve_errors if m.startswith(UNSOLVABLE_PREFIX)), None)

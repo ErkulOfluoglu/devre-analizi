@@ -275,7 +275,7 @@ def test_zener_method_gate_and_ac_refused(client):
     r = client.post("/analyze", json={"netlist": reg_net("300") + GND, "mode": "AC_PHASOR",
                                       "frequency": 50, "analysis_type": "NODAL"})
     assert r.status_code == 422
-    assert "yalnızca DC kaynaklarla" in r.json()["detail"]
+    assert "Dalga Şekli" in r.json()["detail"]
 
 
 def test_assistant_describes_zener():

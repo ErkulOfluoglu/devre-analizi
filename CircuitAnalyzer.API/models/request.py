@@ -82,6 +82,9 @@ class AnalysisType(str, Enum):
     ZENER_RANGE: Zener Aralığı — temel zener regülatör devresinde (V_İ, R_X, Zener, R_Y) zenerin
               ters iletimde kalıp I_ZM'yi aşmayacağı yük direnci (R_Y) ya da giriş gerilimi (V_İ)
               aralığını bulur; hedef 'zener_range_target' ile seçilir (boşsa yük direnci R_Y)
+    WAVEFORM: Dalga Şekli — diyot/zener içeren devrede sinüs, kare veya üçgen gerilim kaynağı için
+              iki periyotluk V_O(t) dalga şeklini, iletim aralıklarını ve V_DC ortalamasını çıkarır;
+              çıkış elemanı 'waveform_output' ile seçilir (boşsa netlist'teki son direnç)
 
     Not: 'thevenin_terminals' alanı THEVENIN, NORTON ve SOURCE_TRANSFORM analizi için
     hedef port (terminal çifti) tanımlamasında ortak kullanılır.
@@ -100,6 +103,7 @@ class AnalysisType(str, Enum):
     TRANSFORMER = "TRANSFORMER"
     THREE_PHASE = "THREE_PHASE"
     ZENER_RANGE = "ZENER_RANGE"
+    WAVEFORM = "WAVEFORM"
 
     @classmethod
     def __get_pydantic_json_schema__(cls, core_schema, handler):
@@ -107,7 +111,8 @@ class AnalysisType(str, Enum):
         if "enum" in schema:
             schema["enum"] = [v for v in schema["enum"]
                               if v not in ("POWER", "RESONANCE", "RECIPROCITY",
-                                           "TRANSFORMER", "THREE_PHASE", "ZENER_RANGE")]
+                                           "TRANSFORMER", "THREE_PHASE", "ZENER_RANGE",
+                                           "WAVEFORM")]
         return schema
 
 
@@ -391,6 +396,12 @@ class AnalysisRequest(BaseModel):
         default=None,
         description="ZENER_RANGE ters probleminde hedef elemanın verilen üst sınırı (SI temel birimi: Ω veya V).",
         examples=[200.0],
+    )
+
+    waveform_output: SkipJsonSchema[Optional[str]] = Field(
+        default=None,
+        description="WAVEFORM (Dalga Şekli) yönteminde çıkış gerilimi V_O'nun alınacağı elemanın kimliği (ör: 'R1'). Boşsa netlist'teki son direnç alınır.",
+        examples=["R1"],
     )
 
     @field_validator("power_factor_target")

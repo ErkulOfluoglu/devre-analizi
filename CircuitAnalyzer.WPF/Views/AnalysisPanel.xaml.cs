@@ -21,6 +21,7 @@ public partial class AnalysisPanel : UserControl
     public event EventHandler<TransientAnalysisDto>? EnlargePlotRequested;
     public event EventHandler<ResonanceDto>? EnlargeResonanceRequested;
     public event EventHandler<ZenerRangeDto>? EnlargeZenerRangeRequested;
+    public event EventHandler<WaveformResultDto>? EnlargeWaveformRequested;
 
     private BackendState _backendState = BackendState.Starting;
     private bool _isBusy;
@@ -328,6 +329,43 @@ public partial class AnalysisPanel : UserControl
             ClearZenerRangeGiven();
     }
 
+    /// <summary>Dalga şekli çıkış elemanı adayları: yalnızca dirençler.</summary>
+    internal static List<string> WaveformOutputIds(IEnumerable<CircuitElement> elements) =>
+        elements
+            .Where(e => e is Resistor && !string.IsNullOrWhiteSpace(e.Id))
+            .Select(e => e.Id)
+            .ToList();
+
+    /// <summary>Çıkış elemanı seçimini çözer: listede varsa korur, yoksa boş bırakır (API son direnci seçer).</summary>
+    internal static string? ResolveWaveformOutput(IReadOnlyList<string> candidates, string? preferred)
+    {
+        if (string.IsNullOrEmpty(preferred))
+            return null;
+        return candidates.Contains(preferred, StringComparer.Ordinal) ? preferred : null;
+    }
+
+    public void SetAvailableWaveformOutputs(IEnumerable<CircuitElement> elements) =>
+        SetAvailableWaveformOutputIds(WaveformOutputIds(elements));
+
+    public void SetAvailableWaveformOutputIds(IReadOnlyList<string> outputIds)
+    {
+        if (CmbWaveformOutput == null) return;
+
+        string? prev = GetSelectedTerminal(CmbWaveformOutput);
+        var list = outputIds.ToList();
+        CmbWaveformOutput.ItemsSource = list;
+        CmbWaveformOutput.SelectedItem = ResolveWaveformOutput(list, prev);
+    }
+
+    public void SetWaveformOutput(string? outputId)
+    {
+        if (CmbWaveformOutput?.ItemsSource is IEnumerable<string> items)
+        {
+            var list = items as IReadOnlyList<string> ?? items.ToList();
+            CmbWaveformOutput.SelectedItem = ResolveWaveformOutput(list, outputId);
+        }
+    }
+
     private void CmbZenerRangeTarget_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressZenerTargetChanged) return;
@@ -421,6 +459,10 @@ public partial class AnalysisPanel : UserControl
         {
             CmbAnalysisType.SelectedIndex = 13;
         }
+        else if (string.Equals(analysisType, AnalysisTypes.Waveform, StringComparison.OrdinalIgnoreCase))
+        {
+            CmbAnalysisType.SelectedIndex = 14;
+        }
         else
         {
             CmbAnalysisType.SelectedIndex = 0;
@@ -430,6 +472,7 @@ public partial class AnalysisPanel : UserControl
         UpdatePowerFactorTargetVisibility();
         UpdateReciprocityTargetVisibility();
         UpdateZenerRangeTargetVisibility();
+        UpdateWaveformOutputVisibility();
 
         if (terminalPositive != null && CmbTerminalPositive.ItemsSource is IEnumerable<string> items && items.Contains(terminalPositive))
         {
@@ -464,6 +507,7 @@ public partial class AnalysisPanel : UserControl
             ZenerRangeTarget = GetSelectedTerminal(CmbZenerRangeTarget),
             ZenerRangeGivenMin = givenMin,
             ZenerRangeGivenMax = givenMax,
+            WaveformOutput = GetSelectedTerminal(CmbWaveformOutput),
         };
     }
 
@@ -509,6 +553,11 @@ public partial class AnalysisPanel : UserControl
             TxtZenerRangeGivenMax.Text = settings.ZenerRangeGivenMax ?? "";
         }
         SetZenerRangeGivenError(null);
+        if (CmbWaveformOutput?.ItemsSource is IEnumerable<string> wfItems)
+        {
+            var candidates = wfItems as IReadOnlyList<string> ?? wfItems.ToList();
+            CmbWaveformOutput.SelectedItem = ResolveWaveformOutput(candidates, settings.WaveformOutput);
+        }
         if (settings.Frequency != null && TxtFrequency != null)
         {
             TxtFrequency.Text = settings.Frequency;
@@ -576,14 +625,17 @@ public partial class AnalysisPanel : UserControl
         UpdatePowerFactorTargetVisibility();
         UpdateReciprocityTargetVisibility();
         UpdateZenerRangeTargetVisibility();
+        UpdateWaveformOutputVisibility();
         UpdateModeLabel();
     }
 
-    /// <summary>Çözücü durumunun altındaki mod yazısı: "Geçici durum" yöntemde, yoksa AC / DC.</summary>
+    /// <summary>Çözücü durumunun altındaki mod yazısı: "Geçici durum" / "Dalga şekli" yöntemde, yoksa AC / DC.</summary>
     internal static string ModeLabelText(bool hasAcSource, string analysisType) =>
         string.Equals(analysisType, AnalysisTypes.Transient, StringComparison.OrdinalIgnoreCase)
             ? "Geçici durum"
-            : hasAcSource ? "AC (fazör) analiz" : "DC analiz";
+            : string.Equals(analysisType, AnalysisTypes.Waveform, StringComparison.OrdinalIgnoreCase)
+                ? "Dalga şekli"
+                : hasAcSource ? "AC (fazör) analiz" : "DC analiz";
 
     private void UpdateModeLabel()
     {
@@ -646,6 +698,18 @@ public partial class AnalysisPanel : UserControl
             RowZenerRangeGiven.Visibility = vis;
     }
 
+    private void UpdateWaveformOutputVisibility()
+    {
+        if (RowWaveformOutput == null) return;
+
+        string selectedText = (CmbAnalysisType.SelectedItem as ComboBoxItem)?.Content as string
+            ?? CmbAnalysisType.SelectedItem as string
+            ?? "";
+
+        bool isWaveform = string.Equals(AnalysisTypeFromText(selectedText), AnalysisTypes.Waveform, StringComparison.OrdinalIgnoreCase);
+        RowWaveformOutput.Visibility = isWaveform ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     /// <summary>Yöntem listesindeki yazıdan API analiz türünü (AnalysisTypes) bulur.</summary>
     internal static string AnalysisTypeFromText(string selectedText)
     {
@@ -675,6 +739,8 @@ public partial class AnalysisPanel : UserControl
             return AnalysisTypes.ThreePhase;
         if (string.Equals(selectedText, "Zener Aralığı", StringComparison.Ordinal))
             return AnalysisTypes.ZenerRange;
+        if (string.Equals(selectedText, "Dalga Şekli", StringComparison.Ordinal))
+            return AnalysisTypes.Waveform;
         return AnalysisTypes.Nodal;
     }
 
@@ -824,9 +890,15 @@ public partial class AnalysisPanel : UserControl
             }
         }
 
+        string? waveformOutput = null;
+        if (string.Equals(analysisType, AnalysisTypes.Waveform, StringComparison.OrdinalIgnoreCase))
+        {
+            waveformOutput = GetSelectedTerminal(CmbWaveformOutput);
+        }
+
         options = new SolveOptions(
             analysisType, freq, pos, neg, ValueDisplay, powerFactorTarget, reciprocityTarget,
-            zenerRangeTarget, zenerRangeGivenMin, zenerRangeGivenMax);
+            zenerRangeTarget, zenerRangeGivenMin, zenerRangeGivenMax, waveformOutput);
         return true;
     }
 
@@ -1873,6 +1945,279 @@ public partial class AnalysisPanel : UserControl
         return card;
     }
 
+    // ═══════════════════════════════════════════════════════
+    //  DALGA ŞEKLİ SONUÇ KARTI VE BİÇİMLENDİRME
+    // ═══════════════════════════════════════════════════════
+
+    internal static string FormatWaveformExtrema(WaveformResultDto wf) =>
+        $"V_O,max = {FormatDiodeVoltage(wf.VOutMax)} · V_O,min = {FormatDiodeVoltage(wf.VOutMin)}";
+
+    internal static string FormatWaveformDcNumeric(WaveformResultDto wf) =>
+        $"Ortalama (DC) değer: {FormatDiodeVoltage(wf.VDcNumeric)} (sayısal)";
+
+    internal static string? FormatWaveformBookFormula(WaveformBookFormulaDto? bf)
+    {
+        if (bf == null)
+            return null;
+
+        string text = TurkishNumber.NormalizeForDisplay(bf.Text?.Trim() ?? "");
+        if (string.IsNullOrEmpty(text))
+            text = $"V_DC = {FormatDiodeVoltage(bf.Value)}";
+        else if (!text.EndsWith("V", StringComparison.Ordinal))
+            text = $"{text} = {FormatDiodeVoltage(bf.Value)}";
+
+        return string.IsNullOrWhiteSpace(bf.Name)
+            ? $"Kitap formülü: {text}"
+            : $"Kitap formülü ({bf.Name.Trim()}): {text}";
+    }
+
+    internal static string? FormatWaveformConductionAngle(double? angleDeg)
+    {
+        if (!angleDeg.HasValue || !double.IsFinite(angleDeg.Value))
+            return null;
+        return $"İletim θ = {TurkishNumber.Format(angleDeg.Value, "0.##")}° den başlar";
+    }
+
+    internal static string FormatWaveformDiodeIntervals(WaveformDiodeDto diode, double timeScale, string timeUnit)
+    {
+        if (diode?.Intervals == null || diode.Intervals.Count == 0)
+            return "—";
+        return string.Join(" · ", diode.Intervals.Select(iv =>
+            $"{TurkishNumber.Format(iv.TStart * timeScale, "0.##")}–{TurkishNumber.Format(iv.TEnd * timeScale, "0.##")} {timeUnit} {FormatDiodeState(iv.State)}"));
+    }
+
+    internal static string FormatWaveformLevelStates(Dictionary<string, string>? states)
+    {
+        if (states == null || states.Count == 0)
+            return "—";
+        return string.Join(", ", states.Select(kv => $"{kv.Key}: {FormatDiodeState(kv.Value)}"));
+    }
+
+    private Border BuildWaveformCard(WaveformResultDto wf)
+    {
+        var card = new Border
+        {
+            Padding = new Thickness(14),
+            Margin = new Thickness(0, 0, 0, 12)
+        };
+        card.SetResourceReference(StyleProperty, "Card");
+
+        var stack = new StackPanel();
+
+        var header = new TextBlock
+        {
+            Text = string.IsNullOrWhiteSpace(wf.OutputLabel) ? "Dalga Şekli" : $"Dalga Şekli — {wf.OutputLabel}",
+            FontSize = 14,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        header.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+        SubscriptText.Apply(header);
+        stack.Children.Add(header);
+
+        // Giriş / çıkış dalga şekli grafiği
+        if (wf.T is { Count: > 0 } && wf.VOut is { Count: > 0 })
+        {
+            var plotView = new WaveformPlotView { Margin = new Thickness(0, 0, 0, 10) };
+            plotView.LoadData(wf);
+            plotView.EnlargeClicked += (_, _) => EnlargeWaveformRequested?.Invoke(this, wf);
+            stack.Children.Add(plotView);
+        }
+
+        // Temel değerler: V_O,max · V_O,min, sayısal DC, kitap formülü, iletim açısı
+        var txtExtrema = new TextBlock
+        {
+            Text = FormatWaveformExtrema(wf),
+            FontSize = 13.5,
+            FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 4)
+        };
+        txtExtrema.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+        SubscriptText.Apply(txtExtrema);
+        stack.Children.Add(txtExtrema);
+
+        var txtDc = new TextBlock
+        {
+            Text = FormatWaveformDcNumeric(wf),
+            FontSize = 12.5,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 4)
+        };
+        txtDc.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+        SubscriptText.Apply(txtDc);
+        stack.Children.Add(txtDc);
+
+        if (FormatWaveformBookFormula(wf.BookFormula) is { } bookText)
+        {
+            var txtBook = new TextBlock
+            {
+                Text = bookText,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 4)
+            };
+            txtBook.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+            SubscriptText.Apply(txtBook);
+            stack.Children.Add(txtBook);
+        }
+
+        if (FormatWaveformConductionAngle(wf.ConductionAngleDeg) is { } angleText)
+        {
+            var txtAngle = new TextBlock
+            {
+                Text = angleText,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            txtAngle.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+            SubscriptText.Apply(txtAngle);
+            stack.Children.Add(txtAngle);
+        }
+
+        // Kare dalga iki seviye tablosu
+        if (wf.Levels is { Count: > 0 })
+        {
+            var lvlHeader = new TextBlock
+            {
+                Text = "Seviyeler",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 4, 0, 6)
+            };
+            lvlHeader.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+            stack.Children.Add(lvlHeader);
+
+            var lvlCard = new Border { Margin = new Thickness(0, 0, 0, 10) };
+            lvlCard.SetResourceReference(StyleProperty, "Card.Inset");
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            string[] headers = { "v_i", "v_O", "Diyot durumları" };
+            for (int c = 0; c < headers.Length; c++)
+            {
+                var th = new TextBlock
+                {
+                    Text = headers[c],
+                    FontSize = 11,
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(2, 0, 10, 4)
+                };
+                th.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+                SubscriptText.Apply(th);
+                Grid.SetRow(th, 0);
+                Grid.SetColumn(th, c);
+                grid.Children.Add(th);
+            }
+
+            for (int i = 0; i < wf.Levels.Count; i++)
+            {
+                var lvl = wf.Levels[i];
+                int row = i + 1;
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                string[] vals =
+                {
+                    FormatDiodeVoltage(lvl.VIn),
+                    FormatDiodeVoltage(lvl.VOut),
+                    FormatWaveformLevelStates(lvl.States),
+                };
+
+                for (int c = 0; c < vals.Length; c++)
+                {
+                    var td = new TextBlock
+                    {
+                        Text = vals[c],
+                        FontSize = 11.5,
+                        Margin = new Thickness(2, 2, 10, 2),
+                        TextWrapping = c == 2 ? TextWrapping.Wrap : TextWrapping.NoWrap
+                    };
+                    if (c == 2)
+                    {
+                        td.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+                        SubscriptText.Apply(td);
+                    }
+                    else
+                    {
+                        td.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+                        td.SetResourceReference(TextBlock.FontFamilyProperty, "Font.Mono");
+                    }
+                    Grid.SetRow(td, row);
+                    Grid.SetColumn(td, c);
+                    grid.Children.Add(td);
+                }
+            }
+
+            lvlCard.Child = grid;
+            stack.Children.Add(lvlCard);
+        }
+
+        // Diyot iletim aralıkları tablosu
+        if (wf.Diodes is { Count: > 0 })
+        {
+            var (tScale, tUnit) = WaveformPlotView.TimeUnitFor(wf);
+
+            var diodeHeader = new TextBlock
+            {
+                Text = "Diyot iletim aralıkları",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 4, 0, 6)
+            };
+            diodeHeader.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+            stack.Children.Add(diodeHeader);
+
+            var diodeCard = new Border();
+            diodeCard.SetResourceReference(StyleProperty, "Card.Inset");
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            for (int r = 0; r < wf.Diodes.Count; r++)
+            {
+                var d = wf.Diodes[r];
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                var idTb = new TextBlock
+                {
+                    Text = d.Id,
+                    FontSize = 12,
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(2, 2, 12, 2)
+                };
+                idTb.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+                Grid.SetRow(idTb, r);
+                Grid.SetColumn(idTb, 0);
+                grid.Children.Add(idTb);
+
+                var ivTb = new TextBlock
+                {
+                    Text = FormatWaveformDiodeIntervals(d, tScale, tUnit),
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(2, 2, 2, 2)
+                };
+                ivTb.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+                SubscriptText.Apply(ivTb);
+                Grid.SetRow(ivTb, r);
+                Grid.SetColumn(ivTb, 1);
+                grid.Children.Add(ivTb);
+            }
+
+            diodeCard.Child = grid;
+            stack.Children.Add(diodeCard);
+        }
+
+        card.Child = stack;
+        return card;
+    }
+
     /// <summary>
     /// Üç faz sonuçları, anlatımdaki adlarla (V_RN, V_RS, I_R, I_N, V_N′N, I_RS) bölüm bölüm.
     /// Değerler kutupsal (büyüklük∠açı), önekli birimle.
@@ -1911,6 +2256,12 @@ public partial class AnalysisPanel : UserControl
     private StackPanel BuildResultsPanel(AnalysisResponseDto response)
     {
         var panel = new StackPanel();
+
+        // Dalga şekli kartı (Sonuçlar sekmesinin en üstünde)
+        if (response.WaveformResult is { } waveform)
+        {
+            panel.Children.Add(BuildWaveformCard(waveform));
+        }
 
         // Zener aralığı kartı (Sonuçlar sekmesinin en üstünde)
         if (response.ZenerRangeResult is { } zenerRange)

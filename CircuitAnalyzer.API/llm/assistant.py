@@ -44,6 +44,7 @@ _METHOD_NAMES = {
     AnalysisType.TRANSFORMER: "Transformatör (ideal: V₂ = a·V₁; kuplajlı: M = k·√(L₁L₂), primer/sekonder gerilim ve akımlar)",
     AnalysisType.THREE_PHASE: "Üç faz (Y/Δ kaynak ve yük, hat/faz büyüklükleri, nötr akımı, güç, Aron, kompanzasyon)",
     AnalysisType.ZENER_RANGE: "Zener aralığı (zener regülatöründe R_Y yük direnci veya V_İ giriş gerilimi çalışma aralığı)",
+    AnalysisType.WAVEFORM: "Dalga şekli (diyotlu devrede sinüs, kare veya üçgen giriş için V_O(t) dalga şekli, iletim aralıkları ve ortalama V_DC değer)",
 }
 
 _RULES = """Sen meslek yüksekokulu elektronik öğrencilerine devre analizi anlatan sabırlı bir öğretmensin.
@@ -139,6 +140,12 @@ _NOTES_ZENER_RANGE = [
     "R_Y,min = V_Z/I_Y,max ve I_Y,min = I_X − I_ZM → R_Y,max = V_Z/I_Y,min. Giriş değişirken (R_Y sabit): "
     "I_Y = V_Z/R_Y sabit kalır; I_X ∈ [I_Y, I_Y + I_ZM] → V_İ = I_X·R_X + V_Z.",
 ]
+_NOTES_WAVEFORM = [
+    "Dalga Şekli analizinde giriş geriliminin her anında diyotların iletim/yalıtım durumu bulunur. "
+    "Sinüs girişli yarım dalga doğrultucuda kitap formülü V_DC = 0,318·(V_m − V_T), köprü (tam dalga) "
+    "doğrultucuda V_DC = 0,636·(V_m − 2·V_T)'dir; iletim θ = arcsin(V_T/V_m) açısında başladığı için "
+    "sayısal ortalama biraz daha düşüktür. Düğüm gerilimleri ve akım tablosu pozitif tepe anındaki değerlerdir.",
+]
 
 
 def concept_notes(analysis_type: AnalysisType, is_dc: bool,
@@ -166,6 +173,7 @@ def concept_notes(analysis_type: AnalysisType, is_dc: bool,
         AnalysisType.TRANSFORMER: _NOTES_TRANSFORMER,
         AnalysisType.THREE_PHASE: _NOTES_THREE_PHASE + _NOTES_POWER,
         AnalysisType.ZENER_RANGE: _NOTES_ZENER_RANGE,
+        AnalysisType.WAVEFORM: _NOTES_WAVEFORM,
     }.get(analysis_type, [])
     return "KAVRAM NOTLARI (doğru bilgiler; kavram sorularında bunlara uy):\n" + "\n".join(f"- {n}" for n in notes)
 
@@ -219,6 +227,12 @@ def describe_element(e: ParsedElement, value_basis: str = "PEAK") -> str:
         f_txt = f", f = {num(freq)} Hz" if freq else ""
         return (f"{eid}: AC gerilim kaynağı, genlik ({basis_label}) {eng(amp, 'V')}, faz {num(p.get('phase', 0))}°{f_txt}, "
                 f"(+) ucu {_node(e.node_positive)}, (−) ucu {_node(e.node_negative)}")
+    if t == ElementType.AC_SOURCE_SQUARE:
+        return (f"{eid}: kare dalga gerilim kaynağı, V₁ = {eng(p['v1'], 'V')}, V₂ = {eng(p['v2'], 'V')}, "
+                f"f = {num(p['frequency'])} Hz, (+) ucu {_node(e.node_positive)}, (−) ucu {_node(e.node_negative)}")
+    if t == ElementType.AC_SOURCE_TRIANGLE:
+        return (f"{eid}: üçgen dalga gerilim kaynağı, tepe V_p = {eng(p['amplitude'], 'V')}, "
+                f"f = {num(p['frequency'])} Hz, (+) ucu {_node(e.node_positive)}, (−) ucu {_node(e.node_negative)}")
     if t == ElementType.CURRENT_DC:
         return (f"{eid}: DC akım kaynağı {eng(e.value, 'A')}, akım kaynak içinde "
                 f"{_node(e.node_positive)} → {_node(e.node_negative)} yönünde")
@@ -592,6 +606,21 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
             put(ch.x, ch_unit)
             put(ch.v_y, "V")
             put(ch.i_z, "A")
+    wf = getattr(results, "waveform", None)
+    if wf is not None:
+        put(wf.frequency, "Hz")
+        put(wf.period, "s")
+        put(wf.v_out_max, "V")
+        put(wf.v_out_min, "V")
+        put(wf.v_dc_numeric, "V")
+        if wf.conduction_angle_deg is not None:
+            put(wf.conduction_angle_deg, "°")
+        if wf.book_formula is not None:
+            put(wf.book_formula.value, "V")
+        if wf.levels:
+            for lv in wf.levels:
+                put(lv.v_in, "V")
+                put(lv.v_out, "V")
     return known_from(values, texts)
 
 

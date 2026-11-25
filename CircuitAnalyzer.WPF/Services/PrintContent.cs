@@ -12,6 +12,7 @@ namespace CircuitAnalyzer.WPF.Services
         PowerTriangle,
         ResonanceCurve,
         ZenerRangePlot,
+        WaveformPlot,
     }
 
     internal sealed record PrintFigure(PrintFigureKind Kind, string Caption);
@@ -166,6 +167,30 @@ namespace CircuitAnalyzer.WPF.Services
                 .ToList();
         }
 
+        /// <summary>Dalga şekli kare seviye tablosu (v_i, v_O, diyot durumları).</summary>
+        public static List<(string VIn, string VOut, string States)> WaveformLevelRows(WaveformResultDto? wf)
+        {
+            if (wf?.Levels == null)
+                return new();
+            return wf.Levels
+                .Select(l => (
+                    UnicodeMinus(AnalysisPanel.FormatDiodeVoltage(l.VIn)),
+                    UnicodeMinus(AnalysisPanel.FormatDiodeVoltage(l.VOut)),
+                    AnalysisPanel.FormatWaveformLevelStates(l.States)))
+                .ToList();
+        }
+
+        /// <summary>Dalga şekli diyot iletim aralıkları tablosu (diyot kimliği, aralıklar).</summary>
+        public static List<(string Id, string Intervals)> WaveformDiodeRows(WaveformResultDto? wf)
+        {
+            if (wf?.Diodes == null)
+                return new();
+            var (tScale, tUnit) = WaveformPlotView.TimeUnitFor(wf);
+            return wf.Diodes
+                .Select(d => (d.Id, AnalysisPanel.FormatWaveformDiodeIntervals(d, tScale, tUnit)))
+                .ToList();
+        }
+
         /// <summary>Başlık + tablo sayfaya bölünmüş mü (başlık ile son satır ayrı sayfalarda).</summary>
         public static bool TableIsSplit(TablePlacement p) => p.Heading != p.LastRow;
 
@@ -225,6 +250,9 @@ namespace CircuitAnalyzer.WPF.Services
             if (response.ZenerRangeResult is { Curve.X.Count: > 0, Curve.VY.Count: > 0 } zr)
                 list.Add(new PrintFigure(PrintFigureKind.ZenerRangePlot, ZenerRangeCaption(zr)));
 
+            if (response.WaveformResult is { T.Count: > 0, VOut.Count: > 0 } wf)
+                list.Add(new PrintFigure(PrintFigureKind.WaveformPlot, WaveformCaption(wf)));
+
             return list;
         }
 
@@ -278,6 +306,13 @@ namespace CircuitAnalyzer.WPF.Services
                 "kesikli dikey çizgiler sınırları, noktalar sağlama değerlerini gösterir.");
         }
 
+        public static string WaveformCaption(WaveformResultDto data)
+        {
+            return UnicodeMinus(
+                $"Dalga şekli grafiği: kesikli çizgi giriş v_i, düz çizgi çıkış v_O. " +
+                $"{AnalysisPanel.FormatWaveformExtrema(data)} · {AnalysisPanel.FormatWaveformDcNumeric(data)}.");
+        }
+
         /// <summary>
         /// Şeklin anlatımda gireceği yer: konusunu anlatan bölümün hemen ardı. Dönüş, ardına
         /// girilecek bölümün sırası; uygun bölüm yoksa −1 (şekil "Sonuçlar"ın hemen önüne girer).
@@ -291,6 +326,7 @@ namespace CircuitAnalyzer.WPF.Services
                 // Güç yöntemi "Güç Üçgeni", üç faz "Güç" bölümünde anlatır
                 PrintFigureKind.PowerTriangle => new[] { "Güç Üçgeni", "Güç" },
                 PrintFigureKind.ZenerRangePlot => new[] { "Sağlama", "Çalışma Aralığı" },
+                PrintFigureKind.WaveformPlot => new[] { "Dalga Şekli", "Çıkış Dalga Şekli", "Ortalama Değer" },
                 _ => Array.Empty<string>()
             };
             foreach (string anchor in anchors)

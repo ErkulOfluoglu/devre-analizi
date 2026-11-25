@@ -287,7 +287,7 @@ def test_ac_mode_refused(client):
     r = client.post("/analyze", json={"netlist": P54 + GND, "mode": "AC_PHASOR",
                                       "frequency": 50, "analysis_type": "NODAL"})
     assert r.status_code == 422
-    assert "yalnızca DC kaynaklarla" in r.json()["detail"]
+    assert "Dalga Şekli" in r.json()["detail"]
 
 
 @pytest.mark.parametrize("net,mode", [
@@ -302,7 +302,7 @@ def test_ac_source_refused(client, net, mode):
         body["frequency"] = 50
     r = client.post("/analyze", json=body)
     assert r.status_code == 422
-    assert "doğrultucu ve kırpıcılar" in r.json()["detail"]
+    assert "Dalga Şekli" in r.json()["detail"]
 
 
 def test_no_consistent_state_refused(client):

@@ -57,6 +57,7 @@ namespace CircuitAnalyzer.WPF
             AnalysisPanel.EnlargePlotRequested += (_, data) => PlotOverlay.Show(data);
             AnalysisPanel.EnlargeResonanceRequested += (_, data) => PlotOverlay.Show(data);
             AnalysisPanel.EnlargeZenerRangeRequested += (_, data) => PlotOverlay.Show(data);
+            AnalysisPanel.EnlargeWaveformRequested += (_, data) => PlotOverlay.Show(data);
             Closed += (_, _) => _backend.Dispose();
 
             AnalysisPanel.AnswerChecker = async req =>
@@ -232,6 +233,7 @@ namespace CircuitAnalyzer.WPF
                 .ToList());
             AnalysisPanel.SetAvailableReciprocityTargets(_elements);
             AnalysisPanel.SetAvailableZenerRangeTargets(_elements);
+            AnalysisPanel.SetAvailableWaveformOutputs(_elements);
             _overlay?.ShowNodeNumbers(netlist, _wires);
         }
 
@@ -310,6 +312,9 @@ namespace CircuitAnalyzer.WPF
                     : null,
                 ZenerRangeGivenMax = string.Equals(options.AnalysisType, AnalysisTypes.ZenerRange, StringComparison.OrdinalIgnoreCase)
                     ? options.ZenerRangeGivenMax
+                    : null,
+                WaveformOutput = string.Equals(options.AnalysisType, AnalysisTypes.Waveform, StringComparison.OrdinalIgnoreCase)
+                    ? options.WaveformOutput
                     : null,
             };
 
@@ -541,6 +546,8 @@ namespace CircuitAnalyzer.WPF
             OnCircuitChanged();
             AnalysisPanel.ClearResults();
             AnalysisPanel.SetAnalysisType(example.SuggestedAnalysisType, example.SuggestedTerminal);
+            if (!string.IsNullOrEmpty(example.SuggestedWaveformOutput))
+                AnalysisPanel.SetWaveformOutput(example.SuggestedWaveformOutput);
             TxtStatus.Text = $"Örnek yüklendi: {example.Name} — {example.Description}";
 
             ResetHistoryAsSaved();

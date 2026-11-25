@@ -76,6 +76,8 @@ public class ExampleCircuitsTests : IClassFixture<BackendFixture>
             AnalysisTypes.Superposition,
             AnalysisTypes.Millman,
             AnalysisTypes.SourceTransform,
+            AnalysisTypes.ZenerRange,
+            AnalysisTypes.Waveform,
         };
         Assert.Contains(c1.SuggestedAnalysisType, validAnalysisTypes);
 

@@ -402,9 +402,12 @@ namespace CircuitAnalyzer.WPF.Services
                 // ═══════════════════════════════════════════════════════
                 //  6. SONUÇ TABLOSU
                 // ═══════════════════════════════════════════════════════
-                if (input.Response?.Results != null || input.Response?.ThreePhaseResult != null || input.Response?.WattmeterResults != null || input.Response?.DiodeResults != null || input.Response?.ZenerRangeResult != null)
+                if (input.Response?.Results != null || input.Response?.ThreePhaseResult != null || input.Response?.WattmeterResults != null || input.Response?.DiodeResults != null || input.Response?.ZenerRangeResult != null || input.Response?.WaveformResult != null)
                 {
                     var results = input.Response.Results;
+                    var waveform = input.Response.WaveformResult;
+                    var waveformLevelRows = PrintContent.WaveformLevelRows(waveform);
+                    var waveformDiodeRows = PrintContent.WaveformDiodeRows(waveform);
                     var zenerRange = input.Response.ZenerRangeResult;
                     var zenerStepRows = PrintContent.ZenerRangeStepRows(zenerRange);
                     var zenerCheckRows = PrintContent.ZenerRangeCheckRows(zenerRange);
@@ -412,6 +415,7 @@ namespace CircuitAnalyzer.WPF.Services
                     var wattmeterRows = PrintContent.WattmeterRows(input.Response.WattmeterResults);
                     var diodeRows = PrintContent.DiodeRows(input.Response.DiodeResults);
                     var probeRows = PrintContent.ProbeRows(results?.ProbeResults);
+                    bool hasWaveform = waveform != null;
                     bool hasZenerRange = zenerRange != null;
                     bool hasThreePhase = threePhaseTables.Count > 0;
                     bool hasVoltages = results?.NodeVoltages != null && results.NodeVoltages.Count > 0;
@@ -421,7 +425,7 @@ namespace CircuitAnalyzer.WPF.Services
                     bool hasProbes = probeRows.Count > 0;
                     bool hasPower = results?.Power?.Elements != null && results.Power.Elements.Count > 0;
 
-                    if (hasZenerRange || hasThreePhase || hasVoltages || hasWattmeters || hasDiodes || hasCurrents || hasProbes || hasPower)
+                    if (hasWaveform || hasZenerRange || hasThreePhase || hasVoltages || hasWattmeters || hasDiodes || hasCurrents || hasProbes || hasPower)
                     {
                         Paragraph TableHeading(string text, double top)
                         {
@@ -470,6 +474,82 @@ namespace CircuitAnalyzer.WPF.Services
                             };
                             pNote.Inlines.Add(new Run(tablesNote));
                             doc.Blocks.Add(pNote);
+                        }
+
+                        // Dalga Şekli: uç değerler, ortalama (DC) değer, kitap formülü, iletim açısı, seviyeler ve diyot aralıkları
+                        if (waveform != null)
+                        {
+                            var pWfHead = TableHeading(
+                                string.IsNullOrWhiteSpace(waveform.OutputLabel) ? "Dalga Şekli" : $"Dalga Şekli — {waveform.OutputLabel}",
+                                4);
+
+                            var pExtrema = new Paragraph
+                            {
+                                FontSize = 13,
+                                Foreground = brushPrimary,
+                                Margin = new Thickness(0, 2, 0, 2)
+                            };
+                            var boldExt = new Bold();
+                            boldExt.Inlines.AddRange(SubscriptText.ToInlines(
+                                PrintContent.UnicodeMinus(Views.AnalysisPanel.FormatWaveformExtrema(waveform)), 13));
+                            pExtrema.Inlines.Add(boldExt);
+                            doc.Blocks.Add(pExtrema);
+
+                            var pDc = new Paragraph
+                            {
+                                FontSize = 12.5,
+                                Foreground = brushPrimary,
+                                Margin = new Thickness(0, 0, 0, 2)
+                            };
+                            pDc.Inlines.AddRange(SubscriptText.ToInlines(
+                                PrintContent.UnicodeMinus(Views.AnalysisPanel.FormatWaveformDcNumeric(waveform)), 12.5));
+                            doc.Blocks.Add(pDc);
+
+                            if (Views.AnalysisPanel.FormatWaveformBookFormula(waveform.BookFormula) is { } bookText)
+                            {
+                                var pBook = new Paragraph
+                                {
+                                    FontSize = 12,
+                                    Foreground = brushSecondary,
+                                    Margin = new Thickness(0, 0, 0, 2)
+                                };
+                                pBook.Inlines.AddRange(SubscriptText.ToInlines(PrintContent.UnicodeMinus(bookText), 12));
+                                doc.Blocks.Add(pBook);
+                            }
+
+                            if (Views.AnalysisPanel.FormatWaveformConductionAngle(waveform.ConductionAngleDeg) is { } angleText)
+                            {
+                                var pAngle = new Paragraph
+                                {
+                                    FontSize = 12,
+                                    Foreground = brushSecondary,
+                                    Margin = new Thickness(0, 0, 0, 6)
+                                };
+                                pAngle.Inlines.AddRange(SubscriptText.ToInlines(PrintContent.UnicodeMinus(angleText), 12));
+                                doc.Blocks.Add(pAngle);
+                            }
+
+                            if (waveformLevelRows.Count > 0)
+                            {
+                                var pLvlHead = TableHeading("Seviyeler", 6);
+                                var tblLvls = CreateTable(doc, new[] { "v_i", "v_O", "Diyot durumları" }, new[] { 100.0, 100.0, 320.0 });
+                                var rg = tblLvls.RowGroups[0];
+                                foreach (var (vIn, vOut, states) in waveformLevelRows)
+                                    rg.Rows.Add(CreateRow(doc, new[] { vIn, vOut, states }));
+                                doc.Blocks.Add(tblLvls);
+                                tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pLvlHead, pLvlHead, tblLvls));
+                            }
+
+                            if (waveformDiodeRows.Count > 0)
+                            {
+                                var pDiodeHead = TableHeading("Diyot iletim aralıkları", 6);
+                                var tblWfDiodes = CreateTable(doc, new[] { "Diyot", "Aralıklar" }, new[] { 100.0, 420.0 });
+                                var rg = tblWfDiodes.RowGroups[0];
+                                foreach (var (id, intervals) in waveformDiodeRows)
+                                    rg.Rows.Add(CreateRow(doc, new[] { id, intervals }));
+                                doc.Blocks.Add(tblWfDiodes);
+                                tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pDiodeHead, pDiodeHead, tblWfDiodes));
+                            }
                         }
 
                         // Zener Aralığı: verilen aralık (ters problem), cevap cümlesi, hesap adımları ve sağlama tablosu
@@ -820,6 +900,7 @@ namespace CircuitAnalyzer.WPF.Services
         internal const double TransientPlotHeight = 230;
         internal const double ResonancePlotHeight = 300;
         internal const double ZenerRangePlotHeight = 250;
+        internal const double WaveformPlotHeight = 250;
 
         /// <summary>Grafik görüntüsünün çözünürlük katı: 600 DIP → 1800 px (~270 dpi kâğıtta).</summary>
         private const double PlotPixelScale = 3;
@@ -927,6 +1008,18 @@ namespace CircuitAnalyzer.WPF.Services
                             Views.PlotMarkers.DataWidthPx(FigureWidth), Views.PlotMarkers.DataHeightPx(ZenerRangePlotHeight),
                             c => ScottColor(doc, c)),
                         FigureWidth, ZenerRangePlotHeight, 0);
+                }
+                case PrintFigureKind.WaveformPlot:
+                {
+                    var data = response.WaveformResult;
+                    if (data == null)
+                        return null;
+                    var (scale, unit) = Views.WaveformPlotView.TimeUnitFor(data);
+                    return PlotImage(doc, plot =>
+                        Views.WaveformPlotView.BuildPlot(plot, data, scale, unit,
+                            Views.PlotMarkers.DataWidthPx(FigureWidth), Views.PlotMarkers.DataHeightPx(WaveformPlotHeight),
+                            c => ScottColor(doc, c)),
+                        FigureWidth, WaveformPlotHeight, 0);
                 }
                 case PrintFigureKind.PowerTriangle:
                 {

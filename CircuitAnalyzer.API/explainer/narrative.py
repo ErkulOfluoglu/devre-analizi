@@ -282,6 +282,7 @@ def build_explanation(
     reciprocity_analysis=None,
     reciprocity_inapplicable_reason: Optional[str] = None,
     zener_range_inapplicable_reason: Optional[str] = None,
+    waveform_inapplicable_reason: Optional[str] = None,
 ) -> List[ExplanationSection]:
     """
     Çözümün Türkçe anlatımını üretir. Çözüm başarısızsa boş liste döner.
@@ -413,6 +414,19 @@ def build_explanation(
         fallback = _Section("Zener Aralığı")
         fallback.note(
             f"Bu devrede Zener Aralığı uygulanamadı: {clean}. "
+            "“Düğüm Gerilimleri” yöntemini seçebilirsiniz; aynı sonuçları şimdi o "
+            "yöntemle anlatıyoruz."
+        )
+        analysis_type = ctx.analysis_type = AnalysisType.NODAL
+        method_builders = (lambda c: [fallback],) + method_builders
+
+    if analysis_type == AnalysisType.WAVEFORM:
+        why = (waveform_inapplicable_reason
+               or "Dalga Şekli yöntemi diyotlu devreler içindir")
+        clean = why.strip().rstrip(".")
+        fallback = _Section("Dalga Şekli")
+        fallback.note(
+            f"Bu devrede Dalga Şekli yöntemi uygulanamadı: {clean}. "
             "“Düğüm Gerilimleri” yöntemini seçebilirsiniz; aynı sonuçları şimdi o "
             "yöntemle anlatıyoruz."
         )

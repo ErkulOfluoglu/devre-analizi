@@ -279,8 +279,8 @@ namespace CircuitAnalyzer.WPF.Services
                 NodePins = nodePins,
                 HasGround = hasGround,
                 HasAcSource = acSources.Count > 0 || acCurrentSources.Count > 0 || threePhaseSources.Count > 0 || wattmeters.Count > 0,
-                HasPhasorSource = acSources.Any(s => s.InputMode == AcInputMode.Phasor) || acCurrentSources.Any(s => s.InputMode == AcInputMode.Phasor),
-                PhasorFrequencies = acSources.Where(s => s.InputMode == AcInputMode.Phasor).Select(s => s.Frequency)
+                HasPhasorSource = acSources.Any(s => s.Waveform == AcWaveform.Sine && s.InputMode == AcInputMode.Phasor) || acCurrentSources.Any(s => s.InputMode == AcInputMode.Phasor),
+                PhasorFrequencies = acSources.Where(s => s.Waveform == AcWaveform.Sine && s.InputMode == AcInputMode.Phasor).Select(s => s.Frequency)
                     .Concat(acCurrentSources.Where(s => s.InputMode == AcInputMode.Phasor).Select(s => s.Frequency))
                     .Distinct().ToList(),
             };
