@@ -326,6 +326,63 @@ def test_clamper_assistant_known_values():
     assert kv is not None
 
 
+def test_clamper_reversed_input_source(client):
+    # V1 0 1 SQUARE(-10 15 1k), düğüm 1 gerilimi +10 / −15 → p154 (V1 1 0 SQUARE(10 -15 1k)) ile eşdeğer
+    normal = analyze(
+        client,
+        "V1 1 0 SQUARE(10 -15 1k)\nC1 1 2 100u\nD1 0 2 SI\nR1 2 0 100k",
+    )
+    rev = analyze(
+        client,
+        "V1 0 1 SQUARE(-10 15 1k)\nC1 1 2 100u\nD1 0 2 SI\nR1 2 0 100k",
+    )
+    wf_n, wf_r = normal["waveform"], rev["waveform"]
+    assert wf_r["v_out_max"] == pytest.approx(24.3, abs=1e-6)
+    assert wf_r["v_out_min"] == pytest.approx(-0.7, abs=1e-6)
+    assert wf_r["v_out_max"] == pytest.approx(wf_n["v_out_max"], abs=1e-6)
+    assert wf_r["v_out_min"] == pytest.approx(wf_n["v_out_min"], abs=1e-6)
+    assert abs(wf_r["clamper"]["v_c"]) == pytest.approx(14.3, abs=1e-6)
+    assert wf_r["clamper"]["v_c"] == pytest.approx(wf_n["clamper"]["v_c"], abs=1e-6)
+    assert wf_r["clamper"]["checks"] == wf_n["clamper"]["checks"]
+    assert [lv["v_in"] for lv in wf_r["levels"]] == pytest.approx([10.0, -15.0], abs=1e-6)
+    # Anlık görüntü: iletim alternansında düğüm 1 = v_i_min = −15 V; V1 (0→1) akımı = I_C = I_R
+    assert rev["results"]["node_voltages"]["1"]["value"] == pytest.approx(-15.0, abs=1e-6)
+    assert rev["results"]["node_voltages"]["2"]["value"] == pytest.approx(-0.7, abs=1e-6)
+    assert rev["results"]["element_currents"]["V1"]["value"] == pytest.approx(-7e-6, abs=1e-12)
+    assert "V1 ters bağlı" in expl_text(rev)
+    for s in rev["results"]["explanation"]:
+        for b in s["blocks"]:
+            if b["kind"] == "result":
+                assert b["text"].count(" = ") <= 1
+
+    # V1 0 1 SQUARE(10 -15 1k), D1 2 0 IDEAL: düğüm −10/+15 görür, üst tepe (+15) 0 V'a kenetlenir
+    top_pinned = analyze(
+        client,
+        "V1 0 1 SQUARE(10 -15 1k)\nC1 1 2 100u\nD1 2 0 IDEAL\nR1 2 0 100k",
+    )
+    wf_tp = top_pinned["waveform"]
+    assert wf_tp["v_out_max"] == pytest.approx(0.0, abs=1e-6)
+    assert wf_tp["v_out_min"] == pytest.approx(-25.0, abs=1e-6)
+    assert [lv["v_out"] for lv in wf_tp["levels"]] == pytest.approx([-25.0, 0.0], abs=1e-6)
+    assert wf_tp["clamper"]["v_c"] == pytest.approx(15.0, abs=1e-6)
+    assert top_pinned["results"]["node_voltages"]["1"]["value"] == pytest.approx(15.0, abs=1e-6)
+    assert top_pinned["results"]["node_voltages"]["2"]["value"] == pytest.approx(0.0, abs=1e-6)
+    assert "V1 ters bağlı" in expl_text(top_pinned)
+
+    # Ters bağlı SINE: V1 0 1 SINE(0 10 1k), D1 2 0 IDEAL → max 0, min −20
+    sine_rev = analyze(
+        client,
+        "V1 0 1 SINE(0 10 1k)\nC1 1 2 100u\nD1 2 0 IDEAL\nR1 2 0 100k",
+    )
+    wf_sr = sine_rev["waveform"]
+    assert wf_sr["shape"] == "SINE"
+    assert wf_sr["v_out_max"] == pytest.approx(0.0, abs=1e-6)
+    assert wf_sr["v_out_min"] == pytest.approx(-20.0, abs=1e-6)
+    assert wf_sr["clamper"]["v_c"] == pytest.approx(10.0, abs=1e-6)
+    assert sine_rev["results"]["node_voltages"]["1"]["value"] == pytest.approx(10.0, abs=1e-6)
+    assert "V1 ters bağlı" in expl_text(sine_rev)
+
+
 # ── Faz 4c-1 regresyonları ───────────────────────────────
 
 def test_regression_half_wave_si_and_six_zener(client):

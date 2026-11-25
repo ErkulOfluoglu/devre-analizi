@@ -93,6 +93,7 @@ class ClamperSetup:
     v_bias: float                            # seri kaynağın V(y)−V(0) yönündeki işaretli katkısı
     v_t: float                               # diyot eşik gerilimi V_T (V)
     v_k: float                               # diyot kolu kenetleme gerilimi V_K = V_bias ± V_T (V)
+    source_reversed: bool = False            # True: kaynak 0 → a ters bağlı, v_i(t) = −src(t)
 
 
 @dataclass
@@ -222,12 +223,9 @@ def _detect_clamper(
             "giriş kaynağı toprağa (GND) bağlı değil; kondansatörlü kenetleme devresinde "
             "giriş kaynağı referans toprağa (0) bağlı olmalıdır"
         )
-    if src.node_negative != "0":
-        return None, (
-            "giriş kaynağının (−) ucu toprağa (GND) bağlı değil; kondansatörlü kenetleme "
-            "devresinde kaynağın (+) ucu giriş düğümünde, (−) ucu GND'de olmalıdır"
-        )
-    a = src.node_positive
+    # Ters çizilmiş kaynak (V1 0 a ...): (+) ucu GND'de olduğundan giriş düğümü −src(t) görür.
+    source_reversed = src.node_positive == "0"
+    a = src.node_negative if source_reversed else src.node_positive
 
     freq = float(src.params.get("frequency", 0.0) or 0.0)
     if freq <= 0.0 and frequency is not None and frequency > 0.0:
@@ -351,6 +349,7 @@ def _detect_clamper(
         v_bias=v_bias,
         v_t=v_t,
         v_k=v_k,
+        source_reversed=source_reversed,
     )
 
     period = 1.0 / freq
@@ -901,12 +900,17 @@ def _solve_clamper(
     cl = setup.clamper
     assert cl is not None
 
+    # Ters bağlı kaynakta giriş düğümünün gördüğü gerilim v_i(t) = −eval_source(t) olur.
+    sign = -1.0 if cl.source_reversed else 1.0
+
     if setup.shape == "SQUARE":
-        v_i_max = max(setup.v1, setup.v2)
-        v_i_min = min(setup.v1, setup.v2)
+        v1 = sign * setup.v1
+        v2 = sign * setup.v2
+        v_i_max = max(v1, v2)
+        v_i_min = min(v1, v2)
     elif setup.shape == "SINE":
-        v_i_max = setup.offset + setup.amplitude
-        v_i_min = setup.offset - setup.amplitude
+        v_i_max = sign * setup.offset + setup.amplitude
+        v_i_min = sign * setup.offset - setup.amplitude
     else:  # TRIANGLE
         v_i_max = setup.amplitude
         v_i_min = -setup.amplitude
@@ -948,18 +952,18 @@ def _solve_clamper(
     levels: Optional[List[WaveformSquareLevel]] = None
 
     if setup.shape == "SQUARE":
-        st1 = "ON" if abs(setup.v1 - v_in_cond) <= V_TOL else "OFF"
-        st2 = "ON" if abs(setup.v2 - v_in_cond) <= V_TOL else "OFF"
-        v_out1 = setup.v1 - v_c
-        v_out2 = setup.v2 - v_c
+        st1 = "ON" if abs(v1 - v_in_cond) <= V_TOL else "OFF"
+        st2 = "ON" if abs(v2 - v_in_cond) <= V_TOL else "OFF"
+        v_out1 = v1 - v_c
+        v_out2 = v2 - v_c
         levels = [
             WaveformSquareLevel(
-                v_in=_sig_round(setup.v1, 6),
+                v_in=_sig_round(v1, 6),
                 v_out=_sig_round(v_out1, 6),
                 states={cl.diode.id: st1},
             ),
             WaveformSquareLevel(
-                v_in=_sig_round(setup.v2, 6),
+                v_in=_sig_round(v2, 6),
                 v_out=_sig_round(v_out2, 6),
                 states={cl.diode.id: st2},
             ),
@@ -967,7 +971,7 @@ def _solve_clamper(
         state_rows: List[Dict[str, str]] = []
         for k in range(TOTAL_SAMPLES):
             first_half = (k % SAMPLES_PER_PERIOD) < (SAMPLES_PER_PERIOD // 2)
-            v_ins.append(_sig_round(setup.v1 if first_half else setup.v2, 6))
+            v_ins.append(_sig_round(v1 if first_half else v2, 6))
             v_outs.append(_sig_round(v_out1 if first_half else v_out2, 6))
             state_rows.append({cl.diode.id: st1 if first_half else st2})
         diode_traces = _build_diode_intervals(setup.diodes, ts, state_rows, t_total)
@@ -975,7 +979,7 @@ def _solve_clamper(
     else:
         raw_v_outs: List[float] = []
         for t in ts:
-            vin = eval_source(setup, t)
+            vin = sign * eval_source(setup, t)
             vout = vin - v_c
             v_ins.append(_sig_round(vin, 6))
             raw_v_outs.append(vout)
@@ -1104,8 +1108,8 @@ def _solve_clamper(
             # y düğümünde KCL: C'den y'ye giren akım = R'den 0'a akan akım (I_D = 0)
             raw_currents[e.id] = i_y_to_0 if e.node_positive == cl.input_node else -i_y_to_0
         elif e.id == setup.source.id:
-            # Pasif işaret kuralı (a → 0): kaynak dış devreye a'dan I_C verdiği için iç akım −I_C
-            raw_currents[e.id] = -i_y_to_0
+            # Pasif işaret kuralı: dış devreye a'dan I_C verilir; ters kaynakta (0→a) iç akım +I_C olur
+            raw_currents[e.id] = i_y_to_0 if cl.source_reversed else -i_y_to_0
         else:
             # Diyot (ve varsa seri DC kaynak): sınırda I_D = 0
             raw_currents[e.id] = 0.0

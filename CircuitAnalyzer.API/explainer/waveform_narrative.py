@@ -140,20 +140,37 @@ def _build_clamper_sections(analysis) -> List[ExplanationSection]:
         "bozmadan DC seviyesini aşağı ya da yukarı kaydırır.",
     )
     shape_tr = _SHAPE_LABELS[setup.shape]
+    sign = -1.0 if cl.source_reversed else 1.0
     if setup.shape == "SQUARE":
+        v1 = sign * setup.v1
+        v2 = sign * setup.v2
         src_desc = (
             f"Giriş kaynağı {setup.source.id}: {shape_tr} dalga, "
-            f"seviyeler V₁ = {_volts(setup.v1)} ve V₂ = {_volts(setup.v2)}, "
+            f"seviyeler V₁ = {_volts(v1)} ve V₂ = {_volts(v2)}, "
             f"f = {eng(setup.frequency, 'Hz')}, periyot T = 1/f = {eng(setup.period, 's')}."
         )
     else:
-        off_txt = f", ofset {_volts(setup.offset)}" if abs(setup.offset) > 1e-12 else ""
+        offset = sign * setup.offset
+        off_txt = f", ofset {_volts(offset)}" if abs(offset) > 1e-12 else ""
         src_desc = (
             f"Giriş kaynağı {setup.source.id}: {shape_tr} dalga, "
             f"tepe değeri V_m = {_volts(setup.amplitude)}{off_txt}, "
             f"f = {eng(setup.frequency, 'Hz')}, periyot T = 1/f = {eng(setup.period, 's')}."
         )
     s1.add("text", src_desc)
+    if cl.source_reversed:
+        if setup.shape == "SQUARE":
+            s1.add(
+                "text",
+                f"{setup.source.id} ters bağlı: giriş düğümündeki gerilim kaynak değerinin tersidir, "
+                f"seviyeler {_volts(v1)} ve {_volts(v2)}.",
+            )
+        else:
+            s1.add(
+                "text",
+                f"{setup.source.id} ters bağlı: giriş düğümündeki gerilim kaynak değerinin tersidir "
+                f"(v_i = {MINUS}kaynak gerilimi).",
+            )
     if bias is not None:
         s1.add(
             "text",
