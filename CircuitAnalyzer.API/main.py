@@ -290,6 +290,7 @@ def analyze_circuit(
             target_probes=probes if probes else None,
             warnings=warnings,
             power_factor_target=request.power_factor_target,
+            reciprocity_target=request.reciprocity_target,
         )
 
     # Tekil devre: sonuç yok, tek Türkçe açıklamayla "Devre çözülemedi"
@@ -659,6 +660,7 @@ def llm_ask(request: LlmAskRequest):
             analysis_type=request.analysis_type, thevenin_terminals=request.thevenin_terminals,
             warnings=[],
             power_factor_target=request.power_factor_target,
+            reciprocity_target=request.reciprocity_target,
         )
     # Çözülemeyen devre: model sonuçsuz kalır ve sayı uydurur; /analyze ile aynı açıklama
     unsolvable = next((m for m in solve_errors if m.startswith(UNSOLVABLE_PREFIX)), None)

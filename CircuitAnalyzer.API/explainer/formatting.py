@@ -14,7 +14,7 @@ Eksi işareti olarak Unicode "−" kullanılır (tire ile karışmasın).
 import cmath
 import math
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Union
+from typing import List, Union
 
 Number = Union[int, float, complex]
 
@@ -72,6 +72,28 @@ def eng(value: float, unit: str, digits: int = 4) -> str:
         return f"0 {unit}".strip()
     scale, prefix = _prefix_for(abs(value))
     return f"{num(value / scale, digits)} {prefix}{unit}".strip()
+
+
+def eng_group(values, units, digits: int = 4) -> List[str]:
+    """Aynı satırda yan yana duran değerleri TEK önekle yazar (kitaplardaki gibi):
+    eng_group([1979, 194.6, 1988], ["W", "VAR", "VA"]) → ['1,979 kW', '0,1946 kVAR', '1,988 kVA'].
+    Önek, en büyük değere göre seçilir. `units` tek bir metinse hepsine uygulanır."""
+    vals = list(values)
+    if isinstance(units, str):
+        units = [units] * len(vals)
+    finite = [abs(v) for v in vals
+              if v is not None and not (isinstance(v, float) and (math.isnan(v) or math.isinf(v)))
+              and abs(v) >= 1e-15]
+    if not finite:
+        return [eng(v, u, digits) for v, u in zip(vals, units)]
+    scale, prefix = _prefix_for(max(finite))
+    out = []
+    for v, u in zip(vals, units):
+        if v is None or (isinstance(v, float) and (math.isnan(v) or math.isinf(v))) or abs(v) < 1e-15:
+            out.append(eng(v, u, digits))
+        else:
+            out.append(f"{num(v / scale, digits)} {prefix}{u}".strip())
+    return out
 
 
 def shown_digits(operands, combine, exact: float, max_digits: int = 8) -> int:

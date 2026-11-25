@@ -289,7 +289,7 @@ public class PrintOutputTests
         Assert.Contains("cos φ = 0,8 geri", power.Caption);
 
         var leading = PrintContent.PowerTriangleCaption(new PowerSummaryDto { P = 1000, Q = -750, S = 1250, Pf = 0.8, PfType = "leading" });
-        Assert.Contains("Q = −750 VAR", leading);
+        Assert.Contains("Q = −0,75 kVAR", leading);   // P, Q, S tek önekle
         Assert.DoesNotContain("-", leading);
 
         var tr = PrintContent.Figures(TransientResponse()).Single();

@@ -53,7 +53,7 @@ public class PowerMethodTests
             var panel = new AnalysisPanel();
             panel.SetAnalysisType(AnalysisTypes.Power);
 
-            Assert.Equal(8, panel.CmbAnalysisType.SelectedIndex);
+            Assert.Equal(9, panel.CmbAnalysisType.SelectedIndex);
             Assert.Equal(Visibility.Collapsed, panel.RowTerminals.Visibility);
             Assert.Equal(Visibility.Visible, panel.RowPowerFactorTarget.Visibility);
 
@@ -120,7 +120,7 @@ public class PowerMethodTests
             var panel2 = new AnalysisPanel();
             panel2.RestoreAnalysisSettings(settings);
 
-            Assert.Equal(8, panel2.CmbAnalysisType.SelectedIndex);
+            Assert.Equal(9, panel2.CmbAnalysisType.SelectedIndex);
             Assert.Equal("0,95", panel2.TxtPowerFactorTarget.Text);
             Assert.Equal(AnalysisTypes.Power, panel2.GetAnalysisSettings().Type);
             Assert.Equal("0,95", panel2.GetAnalysisSettings().PowerFactorTarget);
@@ -278,7 +278,7 @@ public class PowerMethodTests
                 P = 1000, Q = 500, S = 1118.03, Pf = 0.894, PfType = "lagging", PhiDeg = 26.56
             });
             Assert.Contains("P = 1 kW", view.TxtSummary.Text);
-            Assert.Contains("Q = 500 VAR", view.TxtSummary.Text);
+            Assert.Contains("Q = 0,5 kVAR", view.TxtSummary.Text);   // P, Q, S tek önekle
             Assert.Contains("geri", view.TxtSummary.Text);
 
             // 2. leading

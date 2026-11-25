@@ -37,18 +37,19 @@ public class AnalysisMethodListTests
     [InlineData(3, "Çevre Akımları", AnalysisTypes.Mesh, false)]
     [InlineData(4, "Süperpozisyon", AnalysisTypes.Superposition, false)]
     [InlineData(5, "Millman", AnalysisTypes.Millman, false)]
-    [InlineData(6, "Kaynak Dönüşümü", AnalysisTypes.SourceTransform, true)]
-    [InlineData(7, "Geçici Durum (Anahtar)", AnalysisTypes.Transient, false)]
-    [InlineData(8, "Güç ve Güç Katsayısı", AnalysisTypes.Power, false)]
-    [InlineData(9, "Rezonans", AnalysisTypes.Resonance, false)]
-    [InlineData(10, "Transformatör", AnalysisTypes.Transformer, false)]
-    [InlineData(11, "Üç Faz", AnalysisTypes.ThreePhase, false)]
+    [InlineData(6, "Karşıtlık", AnalysisTypes.Reciprocity, false)]
+    [InlineData(7, "Kaynak Dönüşümü", AnalysisTypes.SourceTransform, true)]
+    [InlineData(8, "Geçici Durum (Anahtar)", AnalysisTypes.Transient, false)]
+    [InlineData(9, "Güç ve Güç Katsayısı", AnalysisTypes.Power, false)]
+    [InlineData(10, "Rezonans", AnalysisTypes.Resonance, false)]
+    [InlineData(11, "Transformatör", AnalysisTypes.Transformer, false)]
+    [InlineData(12, "Üç Faz", AnalysisTypes.ThreePhase, false)]
     public void ComboItem_MapsToApiTypeAndTerminalsRow(int index, string label, string apiType, bool showsTerminals)
     {
         RunOnSta(() =>
         {
             var panel = new AnalysisPanel();
-            Assert.Equal(12, panel.CmbAnalysisType.Items.Count);
+            Assert.Equal(13, panel.CmbAnalysisType.Items.Count);
             Assert.Equal(label, (panel.CmbAnalysisType.Items[index] as ComboBoxItem)?.Content as string);
 
             panel.CmbAnalysisType.SelectedIndex = index;
@@ -63,6 +64,7 @@ public class AnalysisMethodListTests
     public void NewMethods_ApiTypeNames_MatchPython()
     {
         Assert.Equal("MILLMAN", AnalysisTypes.Millman);
+        Assert.Equal("RECIPROCITY", AnalysisTypes.Reciprocity);
         Assert.Equal("SOURCE_TRANSFORM", AnalysisTypes.SourceTransform);
         Assert.Equal("TRANSIENT", AnalysisTypes.Transient);
         Assert.Equal("POWER", AnalysisTypes.Power);
@@ -78,7 +80,7 @@ public class AnalysisMethodListTests
         {
             var panel = new AnalysisPanel();
             panel.SetAnalysisType(AnalysisTypes.Transient);
-            Assert.Equal(7, panel.CmbAnalysisType.SelectedIndex);
+            Assert.Equal(8, panel.CmbAnalysisType.SelectedIndex);
 
             Assert.True(panel.TryGetOptions(out var opt, out var err), err);
             Assert.Equal(AnalysisTypes.Transient, opt!.AnalysisType);
@@ -92,7 +94,7 @@ public class AnalysisMethodListTests
         {
             var panel = new AnalysisPanel();
             panel.SetAnalysisType(AnalysisTypes.SourceTransform);
-            Assert.Equal(6, panel.CmbAnalysisType.SelectedIndex);
+            Assert.Equal(7, panel.CmbAnalysisType.SelectedIndex);
 
             // Terminal seçilmeden Thevenin gibi hata verir
             Assert.False(panel.TryGetOptions(out var none, out var err));
@@ -130,7 +132,7 @@ public class AnalysisMethodListTests
         {
             var panel = new AnalysisPanel();
             panel.SetAnalysisType(AnalysisTypes.ThreePhase);
-            Assert.Equal(11, panel.CmbAnalysisType.SelectedIndex);
+            Assert.Equal(12, panel.CmbAnalysisType.SelectedIndex);
 
             Assert.True(panel.TryGetOptions(out var opt, out var err), err);
             Assert.Equal(AnalysisTypes.ThreePhase, opt!.AnalysisType);
@@ -143,7 +145,7 @@ public class AnalysisMethodListTests
         RunOnSta(() =>
         {
             var panel = new AnalysisPanel();
-            foreach (var type in new[] { AnalysisTypes.Millman, AnalysisTypes.SourceTransform, AnalysisTypes.Resonance, AnalysisTypes.Transformer, AnalysisTypes.ThreePhase })
+            foreach (var type in new[] { AnalysisTypes.Millman, AnalysisTypes.Reciprocity, AnalysisTypes.SourceTransform, AnalysisTypes.Resonance, AnalysisTypes.Transformer, AnalysisTypes.ThreePhase })
             {
                 panel.RestoreAnalysisSettings(new CircuitDocument.AnalysisData { Type = type });
                 Assert.Equal(type, panel.GetAnalysisSettings().Type);

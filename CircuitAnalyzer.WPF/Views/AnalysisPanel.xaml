@@ -46,6 +46,7 @@
                         <ComboBoxItem Content="Çevre Akımları"/>
                         <ComboBoxItem Content="Süperpozisyon"/>
                         <ComboBoxItem Content="Millman"/>
+                        <ComboBoxItem Content="Karşıtlık"/>
                         <ComboBoxItem Content="Kaynak Dönüşümü"/>
                         <ComboBoxItem Content="Geçici Durum (Anahtar)"/>
                         <ComboBoxItem Content="Güç ve Güç Katsayısı" ToolTip="Devrenin aktif (P), reaktif (Q) ve görünür (S) gücü, güç faktörü ve kompanzasyon hesabı"/>
@@ -199,6 +200,20 @@
                                Style="{DynamicResource Text.Caption}"
                                Margin="0,0,0,2"/>
                     <TextBox x:Name="TxtPowerFactorTarget"/>
+                </StackPanel>
+
+                <!-- Ölçülen eleman (Karşıtlık teoremi için) -->
+                <StackPanel x:Name="RowReciprocityTarget"
+                            Margin="0,8,0,0"
+                            Visibility="Collapsed">
+                    <TextBlock x:Name="TxtReciprocityTargetLabel"
+                               Text="Ölçülen eleman"
+                               Style="{DynamicResource Text.Caption}"
+                               Margin="0,0,0,2"
+                               ToolTip="Kaynağın taşınacağı ikinci kol: bu elemanın akımı (akım kaynağında gerilimi) ölçülür."/>
+                    <ComboBox x:Name="CmbReciprocityTarget"
+                              AutomationProperties.Name="Ölçülen eleman"
+                              ToolTip="Kaynağın taşınacağı ikinci kol: bu elemanın akımı (akım kaynağında gerilimi) ölçülür."/>
                 </StackPanel>
 
                 <!-- Değer Gösterimi (AC için: Etkin / Tepe) -->

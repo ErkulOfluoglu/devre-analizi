@@ -24,6 +24,7 @@ namespace CircuitAnalyzer.WPF.Services
         public const string Mesh = "MESH";
         public const string Superposition = "SUPERPOSITION";
         public const string Millman = "MILLMAN";
+        public const string Reciprocity = "RECIPROCITY";
         public const string SourceTransform = "SOURCE_TRANSFORM";
         public const string Transient = "TRANSIENT";
         public const string Power = "POWER";
@@ -47,6 +48,9 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("thevenin_terminals")] public TerminalsDto? TheveninTerminals { get; set; }
         [JsonPropertyName("value_display")] public string ValueDisplay { get; set; } = "PEAK";
         [JsonPropertyName("power_factor_target")] public double? PowerFactorTarget { get; set; }
+        [JsonPropertyName("reciprocity_target")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ReciprocityTarget { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -453,6 +457,9 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("thevenin_terminals")] public TerminalsDto? TheveninTerminals { get; set; }
         [JsonPropertyName("value_display")] public string ValueDisplay { get; set; } = "PEAK";
         [JsonPropertyName("power_factor_target")] public double? PowerFactorTarget { get; set; }
+        [JsonPropertyName("reciprocity_target")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ReciprocityTarget { get; set; }
         [JsonPropertyName("question")] public string Question { get; set; } = "";
         /// <summary>Boşsa sunucu seçer (önerilen ya da ilk kurulu model).</summary>
         [JsonPropertyName("model")] public string? Model { get; set; }
@@ -474,6 +481,7 @@ namespace CircuitAnalyzer.WPF.Services
             TheveninTerminals = analysis.TheveninTerminals,
             ValueDisplay = analysis.ValueDisplay,
             PowerFactorTarget = analysis.PowerFactorTarget,
+            ReciprocityTarget = analysis.ReciprocityTarget,
             Question = question,
         };
     }
@@ -734,6 +742,37 @@ namespace CircuitAnalyzer.WPF.Services
                 return $"0 {unit}";
             var (scale, prefix) = PrefixFor(Math.Abs(value));
             return $"{Number(value / scale, significant)} {prefix}{unit}";
+        }
+
+        /// <summary>
+        /// Aynı satırda yan yana duran değerleri TEK önekle yazar (kitaplardaki gibi):
+        /// (1979 W, 194,6 VAR, 1988 VA) → "1,979 kW", "0,1946 kVAR", "1,988 kVA".
+        /// Önek en büyük değere göre seçilir; sıfır ve geçersiz değerler tek başına yazılır.
+        /// </summary>
+        public static string[] FormatGroup(IReadOnlyList<double> values, IReadOnlyList<string> units, int significant = 4)
+        {
+            double max = 0;
+            foreach (var v in values)
+            {
+                if (!double.IsNaN(v) && !double.IsInfinity(v))
+                    max = Math.Max(max, Math.Abs(v));
+            }
+            var result = new string[values.Count];
+            if (max < 1e-15)
+            {
+                for (int i = 0; i < values.Count; i++)
+                    result[i] = Format(values[i], units[i], significant);
+                return result;
+            }
+            var (scale, prefix) = PrefixFor(max);
+            for (int i = 0; i < values.Count; i++)
+            {
+                double v = values[i];
+                result[i] = double.IsNaN(v) || double.IsInfinity(v) || Math.Abs(v) < 1e-15
+                    ? Format(v, units[i], significant)
+                    : $"{Number(v / scale, significant)} {prefix}{units[i]}";
+            }
+            return result;
         }
 
         /// <summary>DC: "8 V"; AC: "95.3∠7.984° mA" (kutupsal — öğrenci genlik/faz okur).</summary>

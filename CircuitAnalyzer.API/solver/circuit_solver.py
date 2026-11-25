@@ -55,6 +55,7 @@ from explainer.narrative import PortCircuit, PortExtras, build_explanation, port
 from solver.frequency_check import check_source_frequencies
 from solver.mesh import analyze_meshes
 from solver.resonance import ResonanceNotApplicable, analyze_resonance, verify_with_lcapy
+from solver.reciprocity import ReciprocityAnalysis, reciprocity_pair, source_phasor
 from solver.transformer import analyze_transformer
 from solver.three_phase import (
     analyze_three_phase, expand_three_phase, has_three_phase, has_wattmeters,
@@ -491,6 +492,7 @@ def solve_circuit(
     warnings: Optional[List[str]] = None,
     value_display: Optional[Union[str, object]] = None,
     power_factor_target: Optional[float] = None,
+    reciprocity_target: Optional[str] = None,
 ) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
     """
     Devreyi çözer (anahtarlı devreler için giriş noktası).
@@ -509,17 +511,22 @@ def solve_circuit(
     if analysis_type == AnalysisType.TRANSIENT and not has_transformers(parsed):
         return _solve_transient(parsed, mode, frequency, target_probes, warnings)
     if has_switches(parsed) and not parsed.errors:
+        # Karşıtlık teoremi anahtarsız devre ister: sebebi _solve_core'a önceden verilir
+        switch_block = ("devrede anahtar var; karşıtlık teoremi anahtarsız devrelerde uygulanır."
+                        if analysis_type == AnalysisType.RECIPROCITY else None)
         results, steps, errors = _solve_core(
             circuit_at_time(parsed, "after"), mode, frequency, analysis_type,
             thevenin_terminals, target_probes, warnings,
-            power_factor_target=power_factor_target)
+            power_factor_target=power_factor_target,
+            reciprocity_target=reciprocity_target, reciprocity_block=switch_block)
         results.explanation.insert(0, ExplanationSection(
             title="Anahtar Konumu",
             blocks=[ExplanationBlock(kind="note", text=SWITCH_NOTE)]))
         return results, steps, errors
     return _solve_core(parsed, mode, frequency, analysis_type,
                        thevenin_terminals, target_probes, warnings,
-                       power_factor_target=power_factor_target)
+                       power_factor_target=power_factor_target,
+                       reciprocity_target=reciprocity_target)
 
 
 def _solve_three_phase(
@@ -547,10 +554,14 @@ def _solve_three_phase(
     exp = expand_three_phase(parsed, is_dc, frequency)
     freq = exp.frequency or frequency
     core_type = (AnalysisType.NODAL if three or analysis_type in (
-        AnalysisType.THREE_PHASE, AnalysisType.TRANSFORMER) else analysis_type)
+        AnalysisType.THREE_PHASE, AnalysisType.TRANSFORMER, AnalysisType.RECIPROCITY)
+        else analysis_type)
     results, steps, errors = solve_circuit(
         exp.flat, mode, freq, core_type, None if three else thevenin_terminals, target_probes,
         warnings, power_factor_target=None if three else power_factor_target)
+    if analysis_type == AnalysisType.RECIPROCITY:
+        errors.append("ℹ Karşıtlık teoremi uygulanamadı: devrede üç fazlı eleman ya da wattmetre "
+                      "var; sonuçlar Düğüm Gerilimleri yöntemiyle verildi.")
     if any(m.startswith(UNSOLVABLE_PREFIX) for m in errors) or not results.node_voltages:
         return results, steps, errors
 
@@ -779,6 +790,8 @@ def _solve_core(
     target_probes: Optional[List[ProbeTarget]] = None,
     warnings: Optional[List[str]] = None,
     power_factor_target: Optional[float] = None,
+    reciprocity_target: Optional[str] = None,
+    reciprocity_block: Optional[str] = None,
 ) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
     """
     Devreyi çözer ve yapılandırılmış sonuç döndürür.
@@ -795,12 +808,14 @@ def _solve_core(
         parsed: Ayrıştırılmış devre
         mode: DC, AC_TIME veya AC_PHASOR
         frequency: AC frekansı (Hz) — AC modlarında zorunlu
-        analysis_type: NODAL, MESH, THEVENIN, NORTON, SUPERPOSITION, MILLMAN, SOURCE_TRANSFORM, TRANSIENT, POWER, RESONANCE
+        analysis_type: NODAL, MESH, THEVENIN, NORTON, SUPERPOSITION, MILLMAN, SOURCE_TRANSFORM, TRANSIENT, POWER, RESONANCE, RECIPROCITY
         thevenin_terminals: Thevenin port tanımı (iki düğüm)
         target_probes: Ölçüm probları
         warnings: Verilirse frekans/süperpozisyon uyarıları bu listeye
             eklenir (API yanıtındaki 'warnings'); verilmezse 'errors'e.
         power_factor_target: POWER yönteminde hedef cos φ₂ (0 < cos φ₂ ≤ 1)
+        reciprocity_target: RECIPROCITY yönteminde ikinci kolun elemanı (boşsa son R/L/C)
+        reciprocity_block: RECIPROCITY'nin uygulanamama sebebi çağıran tarafça biliniyorsa (ör. anahtar)
 
     Returns:
         (AnalysisResults, List[SolutionStep], List[str])
@@ -1185,6 +1200,24 @@ def _solve_core(
     if power_inapplicable_reason:
         errors.append(f"ℹ Güç ve Güç Katsayısı yöntemi uygulanamadı: {power_inapplicable_reason}")
 
+    # ── Adım 6.67: Karşıtlık teoremi (RECIPROCITY yöntemi) — ikinci çözüm ──
+    reciprocity_analysis: Optional[ReciprocityAnalysis] = None
+    reciprocity_inapplicable_reason: Optional[str] = None
+    if analysis_type == AnalysisType.RECIPROCITY:
+        if reciprocity_block:
+            reciprocity_inapplicable_reason = reciprocity_block
+        else:
+            try:
+                reciprocity_analysis, reciprocity_inapplicable_reason = _solve_reciprocity(
+                    parsed, mode, is_dc, frequency, reciprocity_target, raw_nodes, raw_currents)
+            except Exception as e:      # beklenmeyen hata: yanlış sonuç yerine dürüst yedek
+                turkish_error(e, "karşıtlık teoremi")   # ham hata stderr'e yazılır
+                reciprocity_analysis = None
+                reciprocity_inapplicable_reason = (
+                    "karşıtlık teoremi hesaplanırken beklenmeyen bir hata oluştu.")
+        if reciprocity_inapplicable_reason:
+            errors.append(f"ℹ Karşıtlık teoremi uygulanamadı: {reciprocity_inapplicable_reason}")
+
     # ── Adım 6.7: Bağımlı kaynaklı Thevenin/Norton için ek sayılar ──
     port_extras = None
     if (has_dependent and thevenin_terminals is not None
@@ -1220,6 +1253,8 @@ def _solve_core(
             resonance_inapplicable_reason=resonance_inapplicable_reason,
             transformer_analysis=transformer_analysis,
             requested_type=requested_type,
+            reciprocity_analysis=reciprocity_analysis,
+            reciprocity_inapplicable_reason=reciprocity_inapplicable_reason,
         )
     except Exception as e:
         errors.append(f"ℹ Anlatım oluşturulamadı: {turkish_error(e, 'anlatım')}")
@@ -2030,6 +2065,98 @@ def _solve_port_extras(
 
 
 # ═══════════════════════════════════════════════════════
+#  KARŞITLIK TEOREMİ (RECIPROCITY yöntemi): ikinci çözüm
+# ═══════════════════════════════════════════════════════
+
+def _fresh_node(parsed: ParsedCircuit, base: str) -> str:
+    used = {n for e in parsed.elements for n in element_nodes(e)}
+    name = base
+    while name in used:
+        name += "_"
+    return name
+
+
+def _solve_reciprocity(
+    parsed: ParsedCircuit, mode: AnalysisMode, is_dc: bool, frequency: Optional[float],
+    target_id: Optional[str], raw_nodes: dict, raw_currents: dict,
+) -> Tuple[Optional[ReciprocityAnalysis], str]:
+    """
+    Kaynak ile hedef elemanı yer değiştirip devreyi ikinci kez çözer; (analiz, '') ya da
+    (None, Türkçe sebep) döndürür. Birinci durum özgün devrenin zaten çözülmüş sonuçlarıdır.
+
+    Gerilim kaynağı E (a+, b−), hedef Y (c, d):
+      1. durum: I₁ = Y'nin c → d eleman akımı.
+      2. durum: E yerine 0 V'luk bir kaynak (ampermetre) konur, Y (x, d)'ye taşınır, x gizli
+         düğümdür; E'nin bir kopyası (+ ucu x, − ucu c) Y ile seri girer. I₂ = devreye a ucundan
+         giren akım = −(ampermetrenin eleman akımı).
+    Akım kaynağı I (a, b), hedef Y (c, d):
+      1. durum: V₁ = V_c − V_d.  2. durum: I silinir (açık devre), kopyası (c, d) arasına
+      konur; V₂ = V_a − V_b.
+    Sayılar uyuşmazsa ya da ikinci devre çözülemezse (ör. yalnızca bobinlerden oluşan çevrede
+    DC gerilim kaynağı) (None, sebep) döner. Gizli düğüm ve yardımcı kaynak adları
+    hiçbir sonuca ya da metne girmez.
+    """
+    pair, why = reciprocity_pair(parsed, mode, target_id)
+    if pair is None:
+        return None, why
+    src, tgt = pair
+    voltage_form = src.element_type in VOLTAGE_SOURCES
+    a, b = src.node_positive, src.node_negative
+    c, d = tgt.node_positive, tgt.node_negative
+
+    if voltage_form:
+        if tgt.id not in raw_currents:
+            return None, f"{tgt.id} elemanının akımı bulunamadı."
+        case1 = complex(raw_currents[tgt.id])
+    else:
+        case1 = complex(raw_nodes.get(c, 0)) - complex(raw_nodes.get(d, 0))
+
+    sub = copy.deepcopy(parsed)
+    sub.probes = []
+    ammeter = None
+    if voltage_form:
+        x = _fresh_node(parsed, "_rcp_x")
+        ammeter = ParsedElement(id=_fresh_id(parsed, "Vrcp_amp"), element_type=ElementType.DC_SOURCE,
+                                node_positive=a, node_negative=b, value=0.0)
+        moved = copy.deepcopy(src)
+        moved.id = _fresh_id(parsed, "Vrcp_src")
+        moved.node_positive, moved.node_negative = x, c
+        new_elements = []
+        for e in sub.elements:
+            if e.id == src.id:
+                new_elements.append(ammeter)
+            elif e.id == tgt.id:
+                e.node_positive = x
+                new_elements.append(e)
+            else:
+                new_elements.append(e)
+        new_elements.append(moved)
+        sub.elements = new_elements
+    else:
+        moved = copy.deepcopy(src)
+        moved.id = _fresh_id(parsed, "Irp_src")
+        moved.node_positive, moved.node_negative = c, d
+        sub.elements = [e for e in sub.elements if e.id != src.id] + [moved]
+
+    cct = make_circuit(sub, is_dc, frequency, to_lcapy_netlist(sub, frequency))
+    sense = lcapy_sense_map(sub)
+    if voltage_form:
+        case2 = -complex(lcapy_element_current(cct, ammeter, sense, is_dc, frequency))
+    else:
+        def volt(n: str) -> complex:
+            return 0j if n == "0" else complex(_extract_numeric(cct[n].V, is_dc, frequency))
+        case2 = volt(a) - volt(b)
+
+    if not (cmath.isfinite(case1) and cmath.isfinite(case2)):
+        return None, "ikinci durumun çözümünde sonsuz ya da tanımsız bir değer çıktı."
+    if abs(case1 - case2) > 1e-6 * max(abs(case1), abs(case2)) + 1e-12:
+        return None, "kaynak taşınınca bulunan değer ilk durumla uyuşmadı (devre karşıtlık koşullarını sağlamıyor)."
+    return ReciprocityAnalysis(
+        form="current" if voltage_form else "voltage", source=src, target=tgt,
+        source_value=source_phasor(src), case1=case1, case2=case2), ""
+
+
+# ═══════════════════════════════════════════════════════
 #  GÜÇ ANALİZİ (P, Q, S, cos φ)
 # ═══════════════════════════════════════════════════════
 
@@ -2467,7 +2594,8 @@ def _solve_transformer_fallback(
     """
     reduced = without_transformers(parsed)
     fb_type = (AnalysisType.NODAL
-               if requested_type in (AnalysisType.TRANSFORMER, AnalysisType.TRANSIENT)
+               if requested_type in (AnalysisType.TRANSFORMER, AnalysisType.TRANSIENT,
+                                     AnalysisType.RECIPROCITY)
                else requested_type)
     results, steps, errors = _solve_core(
         reduced, mode, frequency, fb_type, thevenin_terminals, target_probes, warnings,

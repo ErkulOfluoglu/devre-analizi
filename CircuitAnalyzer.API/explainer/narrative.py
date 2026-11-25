@@ -30,7 +30,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from explainer.formatting import (
-    MINUS, ek, eng, node_ek, node_name, node_v, num, paren, polar, rect, shown_digits,
+    MINUS, ek, eng, eng_group, node_ek, node_name, node_v, num, paren, polar, rect, shown_digits,
 )
 from explainer.cramer import cramer3, exact_fmt, integer_rows, is_integral_row
 from explainer.step_generator import _node_groups, _source_value
@@ -165,6 +165,8 @@ class _Ctx:
     port: Optional["PortExtras"] = None
     # Norton: kısa devre akımının türetmesi In adımında gösterildi (Rn adımı tekrar etmez)
     isc_derived: bool = False
+    # Karşıtlık teoremi: çözücünün ikinci çözümünden gelen ReciprocityAnalysis (tanıtımda kullanılır)
+    reciprocity: Optional[object] = None
 
     # ── Eleman bilgileri ──
 
@@ -268,6 +270,8 @@ def build_explanation(
     resonance_inapplicable_reason: Optional[str] = None,
     transformer_analysis=None,
     requested_type: Optional[AnalysisType] = None,
+    reciprocity_analysis=None,
+    reciprocity_inapplicable_reason: Optional[str] = None,
 ) -> List[ExplanationSection]:
     """
     Çözümün Türkçe anlatımını üretir. Çözüm başarısızsa boş liste döner.
@@ -370,6 +374,27 @@ def build_explanation(
         )
         analysis_type = ctx.analysis_type = AnalysisType.NODAL
         method_builders = (lambda c: [fallback],) + method_builders
+
+    if analysis_type == AnalysisType.RECIPROCITY:
+        # Döngüsel içe aktarmayı önlemek için yerel import
+        from explainer.reciprocity_narrative import build_reciprocity
+        if reciprocity_analysis is not None:
+            extra, why = build_reciprocity(ctx, reciprocity_analysis)
+        else:
+            extra, why = None, (reciprocity_inapplicable_reason
+                                or "karşıtlık teoremi bu devreye uygulanamadı.")
+        if extra is not None:
+            ctx.reciprocity = reciprocity_analysis
+            method_builders = (lambda c: extra,)
+        else:
+            fallback = _Section("Karşıtlık Teoremi")
+            fallback.note(
+                f"Bu devrede karşıtlık teoremi uygulanamadı: {why} "
+                "“Düğüm Gerilimleri” yöntemini seçebilirsiniz; aynı sonuçları şimdi o "
+                "yöntemle anlatıyoruz."
+            )
+            analysis_type = ctx.analysis_type = AnalysisType.NODAL
+            method_builders = (lambda c: [fallback],) + method_builders
 
     if analysis_type in (AnalysisType.MILLMAN, AnalysisType.SOURCE_TRANSFORM):
         # Döngüsel içe aktarmayı önlemek için yerel import
@@ -597,6 +622,15 @@ def _intro(ctx: _Ctx) -> List[_Section]:
             "Millman teoremiyle çözeceğiz: devre, iki düğüm arasına paralel bağlı kollar olarak "
             "ele alınır. Önce bu iki düğüm arasındaki gerilimi tek bir formülle bulacağız, sonra her "
             "kolun akımını Ohm yasasıyla hesaplayacağız."
+        )
+    elif ctx.analysis_type == AnalysisType.RECIPROCITY and ctx.reciprocity is not None:
+        ra = ctx.reciprocity
+        s.text(
+            f"Karşıtlık teoremiyle çözeceğiz: {ra.source.id} kaynağını {ra.target.id} koluna "
+            "taşıyıp ölçülen "
+            + ("akımın" if ra.form == "current" else "gerilimin")
+            + " değişmediğini göstereceğiz. Önce kaynak kendi yerindeyken, sonra "
+            f"{ra.target.id} koluna taşınmışken devreyi inceleyeceğiz."
         )
     elif ctx.analysis_type == AnalysisType.SOURCE_TRANSFORM and ctx.terminals:
         a, b = ctx.terminals.node_positive, ctx.terminals.node_negative
@@ -2019,12 +2053,12 @@ def _power(ctx: _Ctx) -> List[_Section]:
         if ctx.is_dc:
             if t == ElementType.RESISTOR:
                 s.math(f"P_{name} = I²·R = ({eng(i_mag, 'A')})² · {eng(e.value, 'Ω')} = {eng(ep.active_power, 'W')}")
-                absorbed_terms.append(eng(ep.active_power, 'W'))
+                absorbed_terms.append(ep.active_power)
             elif t in (ElementType.CAPACITOR, ElementType.INDUCTOR):
                 s.math(f"P_{name} = 0 (DC'de {'açık' if t == ElementType.CAPACITOR else 'kısa'} devre, güç harcamaz)")
             else:
                 s.math(f"P_{name} = {eng(ep.active_power, 'W')}")
-                absorbed_terms.append(eng(ep.active_power, 'W'))
+                absorbed_terms.append(ep.active_power)
         else:
             z = ctx.impedance(e)
             if ctx.is_rms:
@@ -2085,9 +2119,11 @@ def _power(ctx: _Ctx) -> List[_Section]:
     sup = complex(pw.total_supplied.real, pw.total_supplied.imaginary)
     absb = complex(pw.total_absorbed.real, pw.total_absorbed.imaginary)
     if ctx.is_dc:
-        terms = " + ".join(absorbed_terms) if len(absorbed_terms) > 1 else ""
-        s.check(f"Güç dengesi: kaynakların (net) verdiği {eng(sup.real, 'W')} = elemanların harcadığı "
-                f"{(terms + ' = ') if terms else ''}{eng(absb.real, 'W')} ✓"
+        # Denge satırı tek önekle yazılır ("10,27 W + 394,7 mW" yerine "10,27 W + 0,3947 W")
+        sup_txt, *term_txts, absb_txt = eng_group([sup.real, *absorbed_terms, absb.real], "W")
+        terms = " + ".join(term_txts) if len(term_txts) > 1 else ""
+        s.check(f"Güç dengesi: kaynakların (net) verdiği {sup_txt} = elemanların harcadığı "
+                f"{(terms + ' = ') if terms else ''}{absb_txt} ✓"
                 if _close(sup, absb, 1e-6) else
                 f"Güç dengesi: verilen {eng(sup.real, 'W')}, harcanan {eng(absb.real, 'W')}")
     else:

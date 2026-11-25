@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using CircuitAnalyzer.WPF.Controls;
+using CircuitAnalyzer.WPF.Models;
 using CircuitAnalyzer.WPF.Services;
 
 namespace CircuitAnalyzer.WPF.Views;
@@ -244,6 +245,43 @@ public partial class AnalysisPanel : UserControl
         }
     }
 
+    /// <summary>Karşıtlık teoreminde ölçülebilecek pasif elemanların (R, L, C) kimliklerini eleman sırasıyla döndürür.</summary>
+    internal static List<string> ReciprocityTargetIds(IEnumerable<CircuitElement> elements) =>
+        elements
+            .Where(e => e is Resistor or Inductor or Capacitor && !string.IsNullOrWhiteSpace(e.Id))
+            .Select(e => e.Id)
+            .ToList();
+
+    /// <summary>Varsayılan karşıtlık hedefi: devredeki son R/L/C elemanın kimliği (yoksa null).</summary>
+    internal static string? DefaultReciprocityTarget(IEnumerable<CircuitElement> elements)
+    {
+        var ids = ReciprocityTargetIds(elements);
+        return ids.Count > 0 ? ids[^1] : null;
+    }
+
+    /// <summary>Karşıtlık hedefini seçer: önceki seçim listede varsa korur, yoksa son R/L/C elemana düşer.</summary>
+    internal static string? ResolveReciprocityTarget(IReadOnlyList<string> candidates, string? preferred)
+    {
+        if (candidates.Count == 0)
+            return null;
+        if (!string.IsNullOrEmpty(preferred) && candidates.Contains(preferred, StringComparer.Ordinal))
+            return preferred;
+        return candidates[^1];
+    }
+
+    public void SetAvailableReciprocityTargets(IEnumerable<CircuitElement> elements) =>
+        SetAvailableReciprocityTargetIds(ReciprocityTargetIds(elements));
+
+    public void SetAvailableReciprocityTargetIds(IReadOnlyList<string> targetIds)
+    {
+        if (CmbReciprocityTarget == null) return;
+
+        string? prev = GetSelectedTerminal(CmbReciprocityTarget);
+        var list = targetIds.ToList();
+        CmbReciprocityTarget.ItemsSource = list;
+        CmbReciprocityTarget.SelectedItem = ResolveReciprocityTarget(list, prev);
+    }
+
     public void SetAnalysisType(string analysisType, string? terminalPositive = null)
     {
         if (string.Equals(analysisType, AnalysisTypes.Thevenin, StringComparison.OrdinalIgnoreCase))
@@ -266,29 +304,33 @@ public partial class AnalysisPanel : UserControl
         {
             CmbAnalysisType.SelectedIndex = 5;
         }
-        else if (string.Equals(analysisType, AnalysisTypes.SourceTransform, StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(analysisType, AnalysisTypes.Reciprocity, StringComparison.OrdinalIgnoreCase))
         {
             CmbAnalysisType.SelectedIndex = 6;
         }
-        else if (string.Equals(analysisType, AnalysisTypes.Transient, StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(analysisType, AnalysisTypes.SourceTransform, StringComparison.OrdinalIgnoreCase))
         {
             CmbAnalysisType.SelectedIndex = 7;
         }
-        else if (string.Equals(analysisType, AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(analysisType, AnalysisTypes.Transient, StringComparison.OrdinalIgnoreCase))
         {
             CmbAnalysisType.SelectedIndex = 8;
         }
-        else if (string.Equals(analysisType, AnalysisTypes.Resonance, StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(analysisType, AnalysisTypes.Power, StringComparison.OrdinalIgnoreCase))
         {
             CmbAnalysisType.SelectedIndex = 9;
         }
-        else if (string.Equals(analysisType, AnalysisTypes.Transformer, StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(analysisType, AnalysisTypes.Resonance, StringComparison.OrdinalIgnoreCase))
         {
             CmbAnalysisType.SelectedIndex = 10;
         }
-        else if (string.Equals(analysisType, AnalysisTypes.ThreePhase, StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(analysisType, AnalysisTypes.Transformer, StringComparison.OrdinalIgnoreCase))
         {
             CmbAnalysisType.SelectedIndex = 11;
+        }
+        else if (string.Equals(analysisType, AnalysisTypes.ThreePhase, StringComparison.OrdinalIgnoreCase))
+        {
+            CmbAnalysisType.SelectedIndex = 12;
         }
         else
         {
@@ -297,6 +339,7 @@ public partial class AnalysisPanel : UserControl
 
         UpdateTerminalsVisibility();
         UpdatePowerFactorTargetVisibility();
+        UpdateReciprocityTargetVisibility();
 
         if (terminalPositive != null && CmbTerminalPositive.ItemsSource is IEnumerable<string> items && items.Contains(terminalPositive))
         {
@@ -324,6 +367,7 @@ public partial class AnalysisPanel : UserControl
             Frequency = TxtFrequency?.Text,
             ValueDisplay = ValueDisplay,
             PowerFactorTarget = TxtPowerFactorTarget?.Text,
+            ReciprocityTarget = GetSelectedTerminal(CmbReciprocityTarget),
         };
     }
 
@@ -339,6 +383,11 @@ public partial class AnalysisPanel : UserControl
             negItems.Contains(settings.TerminalNegative))
         {
             CmbTerminalNegative.SelectedItem = settings.TerminalNegative;
+        }
+        if (CmbReciprocityTarget?.ItemsSource is IEnumerable<string> recItems)
+        {
+            var candidates = recItems as IReadOnlyList<string> ?? recItems.ToList();
+            CmbReciprocityTarget.SelectedItem = ResolveReciprocityTarget(candidates, settings.ReciprocityTarget);
         }
         if (settings.Frequency != null && TxtFrequency != null)
         {
@@ -405,6 +454,7 @@ public partial class AnalysisPanel : UserControl
     {
         UpdateTerminalsVisibility();
         UpdatePowerFactorTargetVisibility();
+        UpdateReciprocityTargetVisibility();
         UpdateModeLabel();
     }
 
@@ -448,6 +498,18 @@ public partial class AnalysisPanel : UserControl
         RowPowerFactorTarget.Visibility = isPower ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private void UpdateReciprocityTargetVisibility()
+    {
+        if (RowReciprocityTarget == null) return;
+
+        string selectedText = (CmbAnalysisType.SelectedItem as ComboBoxItem)?.Content as string
+            ?? CmbAnalysisType.SelectedItem as string
+            ?? "";
+
+        bool isReciprocity = string.Equals(AnalysisTypeFromText(selectedText), AnalysisTypes.Reciprocity, StringComparison.OrdinalIgnoreCase);
+        RowReciprocityTarget.Visibility = isReciprocity ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     /// <summary>Yöntem listesindeki yazıdan API analiz türünü (AnalysisTypes) bulur.</summary>
     internal static string AnalysisTypeFromText(string selectedText)
     {
@@ -461,6 +523,8 @@ public partial class AnalysisPanel : UserControl
             return AnalysisTypes.Superposition;
         if (selectedText.Contains("Millman", StringComparison.OrdinalIgnoreCase))
             return AnalysisTypes.Millman;
+        if (string.Equals(selectedText, "Karşıtlık", StringComparison.Ordinal))
+            return AnalysisTypes.Reciprocity;
         if (selectedText.Contains("Kaynak Dönüşümü", StringComparison.OrdinalIgnoreCase))
             return AnalysisTypes.SourceTransform;
         if (selectedText.Contains("Geçici", StringComparison.OrdinalIgnoreCase))
@@ -595,7 +659,13 @@ public partial class AnalysisPanel : UserControl
             }
         }
 
-        options = new SolveOptions(analysisType, freq, pos, neg, ValueDisplay, powerFactorTarget);
+        string? reciprocityTarget = null;
+        if (string.Equals(analysisType, AnalysisTypes.Reciprocity, StringComparison.OrdinalIgnoreCase))
+        {
+            reciprocityTarget = GetSelectedTerminal(CmbReciprocityTarget);
+        }
+
+        options = new SolveOptions(analysisType, freq, pos, neg, ValueDisplay, powerFactorTarget, reciprocityTarget);
         return true;
     }
 
@@ -1436,9 +1506,12 @@ public partial class AnalysisPanel : UserControl
                 grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
                 string name = el.Role == "source" ? $"{el.ElementId} ⚡" : el.ElementId;
-                string pStr = EngFormat.Format(el.ActivePower, "W");
-                string qStr = EngFormat.Format(el.ReactivePower, "VAR");
-                string sStr = EngFormat.Format(el.ApparentPower, "VA");
+                // Bir satırdaki P, Q, S tek önekle ("950 W | 1,2 kVAR" yerine "0,95 kW | 1,2 kVAR")
+                var pqs = EngFormat.FormatGroup(
+                    new[] { el.ActivePower, el.ReactivePower, el.ApparentPower }, new[] { "W", "VAR", "VA" });
+                string pStr = pqs[0];
+                string qStr = pqs[1];
+                string sStr = pqs[2];
                 string pfStr;
                 if (el.PowerFactor.HasValue)
                 {

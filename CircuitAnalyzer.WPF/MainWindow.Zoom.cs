@@ -89,16 +89,12 @@ namespace CircuitAnalyzer.WPF
             }
         }
 
-        public void FitToCircuit()
+        /// <summary>
+        /// Çizimin tuval koordinatlarındaki kapsayıcı kutusu: elemanlar, teller ve görünen sonuç
+        /// etiketleri. "Sığdır", ilk açılış ve baskı aynı kutuyu kullanır (baskı etiketleri kesiyordu).
+        /// </summary>
+        internal (double MinX, double MinY, double MaxX, double MaxY) ContentBounds()
         {
-            if (_elements.Count == 0)
-            {
-                SetZoom(1.0);
-                CanvasScrollViewer.ScrollToHorizontalOffset(0);
-                CanvasScrollViewer.ScrollToVerticalOffset(0);
-                return;
-            }
-
             double minX = double.MaxValue, minY = double.MaxValue;
             double maxX = double.MinValue, maxY = double.MinValue;
 
@@ -136,6 +132,20 @@ namespace CircuitAnalyzer.WPF
                     maxY = Math.Max(maxY, r.Bottom);
                 }
             }
+            return (minX, minY, maxX, maxY);
+        }
+
+        public void FitToCircuit()
+        {
+            if (_elements.Count == 0)
+            {
+                SetZoom(1.0);
+                CanvasScrollViewer.ScrollToHorizontalOffset(0);
+                CanvasScrollViewer.ScrollToVerticalOffset(0);
+                return;
+            }
+
+            var (minX, minY, maxX, maxY) = ContentBounds();
 
             double vw = CanvasScrollViewer.ViewportWidth > 0 ? CanvasScrollViewer.ViewportWidth : CanvasScrollViewer.ActualWidth;
             double vh = CanvasScrollViewer.ViewportHeight > 0 ? CanvasScrollViewer.ViewportHeight : CanvasScrollViewer.ActualHeight;
@@ -162,43 +172,7 @@ namespace CircuitAnalyzer.WPF
                 return;
             }
 
-            double minX = double.MaxValue, minY = double.MaxValue;
-            double maxX = double.MinValue, maxY = double.MinValue;
-
-            foreach (var e in _elements)
-            {
-                minX = Math.Min(minX, e.Position.X);
-                minY = Math.Min(minY, e.Position.Y);
-                maxX = Math.Max(maxX, e.Position.X + 80);
-                maxY = Math.Max(maxY, e.Position.Y + 40);
-            }
-
-            foreach (var w in _wires)
-            {
-                minX = Math.Min(minX, Math.Min(w.StartPin.AbsolutePosition.X, w.EndPin.AbsolutePosition.X));
-                minY = Math.Min(minY, Math.Min(w.StartPin.AbsolutePosition.Y, w.EndPin.AbsolutePosition.Y));
-                maxX = Math.Max(maxX, Math.Max(w.StartPin.AbsolutePosition.X, w.EndPin.AbsolutePosition.X));
-                maxY = Math.Max(maxY, Math.Max(w.StartPin.AbsolutePosition.Y, w.EndPin.AbsolutePosition.Y));
-                foreach (var wp in w.Waypoints)
-                {
-                    minX = Math.Min(minX, wp.X);
-                    minY = Math.Min(minY, wp.Y);
-                    maxX = Math.Max(maxX, wp.X);
-                    maxY = Math.Max(maxY, wp.Y);
-                }
-            }
-
-            // Sağdaki sonuç etiketleri de görünsün (yalnız eleman kutuları sığınca etiketler kesiliyordu)
-            if (_overlay != null)
-            {
-                foreach (var r in _overlay.ItemBounds())
-                {
-                    minX = Math.Min(minX, r.Left);
-                    minY = Math.Min(minY, r.Top);
-                    maxX = Math.Max(maxX, r.Right);
-                    maxY = Math.Max(maxY, r.Bottom);
-                }
-            }
+            var (minX, minY, maxX, maxY) = ContentBounds();
 
             double vw = CanvasScrollViewer.ViewportWidth > 0 ? CanvasScrollViewer.ViewportWidth : CanvasScrollViewer.ActualWidth;
             double vh = CanvasScrollViewer.ViewportHeight > 0 ? CanvasScrollViewer.ViewportHeight : CanvasScrollViewer.ActualHeight;

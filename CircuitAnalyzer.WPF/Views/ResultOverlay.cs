@@ -23,6 +23,7 @@ namespace CircuitAnalyzer.WPF.Views
     {
         private readonly Canvas _canvas;
         private readonly List<UIElement> _items = new();
+        private readonly List<(FrameworkElement Badge, Point Pin)> _badges = new();
         private readonly CurrentFlowLayer _flow;
         private CircuitElement? _selected;
 
@@ -82,6 +83,7 @@ namespace CircuitAnalyzer.WPF.Views
             foreach (var item in _items)
                 _canvas.Children.Remove(item);
             _items.Clear();
+            _badges.Clear();
             _lastNetlist = null;
             _lastElements = null;
             _lastWires = null;
@@ -108,6 +110,7 @@ namespace CircuitAnalyzer.WPF.Views
             foreach (var item in _items)
                 _canvas.Children.Remove(item);
             _items.Clear();
+            _badges.Clear();
 
             _lastNetlist = netlist;
             _lastWires = wires;
@@ -129,6 +132,7 @@ namespace CircuitAnalyzer.WPF.Views
             foreach (var item in _items)
                 _canvas.Children.Remove(item);
             _items.Clear();
+            _badges.Clear();
 
             _lastNetlist = netlist;
             _lastElements = elements;
@@ -241,7 +245,63 @@ namespace CircuitAnalyzer.WPF.Views
                     AddLabel(BelowOrRight(element), $"{value} ({direction})", "Brush.Overlay.Current", bold: false);
                 }
             }
+            ResolveBadgeCollisions();
             Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Düğüm rozeti varsayılan olarak ucun sağ üstünde durur. Kısa dikey kollarda (Millman gibi)
+        /// bu yer, elemanın akım etiketine denk gelip onu örtüyordu. Çakışan rozet sırayla sol üst,
+        /// sağ alt ve sol alt yerlerini dener; hepsi doluysa varsayılanda kalır.
+        /// </summary>
+        private void ResolveBadgeCollisions()
+        {
+            if (_badges.Count == 0)
+                return;
+            var occupied = new List<Rect>();
+            foreach (var item in _items)
+            {
+                if (item is FrameworkElement fe && !_badges.Any(b => ReferenceEquals(b.Badge, fe)))
+                    occupied.Add(BoundsOf(fe));
+            }
+            foreach (var (badge, pin) in _badges)
+            {
+                var size = BoundsOf(badge).Size;
+                var candidates = BadgeCandidates(pin, size);
+                var chosen = candidates[0];
+                foreach (var c in candidates)
+                {
+                    if (!occupied.Any(o => Collides(o, c)))
+                    {
+                        chosen = c;
+                        break;
+                    }
+                }
+                Canvas.SetLeft(badge, chosen.Left);
+                Canvas.SetTop(badge, chosen.Top);
+                occupied.Add(chosen);
+            }
+        }
+
+        /// <summary>Rozetin denenecek yerleri, tercih sırasıyla (ilki eski varsayılan yer).</summary>
+        internal static Rect[] BadgeCandidates(Point pin, Size size) => new[]
+        {
+            new Rect(new Point(pin.X + 4, pin.Y - 20), size),
+            new Rect(new Point(pin.X - 4 - size.Width, pin.Y - 20), size),
+            new Rect(new Point(pin.X + 4, pin.Y + 4), size),
+            new Rect(new Point(pin.X - 4 - size.Width, pin.Y + 4), size),
+        };
+
+        /// <summary>İki kutu (aralarında <paramref name="margin"/> kadar pay bırakılarak) üst üste biniyor mu.</summary>
+        internal static bool Collides(Rect a, Rect b, double margin = 1) =>
+            a.Left < b.Right + margin && b.Left < a.Right + margin &&
+            a.Top < b.Bottom + margin && b.Top < a.Bottom + margin;
+
+        private static Rect BoundsOf(FrameworkElement fe)
+        {
+            if (!fe.IsMeasureValid)
+                fe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            return new Rect(Canvas.GetLeft(fe), Canvas.GetTop(fe), fe.DesiredSize.Width, fe.DesiredSize.Height);
         }
 
         // ═══════════════════════════════════════════════════════
@@ -416,6 +476,7 @@ namespace CircuitAnalyzer.WPF.Views
                 badge.SetResourceReference(Border.BackgroundProperty, "Brush.Overlay.NodeBg");
 
                 Place(badge, new Point(pinPosition.X + 4, pinPosition.Y - 20));
+                _badges.Add((badge, pinPosition));
             }
         }
 

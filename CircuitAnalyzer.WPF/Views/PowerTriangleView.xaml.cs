@@ -102,7 +102,8 @@ namespace CircuitAnalyzer.WPF.Views
             string pfFormatted = TurkishNumber.Format(data.Pf, "0.###");
             string pfText = string.IsNullOrEmpty(pfTypeTr) ? pfFormatted : $"{pfFormatted} {pfTypeTr}";
 
-            return $"P = {EngFormat.Format(data.P, "W")} | Q = {EngFormat.Format(data.Q, "VAR")} | S = {EngFormat.Format(data.S, "VA")} | cos φ = {pfText}";
+            var pqs = EngFormat.FormatGroup(new[] { data.P, data.Q, data.S }, new[] { "W", "VAR", "VA" });
+            return $"P = {pqs[0]} | Q = {pqs[1]} | S = {pqs[2]} | cos φ = {pfText}";
         }
 
         /// <summary>Üç fazlı sonucun toplam gücünü üçgenin çizdiği özet biçimine çevirir.</summary>
