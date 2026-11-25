@@ -28,7 +28,6 @@ PYTHON_DISTS = {
     "numpy": "BSD-3-Clause (+ paketlenmiş OpenBLAS vb., LICENSE.txt içinde)",
     "networkx": "BSD-3-Clause",
     "anyio": "MIT",
-    "sniffio": "MIT veya Apache-2.0",
     "h11": "MIT",
     "httptools": "MIT",
     "websockets": "BSD-3-Clause",
@@ -36,14 +35,14 @@ PYTHON_DISTS = {
     "python-dotenv": "BSD-3-Clause",
     "PyYAML": "MIT",
     "click": "BSD-3-Clause",
-    "colorama": "BSD-3-Clause",
     "idna": "BSD-3-Clause",
     "annotated-types": "MIT",
     "annotated-doc": "MIT",
     "typing_extensions": "PSF-2.0",
     "typing-inspection": "MIT",
-    "exceptiongroup": "MIT",
-    "attrs": "MIT",
+    # Python 3.14 paketiyle güncellendi (2026-11-25): sniffio, colorama,
+    # exceptiongroup ve attrs artık pakette yok; tzdata (saat dilimi verisi) eklendi.
+    "tzdata": "Apache-2.0",
     "packaging": "Apache-2.0 veya BSD-2-Clause",
     "property-cached": "BSD-3-Clause",
 }
@@ -73,7 +72,7 @@ def copy_python_licenses(dest: Path) -> list[str]:
 
 def copy_runtime_licenses(dest: Path, dotnet_root: Path | None) -> list[str]:
     lines = []
-    # Python çalışma zamanı (python310.dll vb.) — PSF lisansı
+    # Python çalışma zamanı (python314.dll vb.) — PSF lisansı
     py_license = Path(sys.base_prefix) / "LICENSE.txt"
     if not py_license.exists():
         raise SystemExit(f"[HATA] Python lisansı bulunamadı: {py_license}")

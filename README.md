@@ -142,7 +142,7 @@ Program iki parçadan oluşur:
 
 Arayüz, çözücüyü arka planda kendisi başlatır (geliştirme sırasında `python -m uvicorn main:app`, kurulu sürümde `backend\CircuitAnalyzerAPI.exe`).
 
-**Kaynaktan çalıştırma:** .NET 10 SDK ve Python 3.10+ gerekir.
+**Kaynaktan çalıştırma:** .NET 10 SDK ve Python gerekir (3.14 önerilir, en az 3.10).
 
 ```bash
 pip install -r CircuitAnalyzer.API/requirements-dev.txt

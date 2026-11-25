@@ -11,7 +11,7 @@ derleme sırasında otomatik toplar).
 | Bileşen | Lisans | Kaynak |
 |---|---|---|
 | .NET 10 çalışma zamanı ve WPF | MIT | https://github.com/dotnet/runtime · https://github.com/dotnet/wpf |
-| Python 3.10 (OpenSSL, libffi vb. dahil) | PSF-2.0 (+ dosyada listelenen lisanslar) | https://www.python.org |
+| Python 3.14 (OpenSSL, libffi vb. dahil) | PSF-2.0 (+ dosyada listelenen lisanslar) | https://www.python.org |
 
 ## .NET / WPF paketleri
 
@@ -39,7 +39,6 @@ derleme sırasında otomatik toplar).
 | Pydantic, pydantic-core | MIT | https://github.com/pydantic/pydantic |
 | Uvicorn | BSD-3-Clause | https://github.com/encode/uvicorn |
 | AnyIO | MIT | https://github.com/agronholm/anyio |
-| sniffio | MIT veya Apache-2.0 | https://github.com/python-trio/sniffio |
 | h11 | MIT | https://github.com/python-hyper/h11 |
 | httptools | MIT | https://github.com/MagicStack/httptools |
 | websockets | BSD-3-Clause | https://github.com/python-websockets/websockets |
@@ -47,14 +46,12 @@ derleme sırasında otomatik toplar).
 | python-dotenv | BSD-3-Clause | https://github.com/theskumar/python-dotenv |
 | PyYAML | MIT | https://github.com/yaml/pyyaml |
 | Click | BSD-3-Clause | https://github.com/pallets/click |
-| colorama | BSD-3-Clause | https://github.com/tartley/colorama |
 | idna | BSD-3-Clause | https://github.com/kjd/idna |
 | annotated-types | MIT | https://github.com/annotated-types/annotated-types |
 | annotated-doc | MIT | https://github.com/fastapi/annotated-doc |
 | typing_extensions | PSF-2.0 | https://github.com/python/typing_extensions |
 | typing-inspection | MIT | https://github.com/pydantic/typing-inspection |
-| exceptiongroup | MIT | https://github.com/agronholm/exceptiongroup |
-| attrs | MIT | https://github.com/python-attrs/attrs |
+| tzdata | Apache-2.0 | https://github.com/python/tzdata |
 | packaging | Apache-2.0 veya BSD-2-Clause | https://github.com/pypa/packaging |
 | property-cached | BSD-3-Clause | https://github.com/althonos/property-cached |
 

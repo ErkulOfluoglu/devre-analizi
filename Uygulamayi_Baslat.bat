@@ -19,7 +19,7 @@ if errorlevel 1 (
 
 where python >nul 2>nul
 if errorlevel 1 (
-    echo [HATA] Python bulunamadi. Cozucu icin Python 3.10+ gerekli.
+    echo [HATA] Python bulunamadi. Cozucu icin Python 3.14 onerilir (en az 3.10).
     pause
     exit /b 1
 )

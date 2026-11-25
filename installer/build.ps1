@@ -5,7 +5,7 @@
 #  -Version verilmezse sürüm CircuitAnalyzer.WPF.csproj içindeki <Version> değerinden okunur.
 #
 #  Gerekenler (yalnızca paketi HAZIRLAYAN bilgisayarda; kullanıcıda değil):
-#    .NET 10 SDK, Python 3.10 + requirements.txt + pyinstaller, Inno Setup 6
+#    .NET 10 SDK, Python 3.14 + requirements.txt + pyinstaller, Inno Setup 6
 #
 #  Çıktı: build\installer\DevreAnalizi-Kurulum-<sürüm>.exe
 # ════════════════════════════════════════════════════════════════
@@ -39,7 +39,18 @@ function Find-Tool($name, $candidates) {
 }
 
 $Dotnet = Find-Tool "dotnet" @("$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe", "$env:ProgramFiles\dotnet\dotnet.exe")
-$Python = Find-Tool "python" @()
+# Paket Python 3.14 ile hazırlanır. PATH'teki "python" başka bir sürüm olabileceği
+# için (ör. eski 3.10) önce py başlatıcısından 3.14 istenir, yoksa PATH'tekine düşülür.
+$Python = $null
+if (Get-Command py -ErrorAction SilentlyContinue) {
+    $p = & py -3.14 -c "import sys; print(sys.executable)" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $p) { $Python = $p.Trim() }
+}
+if (-not $Python) { $Python = Find-Tool "python" @() }
+$pyVer = & $Python -c "import sys; print('%d.%d' % sys.version_info[:2])"
+if ([version]$pyVer -lt [version]"3.14") {
+    Write-Host "UYARI: Paket Python $pyVer ile hazırlanıyor; önerilen sürüm 3.14." -ForegroundColor Yellow
+}
 $Iscc   = Find-Tool "ISCC" @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
                              "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
                              "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe")
