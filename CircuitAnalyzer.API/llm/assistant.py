@@ -43,6 +43,7 @@ _METHOD_NAMES = {
     AnalysisType.RECIPROCITY: "Karşıtlık teoremi",
     AnalysisType.TRANSFORMER: "Transformatör (ideal: V₂ = a·V₁; kuplajlı: M = k·√(L₁L₂), primer/sekonder gerilim ve akımlar)",
     AnalysisType.THREE_PHASE: "Üç faz (Y/Δ kaynak ve yük, hat/faz büyüklükleri, nötr akımı, güç, Aron, kompanzasyon)",
+    AnalysisType.ZENER_RANGE: "Zener aralığı (zener regülatöründe R_Y yük direnci veya V_İ giriş gerilimi çalışma aralığı)",
 }
 
 _RULES = """Sen meslek yüksekokulu elektronik öğrencilerine devre analizi anlatan sabırlı bir öğretmensin.
@@ -132,6 +133,12 @@ _NOTES_ZENER = [
     "anoda doğru akar ve harcadığı güç P = V_Z·I_Z'dir. Doğru polarmada silisyum diyot gibi (V_F = 0,7 V), "
     "−V_Z < V_AK < 0,7 V aralığında yalıtımdadır (açık devre, I = 0).",
 ]
+_NOTES_ZENER_RANGE = [
+    "Zener regülatöründe çıkış düğümünde I_X = I_Z + I_Y'dir ve regülasyon için 0 ≤ I_Z ≤ I_ZM olmalıdır. "
+    "Yük değişirken (V_İ sabit): V_X = V_İ − V_Z, I_X = V_X/R_X sabit kalır; I_Y,max = I_X (I_Z = 0) → "
+    "R_Y,min = V_Z/I_Y,max ve I_Y,min = I_X − I_ZM → R_Y,max = V_Z/I_Y,min. Giriş değişirken (R_Y sabit): "
+    "I_Y = V_Z/R_Y sabit kalır; I_X ∈ [I_Y, I_Y + I_ZM] → V_İ = I_X·R_X + V_Z.",
+]
 
 
 def concept_notes(analysis_type: AnalysisType, is_dc: bool,
@@ -158,6 +165,7 @@ def concept_notes(analysis_type: AnalysisType, is_dc: bool,
         AnalysisType.RESONANCE: _NOTES_RESONANCE,
         AnalysisType.TRANSFORMER: _NOTES_TRANSFORMER,
         AnalysisType.THREE_PHASE: _NOTES_THREE_PHASE + _NOTES_POWER,
+        AnalysisType.ZENER_RANGE: _NOTES_ZENER_RANGE,
     }.get(analysis_type, [])
     return "KAVRAM NOTLARI (doğru bilgiler; kavram sorularında bunlara uy):\n" + "\n".join(f"- {n}" for n in notes)
 
@@ -569,6 +577,17 @@ def known_values(parsed: ParsedCircuit, results: AnalysisResults, frequency: Opt
         put(tr.a)
         put(tr.k)
         put(tr.m, "H")
+    zr = getattr(results, "zener_range", None)
+    if zr is not None:
+        put(zr.min, zr.unit)
+        put(zr.max, zr.unit)
+        put(zr.current_value, zr.unit)
+        for st in zr.steps:
+            put(st.value, st.unit)
+        for ch in zr.checks:
+            put(ch.x, zr.unit)
+            put(ch.v_y, "V")
+            put(ch.i_z, "A")
     return known_from(values, texts)
 
 

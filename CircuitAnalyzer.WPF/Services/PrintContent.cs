@@ -11,6 +11,7 @@ namespace CircuitAnalyzer.WPF.Services
         TransientPlot,
         PowerTriangle,
         ResonanceCurve,
+        ZenerRangePlot,
     }
 
     internal sealed record PrintFigure(PrintFigureKind Kind, string Caption);
@@ -138,6 +139,33 @@ namespace CircuitAnalyzer.WPF.Services
                 .ToList();
         }
 
+        /// <summary>Zener aralığı hesap adımları tablosu (sembol, değer).</summary>
+        public static List<(string Symbol, string Value)> ZenerRangeStepRows(ZenerRangeDto? zr)
+        {
+            if (zr?.Steps == null)
+                return new();
+            return zr.Steps
+                .Select(s => (string.IsNullOrWhiteSpace(s.Symbol) ? "—" : s.Symbol,
+                              UnicodeMinus(AnalysisPanel.FormatZenerStepValue(s))))
+                .ToList();
+        }
+
+        /// <summary>Zener aralığı sağlama tablosu (x, Zener durumu, V_Y, I_Z, karar).</summary>
+        public static List<(string X, string State, string VY, string IZ, string Verdict)> ZenerRangeCheckRows(ZenerRangeDto? zr)
+        {
+            if (zr?.Checks == null)
+                return new();
+            string unit = zr.Unit ?? "";
+            return zr.Checks
+                .Select(c => (
+                    UnicodeMinus(EngFormat.Format(c.X, unit)),
+                    AnalysisPanel.FormatDiodeState(c.State),
+                    UnicodeMinus(AnalysisPanel.FormatDiodeVoltage(c.VY)),
+                    UnicodeMinus(EngFormat.Format(c.IZ, "A")),
+                    AnalysisPanel.FormatZenerVerdict(c.Verdict).Text))
+                .ToList();
+        }
+
         /// <summary>Başlık + tablo sayfaya bölünmüş mü (başlık ile son satır ayrı sayfalarda).</summary>
         public static bool TableIsSplit(TablePlacement p) => p.Heading != p.LastRow;
 
@@ -194,6 +222,9 @@ namespace CircuitAnalyzer.WPF.Services
             if ((response.Resonance ?? response.Results?.Resonance) is { } res)
                 list.Add(new PrintFigure(PrintFigureKind.ResonanceCurve, ResonanceCaption(res)));
 
+            if (response.ZenerRangeResult is { Curve.X.Count: > 0, Curve.VY.Count: > 0 } zr)
+                list.Add(new PrintFigure(PrintFigureKind.ZenerRangePlot, ZenerRangeCaption(zr)));
+
             return list;
         }
 
@@ -237,6 +268,14 @@ namespace CircuitAnalyzer.WPF.Services
                    $"f₀ = {EngFormat.Format(data.F0, "Hz")}, Q = {TurkishNumber.Format(data.Q, "G4")}, BW = {EngFormat.Format(data.Bw, "Hz")}.";
         }
 
+        public static string ZenerRangeCaption(ZenerRangeDto data)
+        {
+            string range = AnalysisPanel.FormatZenerRange(data);
+            return UnicodeMinus(
+                $"Zener aralığı grafiği: {range}. Gölgeli bölge geçerli çalışma aralığını, " +
+                "kesikli dikey çizgiler sınırları, noktalar sağlama değerlerini gösterir.");
+        }
+
         /// <summary>
         /// Şeklin anlatımda gireceği yer: konusunu anlatan bölümün hemen ardı. Dönüş, ardına
         /// girilecek bölümün sırası; uygun bölüm yoksa −1 (şekil "Sonuçlar"ın hemen önüne girer).
@@ -249,6 +288,7 @@ namespace CircuitAnalyzer.WPF.Services
                 PrintFigureKind.ResonanceCurve => new[] { "Bant Genişliği" },
                 // Güç yöntemi "Güç Üçgeni", üç faz "Güç" bölümünde anlatır
                 PrintFigureKind.PowerTriangle => new[] { "Güç Üçgeni", "Güç" },
+                PrintFigureKind.ZenerRangePlot => new[] { "Sağlama", "Çalışma Aralığı" },
                 _ => Array.Empty<string>()
             };
             foreach (string anchor in anchors)

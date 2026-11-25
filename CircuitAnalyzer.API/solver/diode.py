@@ -613,7 +613,8 @@ def gate_reason(parsed: ParsedCircuit, mode: AnalysisMode) -> Optional[str]:
 
 
 def solve_with_diodes(parsed: ParsedCircuit, mode: AnalysisMode, frequency, analysis_type,
-                      thevenin_terminals, target_probes, warnings):
+                      thevenin_terminals, target_probes, warnings,
+                      zener_range_target: Optional[str] = None):
     """Diyotlu devre: durum araması → eşdeğer devre → mevcut çözücü → sonuçların tamamlanması."""
     from solver.circuit_solver import UNSOLVABLE_PREFIX, _solve_core
 
@@ -661,7 +662,11 @@ def solve_with_diodes(parsed: ParsedCircuit, mode: AnalysisMode, frequency, anal
             "(en az diyotun iletimde olduğu) birleşim kullanıldı.")
 
     core_type = analysis_type
-    if analysis_type not in (AnalysisType.NODAL, AnalysisType.MESH):
+    is_zener_range = analysis_type == AnalysisType.ZENER_RANGE
+    if is_zener_range:
+        # Zener Aralığı: çizilen devrenin normal düğüm çözümü yapılır, reddedilmez
+        core_type = AnalysisType.NODAL
+    elif analysis_type not in (AnalysisType.NODAL, AnalysisType.MESH):
         report.refused = _REFUSED.get(analysis_type, (analysis_type.value, analysis_type.value))
         core_type = AnalysisType.NODAL
 
@@ -691,20 +696,39 @@ def solve_with_diodes(parsed: ParsedCircuit, mode: AnalysisMode, frequency, anal
 
     _complete_results(results, report, equiv, circuit, target_probes, errors)
 
-    from explainer.diode_narrative import build_diode_sections
-    try:
-        head = build_diode_sections(report, results)
-    except Exception as e:      # beklenmeyen hata: yanlış anlatım yerine dürüst yedek
-        from solver.error_text import turkish_error
-        errors.append(f"ℹ Diyot anlatımı oluşturulamadı: {turkish_error(e, 'diyot anlatımı')}")
-        head = []
-    # Önce devre tanıtılır ("Devreyi Tanıyalım"), sonra diyot durumları ve eşdeğer devre gelir
-    rest = list(results.explanation)
-    at = next((k + 1 for k, sec in enumerate(rest) if sec.title == "Devreyi Tanıyalım"), 0)
-    results.explanation = rest[:at] + head + rest[at:]
-    if switched:
-        results.explanation.insert(0, ExplanationSection(
-            title="Anahtar Konumu", blocks=[ExplanationBlock(kind="note", text=SWITCH_NOTE)]))
+    zr_applied = False
+    zr_reason = ""
+    if is_zener_range:
+        from explainer.zener_range_narrative import (
+            build_zener_range_sections, fallback_note, fallback_section,
+        )
+        from solver.zener_range import analyze_zener_range
+        zr_analysis, zr_reason = analyze_zener_range(parsed, mode, zener_range_target)
+        if zr_analysis is not None:
+            results.zener_range = zr_analysis.summary
+            results.explanation = build_zener_range_sections(zr_analysis)
+            zr_applied = True
+        else:
+            errors.append(fallback_note(zr_reason))
+
+    if not zr_applied:
+        from explainer.diode_narrative import build_diode_sections
+        try:
+            head = build_diode_sections(report, results)
+        except Exception as e:      # beklenmeyen hata: yanlış anlatım yerine dürüst yedek
+            from solver.error_text import turkish_error
+            errors.append(f"ℹ Diyot anlatımı oluşturulamadı: {turkish_error(e, 'diyot anlatımı')}")
+            head = []
+        if is_zener_range and zr_reason:
+            from explainer.zener_range_narrative import fallback_section
+            head.insert(0, fallback_section(zr_reason))
+        # Önce devre tanıtılır ("Devreyi Tanıyalım"), sonra diyot durumları ve eşdeğer devre gelir
+        rest = list(results.explanation)
+        at = next((k + 1 for k, sec in enumerate(rest) if sec.title == "Devreyi Tanıyalım"), 0)
+        results.explanation = rest[:at] + head + rest[at:]
+        if switched:
+            results.explanation.insert(0, ExplanationSection(
+                title="Anahtar Konumu", blocks=[ExplanationBlock(kind="note", text=SWITCH_NOTE)]))
 
     for note in report.notes:
         errors.append(f"ℹ {note}")

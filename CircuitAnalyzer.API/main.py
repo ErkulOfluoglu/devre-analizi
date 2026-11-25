@@ -291,6 +291,7 @@ def analyze_circuit(
             warnings=warnings,
             power_factor_target=request.power_factor_target,
             reciprocity_target=request.reciprocity_target,
+            zener_range_target=request.zener_range_target,
         )
 
     # Tekil devre: sonuç yok, tek Türkçe açıklamayla "Devre çözülemedi"
@@ -316,6 +317,7 @@ def analyze_circuit(
         three_phase=results.three_phase,
         wattmeters=results.wattmeters,
         diodes=results.diodes,
+        zener_range=results.zener_range,
     )
 
     # Güvenlik ağı: sonsuz/NaN sayı JSON'a çevrilemez ve 500 hatası verir;
@@ -662,6 +664,7 @@ def llm_ask(request: LlmAskRequest):
             warnings=[],
             power_factor_target=request.power_factor_target,
             reciprocity_target=request.reciprocity_target,
+            zener_range_target=request.zener_range_target,
         )
     # Çözülemeyen devre: model sonuçsuz kalır ve sayı uydurur; /analyze ile aynı açıklama
     unsolvable = next((m for m in solve_errors if m.startswith(UNSOLVABLE_PREFIX)), None)

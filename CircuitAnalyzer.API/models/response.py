@@ -728,6 +728,48 @@ class DiodeResult(BaseModel):
                      "katot → anot yönünde POZİTİF zener akımı (I_Z = I_KA ≥ 0), OFF durumunda 0"))
 
 
+class ZenerRangeStep(BaseModel):
+    """Zener Aralığı hesabının tek bir ara büyüklük adımı."""
+    symbol: str = Field(..., description="Büyüklük sembolü (ör: V_X, I_X, R_Y,min)")
+    value: Optional[float] = Field(default=None, description="SI değeri; üst sınır sonsuzsa null")
+    unit: str = Field(..., description="SI birimi (V, A, Ω)")
+    text: str = Field(..., description="Türkçe formül ve sayısal sonuç satırı")
+
+
+class ZenerRangeCheck(BaseModel):
+    """Sağlama (3 değer kontrolü): değiştirilen değerde devrenin tam zener çözümü."""
+    x: float = Field(..., description="Denenen değer (Ω veya V)")
+    state: Literal["ON", "ZENER", "OFF"] = Field(..., description="Zenerin çözümdeki durumu")
+    v_y: float = Field(..., description="Çıkış gerilimi V_Y (V)")
+    i_z: float = Field(..., description="Zener akımı I_Z (A, ters iletimde pozitif)")
+    verdict: Literal["BELOW", "OK", "ABOVE"] = Field(..., description="Aralığa göre sonuç: BELOW / OK / ABOVE")
+    text: str = Field(..., description="Türkçe sağlama satırı")
+
+
+class ZenerRangeCurve(BaseModel):
+    """V_Y ve I_Z değişim eğrisi (~200 nokta)."""
+    x: List[float] = Field(..., description="Değişen büyüklük değerleri (R_Y [Ω] veya V_İ [V])")
+    v_y: List[float] = Field(..., description="Her noktadaki çıkış gerilimi V_Y (V)")
+    i_z: List[float] = Field(..., description="Her noktadaki zener akımı I_Z (A, 0'da kırpılmış)")
+
+
+class ZenerRangeSummary(BaseModel):
+    """Zener Aralığı (ZENER_RANGE) yöntemi özeti."""
+    target_id: str = Field(..., description="Değişken elemanın kimliği (ör: RY veya V1)")
+    kind: Literal["LOAD", "INPUT"] = Field(..., description="LOAD: yük direnci R_Y; INPUT: giriş gerilimi V_İ")
+    symbol: str = Field(..., description="Kitap sembolü ('R_Y' veya 'V_İ')")
+    unit: str = Field(..., description="Birim ('Ω' veya 'V')")
+    min: float = Field(..., description="Alt sınır (Ω veya V)")
+    max: Optional[float] = Field(default=None, description="Üst sınır (Ω veya V); sonsuzsa null")
+    current_value: float = Field(..., description="Elemanın çizilen devredeki mevcut değeri")
+    current_inside: bool = Field(..., description="Mevcut değer [min, max] aralığının içinde mi")
+    steps: List[ZenerRangeStep] = Field(default_factory=list, description="Ara hesap adımları")
+    checks: List[ZenerRangeCheck] = Field(default_factory=list, description="Sağlama kontrolleri (alt, iç, üst)")
+    curve: ZenerRangeCurve = Field(..., description="V_Y ve I_Z değişim eğrisi")
+    x_label: str = Field(..., description="Yatay eksen etiketi (ör: 'R_Y (Ω)')")
+    y_label: str = Field(..., description="Düşey eksen etiketi ('V_Y (V)')")
+
+
 class AnalysisResults(BaseModel):
     """Tüm analiz sonuçlarını birleştiren konteyner."""
     node_voltages: Dict[str, NodeVoltage] = Field(
@@ -786,6 +828,9 @@ class AnalysisResults(BaseModel):
     diodes: SkipJsonSchema[List[DiodeResult]] = Field(
         default_factory=list, exclude=True,
         description="İç kullanım: diyot durumları; API yanıtına AnalysisResponse.diodes olarak taşınır")
+    zener_range: SkipJsonSchema[Optional[ZenerRangeSummary]] = Field(
+        default=None, exclude=True,
+        description="İç kullanım: Zener Aralığı özeti; API yanıtına AnalysisResponse.zener_range olarak taşınır")
 
 
 # ═══════════════════════════════════════════════════════
@@ -854,6 +899,10 @@ class AnalysisResponse(BaseModel):
         default_factory=list,
         description=("Diyotların durumu (iletimde/yalıtımda), V_AK ve akımı; yalnızca diyotlu devre "
                      "çözüldüyse dolu, aksi hâlde boş liste"))
+    zener_range: SkipJsonSchema[Optional[ZenerRangeSummary]] = Field(
+        default=None,
+        description=("Zener Aralığı (ZENER_RANGE) yöntemi özeti: min/max aralığı, adımlar, "
+                     "3 değerli sağlama ve V_Y/I_Z eğrisi; yalnızca uygulanabildiyse dolu, aksi hâlde null"))
     warnings: List[str] = Field(
         default_factory=list,
         description=(

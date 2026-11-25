@@ -79,6 +79,9 @@ class AnalysisType(str, Enum):
     THREE_PHASE: Üç Faz — üç fazlı kaynak/yük (Y ya da D), dengeli ve dengesiz devre, hat/faz büyüklükleri,
               güç, Aron ve kompanzasyon; sonuç 'three_phase' alanında. Üç fazlı eleman varsa başka
               bir yöntem seçilse de anlatım bu yöntemle verilir
+    ZENER_RANGE: Zener Aralığı — temel zener regülatör devresinde (V_İ, R_X, Zener, R_Y) zenerin
+              ters iletimde kalıp I_ZM'yi aşmayacağı yük direnci (R_Y) ya da giriş gerilimi (V_İ)
+              aralığını bulur; hedef 'zener_range_target' ile seçilir (boşsa yük direnci R_Y)
 
     Not: 'thevenin_terminals' alanı THEVENIN, NORTON ve SOURCE_TRANSFORM analizi için
     hedef port (terminal çifti) tanımlamasında ortak kullanılır.
@@ -96,6 +99,7 @@ class AnalysisType(str, Enum):
     RECIPROCITY = "RECIPROCITY"
     TRANSFORMER = "TRANSFORMER"
     THREE_PHASE = "THREE_PHASE"
+    ZENER_RANGE = "ZENER_RANGE"
 
     @classmethod
     def __get_pydantic_json_schema__(cls, core_schema, handler):
@@ -103,7 +107,7 @@ class AnalysisType(str, Enum):
         if "enum" in schema:
             schema["enum"] = [v for v in schema["enum"]
                               if v not in ("POWER", "RESONANCE", "RECIPROCITY",
-                                           "TRANSFORMER", "THREE_PHASE")]
+                                           "TRANSFORMER", "THREE_PHASE", "ZENER_RANGE")]
         return schema
 
 
@@ -369,6 +373,12 @@ class AnalysisRequest(BaseModel):
         default=None,
         description="RECIPROCITY (karşıtlık teoremi) yönteminde ikinci kolu oluşturan pasif elemanın (R, L veya C) kimliği, ör: 'R4'. Boşsa netlist'teki son R/L/C elemanı alınır.",
         examples=["R4"],
+    )
+
+    zener_range_target: SkipJsonSchema[Optional[str]] = Field(
+        default=None,
+        description="ZENER_RANGE (Zener Aralığı) yönteminde aralığı bulunacak elemanın kimliği: yük direnci (ör: 'RY') veya DC gerilim kaynağı (ör: 'V1'). Boşsa yük direnci alınır.",
+        examples=["RY"],
     )
 
     @field_validator("power_factor_target")

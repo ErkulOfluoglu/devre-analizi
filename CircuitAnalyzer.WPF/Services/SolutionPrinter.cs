@@ -402,13 +402,17 @@ namespace CircuitAnalyzer.WPF.Services
                 // ═══════════════════════════════════════════════════════
                 //  6. SONUÇ TABLOSU
                 // ═══════════════════════════════════════════════════════
-                if (input.Response?.Results != null || input.Response?.ThreePhaseResult != null || input.Response?.WattmeterResults != null || input.Response?.DiodeResults != null)
+                if (input.Response?.Results != null || input.Response?.ThreePhaseResult != null || input.Response?.WattmeterResults != null || input.Response?.DiodeResults != null || input.Response?.ZenerRangeResult != null)
                 {
                     var results = input.Response.Results;
+                    var zenerRange = input.Response.ZenerRangeResult;
+                    var zenerStepRows = PrintContent.ZenerRangeStepRows(zenerRange);
+                    var zenerCheckRows = PrintContent.ZenerRangeCheckRows(zenerRange);
                     var threePhaseTables = PrintContent.ThreePhaseTables(input.Response.ThreePhaseResult);
                     var wattmeterRows = PrintContent.WattmeterRows(input.Response.WattmeterResults);
                     var diodeRows = PrintContent.DiodeRows(input.Response.DiodeResults);
                     var probeRows = PrintContent.ProbeRows(results?.ProbeResults);
+                    bool hasZenerRange = zenerRange != null;
                     bool hasThreePhase = threePhaseTables.Count > 0;
                     bool hasVoltages = results?.NodeVoltages != null && results.NodeVoltages.Count > 0;
                     bool hasWattmeters = wattmeterRows.Count > 0;
@@ -417,7 +421,7 @@ namespace CircuitAnalyzer.WPF.Services
                     bool hasProbes = probeRows.Count > 0;
                     bool hasPower = results?.Power?.Elements != null && results.Power.Elements.Count > 0;
 
-                    if (hasThreePhase || hasVoltages || hasWattmeters || hasDiodes || hasCurrents || hasProbes || hasPower)
+                    if (hasZenerRange || hasThreePhase || hasVoltages || hasWattmeters || hasDiodes || hasCurrents || hasProbes || hasPower)
                     {
                         Paragraph TableHeading(string text, double top)
                         {
@@ -466,6 +470,59 @@ namespace CircuitAnalyzer.WPF.Services
                             };
                             pNote.Inlines.Add(new Run(tablesNote));
                             doc.Blocks.Add(pNote);
+                        }
+
+                        // Zener Aralığı: aralık cümlesi, hesap adımları ve sağlama tablosu
+                        if (zenerRange != null)
+                        {
+                            var pZrHead = TableHeading("Zener Aralığı", 4);
+                            var pRange = new Paragraph
+                            {
+                                FontSize = 14,
+                                Foreground = brushPrimary,
+                                Margin = new Thickness(0, 2, 0, 4)
+                            };
+                            var boldRange = new Bold();
+                            boldRange.Inlines.AddRange(SubscriptText.ToInlines(
+                                PrintContent.UnicodeMinus(Views.AnalysisPanel.FormatZenerRange(zenerRange)), 14));
+                            pRange.Inlines.Add(boldRange);
+                            doc.Blocks.Add(pRange);
+
+                            if (Views.AnalysisPanel.FormatZenerCurrentStatus(zenerRange) is { } currentStatus)
+                            {
+                                var pStatus = new Paragraph
+                                {
+                                    FontSize = 12.5,
+                                    Foreground = zenerRange.CurrentInside == true ? brushSuccess : GetBrush(doc, "Brush.Warning"),
+                                    Margin = new Thickness(0, 0, 0, 8)
+                                };
+                                pStatus.Inlines.AddRange(SubscriptText.ToInlines(PrintContent.UnicodeMinus(currentStatus), 12.5));
+                                doc.Blocks.Add(pStatus);
+                            }
+
+                            if (zenerStepRows.Count > 0)
+                            {
+                                var tblSteps = CreateTable(doc, new[] { "Büyüklük", "Değer" }, new[] { 200.0, 240.0 });
+                                var rg = tblSteps.RowGroups[0];
+                                foreach (var (sym, val) in zenerStepRows)
+                                    rg.Rows.Add(CreateRow(doc, new[] { sym, val }));
+                                doc.Blocks.Add(tblSteps);
+                                tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pZrHead, pZrHead, tblSteps));
+                            }
+
+                            if (zenerCheckRows.Count > 0)
+                            {
+                                var pCheckHead = TableHeading("Sağlama", 8);
+                                string xCol = !string.IsNullOrWhiteSpace(zenerRange.Symbol) ? zenerRange.Symbol : "x";
+                                var tblChecks = CreateTable(doc,
+                                    new[] { xCol, "Durum", "V_Y", "I_Z", "Karar" },
+                                    new[] { 100.0, 145.0, 95.0, 95.0, 85.0 });
+                                var rg = tblChecks.RowGroups[0];
+                                foreach (var (x, state, vy, iz, verdict) in zenerCheckRows)
+                                    rg.Rows.Add(CreateRow(doc, new[] { x, state, vy, iz, verdict }));
+                                doc.Blocks.Add(tblChecks);
+                                tableGroups.Add((tableGroups.Count == 0 ? pResTitle : pCheckHead, pCheckHead, tblChecks));
+                            }
                         }
 
                         // Üç Faz Tabloları (faz/hat/yük gerilimleri, nötr gerilimi, hat/faz akımları)
@@ -746,6 +803,7 @@ namespace CircuitAnalyzer.WPF.Services
         /// <summary>Kâğıttaki geçici durum grafiğinin (her büyüklük) ve rezonans eğrisinin yüksekliği (DIP).</summary>
         internal const double TransientPlotHeight = 230;
         internal const double ResonancePlotHeight = 300;
+        internal const double ZenerRangePlotHeight = 250;
 
         /// <summary>Grafik görüntüsünün çözünürlük katı: 600 DIP → 1800 px (~270 dpi kâğıtta).</summary>
         private const double PlotPixelScale = 3;
@@ -841,6 +899,18 @@ namespace CircuitAnalyzer.WPF.Services
                             Views.PlotMarkers.DataWidthPx(FigureWidth), Views.PlotMarkers.DataHeightPx(ResonancePlotHeight),
                             c => ScottColor(doc, c)),
                         FigureWidth, ResonancePlotHeight, 0);
+                }
+                case PrintFigureKind.ZenerRangePlot:
+                {
+                    var data = response.ZenerRangeResult;
+                    if (data == null)
+                        return null;
+                    var (scale, unit) = Views.ZenerRangePlotView.XUnitFor(data);
+                    return PlotImage(doc, plot =>
+                        Views.ZenerRangePlotView.BuildPlot(plot, data, scale, unit,
+                            Views.PlotMarkers.DataWidthPx(FigureWidth), Views.PlotMarkers.DataHeightPx(ZenerRangePlotHeight),
+                            c => ScottColor(doc, c)),
+                        FigureWidth, ZenerRangePlotHeight, 0);
                 }
                 case PrintFigureKind.PowerTriangle:
                 {
