@@ -64,6 +64,7 @@ namespace CircuitAnalyzer.WPF.Services
             DcMillmanThreeSources,
             DcLadderSourceTransform,
             DcSeriesParallelDiodes,
+            DcZenerVoltageRegulator,
         };
 
         // ═══════════════════════════════════════════════════════
@@ -395,6 +396,35 @@ namespace CircuitAnalyzer.WPF.Services
             c.Connect(d1.Pins[0], r1.Pins[0]);
             c.Connect(v1.Pins[1], gnd.Pins[0]);
             c.Connect(r1.Pins[1], gnd.Pins[0]);
+            return c;
+        }
+
+        /// <summary>
+        /// Zener gerilim regülatörü: V1 = 100 V → RX = 1 kΩ → [D1 (Zener, V_Z = 20 V, I_ZM = 30 mA, ters bağlı) ∥ RY = 300 Ω] → GND.
+        /// D1 ters iletimde: V_Y = V_Z = 20 V, I_RX = 80 mA, I_RY = 66,67 mA, I_Z = 13,33 mA.
+        /// </summary>
+        public static ExampleCircuit DcZenerVoltageRegulator()
+        {
+            var c = new ExampleCircuit
+            {
+                Name = "Zener: Gerilim Regülatörü",
+                Description = "Zener ters iletimde; çıkış V_Y = V_Z = 20 V, I_Z = 13,33 mA.",
+                SuggestedAnalysisType = AnalysisTypes.Nodal,
+            };
+
+            var v1 = c.Add(new VoltageSource { Value = 100 }, "V1", 100, 200, 90);
+            var rx = c.Add(new Resistor { Value = 1000 }, "RX", 200, 100);
+            // 270° döndürme: Pins[1] (Katot) üstte çıkış düğümünde, Pins[0] (Anot) altta GND'de
+            var d1 = c.Add(new Diode(DiodeModel.Zener) { ZenerVoltage = 20, ZenerMaxCurrent = 0.03 }, "D1", 320, 200, 270);
+            var ry = c.Add(new Resistor { Value = 300 }, "RY", 560, 200, 90);
+            var gnd = c.Add(new GroundElement(), "GND1", 340, 320);
+
+            c.Connect(rx.Pins[0], v1.Pins[0]);
+            c.Connect(rx.Pins[1], d1.Pins[1]);
+            c.Connect(d1.Pins[1], ry.Pins[0]);
+            c.Connect(v1.Pins[1], gnd.Pins[0]);
+            c.Connect(d1.Pins[0], gnd.Pins[0]);
+            c.Connect(ry.Pins[1], gnd.Pins[0]);
             return c;
         }
     }

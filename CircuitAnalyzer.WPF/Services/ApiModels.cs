@@ -652,6 +652,8 @@ namespace CircuitAnalyzer.WPF.Services
         [JsonPropertyName("id")] public string Id { get; set; } = "";
         [JsonPropertyName("model")] public string Model { get; set; } = "SI";
         [JsonPropertyName("v_t")] public double VT { get; set; }
+        [JsonPropertyName("vz")] public double? Vz { get; set; }
+        [JsonPropertyName("izm")] public double? Izm { get; set; }
         [JsonPropertyName("state")] public string State { get; set; } = "";
         [JsonPropertyName("v_ak")] public double VAk { get; set; }
         [JsonPropertyName("i")] public double I { get; set; }

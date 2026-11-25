@@ -285,6 +285,16 @@ namespace CircuitAnalyzer.WPF
             BeginPlacement(diode, $"{diode.Id} (Diyot — Si) eklendi — Sürükle/Sağ-tık/Çift-tık");
         }
 
+        private void BtnAddZener_Click(object sender, RoutedEventArgs e)
+        {
+            var zener = new Diode(DiodeModel.Zener)
+            {
+                Id = $"D{_diodeCounter + 1}"
+            };
+
+            BeginPlacement(zener, $"{zener.Id} (Zener — Vz = 5,1 V) eklendi — Sürükle/Sağ-tık/Çift-tık");
+        }
+
         /// <summary>
         /// Bağımlı kaynağı yerleştirme moduna girmeden hemen ekler (E1, G1, H1, F1…): görünür alanın
         /// ortasına en yakın boş yere konur. Kontrol elemanı çift tıklayınca açılan düzenleyiciden

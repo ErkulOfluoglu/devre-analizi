@@ -263,6 +263,29 @@ public class CircuitClipboardTests
     }
 
     [Fact]
+    public void CopyPaste_ZenerDiode_PreservesVzAndIzm()
+    {
+        var zener = new Diode(DiodeModel.Zener)
+        {
+            Id = "D1",
+            ZenerVoltage = 6.8,
+            ZenerMaxCurrent = 0.05,
+            Position = new Point(100, 100),
+            Rotation = 270
+        };
+
+        string payload = CircuitClipboard.Copy(new CircuitElement[] { zener }, Array.Empty<Wire>());
+        var pasted = CircuitClipboard.Paste(payload, new[] { "D1" }, new Point(40, 20));
+
+        var copy = Assert.Single(pasted.Elements.OfType<Diode>());
+        Assert.Equal("D2", copy.Id);
+        Assert.Equal(DiodeModel.Zener, copy.Model);
+        Assert.Equal(6.8, copy.ZenerVoltage, 6);
+        Assert.Equal(0.05, copy.ZenerMaxCurrent!.Value, 6);
+        Assert.Equal(270, copy.Rotation);
+    }
+
+    [Fact]
     public void InMemoryClipboardWrapper_And_EmptyOrForeignClipboard_NoOp()
     {
         var clipboard = new InMemoryClipboardService();

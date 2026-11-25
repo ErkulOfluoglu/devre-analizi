@@ -706,17 +706,26 @@ class WattmeterReading(BaseModel):
 
 class DiodeResult(BaseModel):
     """
-    Diyotun çözümdeki durumu (Faz 4a, DC). Akım anottan katoda doğru pozitiftir.
-    İletimde (ON) diyot yerine V_T değerinde kaynak, yalıtımda (OFF) açık devre konur.
+    Diyot veya zener diyotun çözümdeki durumu (Faz 4a / 4b, DC).
+    Doğru iletimde (ON) yerine + ucu anotta V_T kaynağı, ters iletimde (ZENER) yerine
+    + ucu katotta V_Z kaynağı, yalıtımda (OFF) açık devre konur.
     """
     id: str = Field(..., description="Diyot kimliği (ör: D1)")
-    model: Literal["IDEAL", "SI", "GE"] = Field(..., description="Diyot modeli")
-    v_t: float = Field(..., description="Eşik gerilimi V_T (V): ideal 0, Si 0,7, Ge 0,3")
-    state: Literal["ON", "OFF"] = Field(..., description="ON: iletimde, OFF: yalıtımda")
+    model: Literal["IDEAL", "SI", "GE", "ZENER"] = Field(..., description="Diyot modeli")
+    v_t: float = Field(..., description="Doğru polarma eşik gerilimi V_T / V_F (V): ideal 0, Si/Zener 0,7, Ge 0,3")
+    vz: Optional[float] = Field(
+        default=None, description="Zener kırılma gerilimi V_Z (V); normal diyotlarda null")
+    izm: Optional[float] = Field(
+        default=None, description="En büyük zener akımı I_ZM (A); belirtilmediyse veya normal diyotlarda null")
+    state: Literal["ON", "ZENER", "OFF"] = Field(
+        ..., description="ON: doğru iletimde, ZENER: ters iletimde (zener bölgesi), OFF: yalıtımda")
     v_ak: Optional[float] = Field(
         default=None,
-        description="Anot–katot gerilimi V_AK = V_A − V_K (V); bir ucu boşta kalan düğümdeyse null")
-    i: float = Field(..., description="Diyot akımı I_AK (A), anot → katot; yalıtımda 0")
+        description="Anot–katot gerilimi V_AK = V_A − V_K (V; zener bölgesinde ≈ −V_Z); bir ucu boştaysa null")
+    i: float = Field(
+        ...,
+        description=("Diyot akımı (A): ON durumunda anot → katot (I_AK ≥ 0), ZENER durumunda "
+                     "katot → anot yönünde POZİTİF zener akımı (I_Z = I_KA ≥ 0), OFF durumunda 0"))
 
 
 class AnalysisResults(BaseModel):

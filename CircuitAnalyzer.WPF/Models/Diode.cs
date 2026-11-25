@@ -1,13 +1,15 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using CircuitAnalyzer.WPF.Services;
 
 namespace CircuitAnalyzer.WPF.Models
 {
     /// <summary>
-    /// Diyot modeli (eşik gerilimi seçimi).
+    /// Diyot modeli (eşik gerilimi / zener kırılma gerilimi seçimi).
     /// </summary>
     public enum DiodeModel
     {
@@ -18,7 +20,10 @@ namespace CircuitAnalyzer.WPF.Models
         Si,
 
         /// <summary>Germanyum diyot (V_T = 0,3 V).</summary>
-        Ge
+        Ge,
+
+        /// <summary>Zener diyot (ters kırılma gerilimi V_Z).</summary>
+        Zener
     }
 
     /// <summary>
@@ -51,19 +56,27 @@ namespace CircuitAnalyzer.WPF.Models
 
         public DiodeModel Model { get; set; } = DiodeModel.Si;
 
+        /// <summary>Zener kırılma gerilimi V_Z (volt, varsayılan 5,1 V).</summary>
+        public double ZenerVoltage { get; set; } = 5.1;
+
+        /// <summary>İsteğe bağlı maksimum zener akımı I_ZM (amper, null ise sınır kontrolü yapılmaz).</summary>
+        public double? ZenerMaxCurrent { get; set; }
+
         /// <summary>Ekranda gövde üstünde gösterilen model etiketi (Ideal için boş).</summary>
         public string ModelLabel => Model switch
         {
             DiodeModel.Si => "Si",
             DiodeModel.Ge => "Ge",
+            DiodeModel.Zener => $"Vz={TurkishNumber.Format(ZenerVoltage, "0.###")}V",
             _ => string.Empty
         };
 
-        /// <summary>Netlist ve dosya kaydı için model kodu: IDEAL | SI | GE.</summary>
+        /// <summary>Netlist ve dosya kaydı için model kodu: IDEAL | SI | GE | ZENER.</summary>
         public string NetlistModel => Model switch
         {
             DiodeModel.Ideal => "IDEAL",
             DiodeModel.Ge => "GE",
+            DiodeModel.Zener => "ZENER",
             _ => "SI"
         };
 
@@ -137,15 +150,37 @@ namespace CircuitAnalyzer.WPF.Models
             triangle.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
             triangle.SetResourceReference(Shape.FillProperty, "Brush.Circuit.Fill");
 
-            // ── Katot çubuğu ──
-            var cathodeBar = new Line
+            // ── Katot çubuğu (Zener için uçları Z şeklinde bükülü kanatlı) ──
+            Shape cathodeBar;
+            if (Model == DiodeModel.Zener)
             {
-                X1 = TriangleRight, Y1 = centerY - HalfBodyHeight,
-                X2 = TriangleRight, Y2 = centerY + HalfBodyHeight,
-                StrokeThickness = 2.2,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round
-            };
+                // Üst kanat anot tarafına, alt kanat katot tarafına bükülür (standart zener simgesi)
+                cathodeBar = new Polyline
+                {
+                    Points = new PointCollection
+                    {
+                        new Point(TriangleRight - 4, centerY - HalfBodyHeight - 2),
+                        new Point(TriangleRight, centerY - HalfBodyHeight),
+                        new Point(TriangleRight, centerY + HalfBodyHeight),
+                        new Point(TriangleRight + 4, centerY + HalfBodyHeight + 2)
+                    },
+                    StrokeThickness = 2.2,
+                    StrokeLineJoin = PenLineJoin.Round,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round
+                };
+            }
+            else
+            {
+                cathodeBar = new Line
+                {
+                    X1 = TriangleRight, Y1 = centerY - HalfBodyHeight,
+                    X2 = TriangleRight, Y2 = centerY + HalfBodyHeight,
+                    StrokeThickness = 2.2,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round
+                };
+            }
             cathodeBar.SetResourceReference(Shape.StrokeProperty, "Brush.Circuit.Stroke");
 
             container.Children.Add(leftLead);
@@ -193,6 +228,16 @@ namespace CircuitAnalyzer.WPF.Models
         {
             int nodeAnode = nodeMap[Pins[0]];
             int nodeCathode = nodeMap[Pins[1]];
+            if (Model == DiodeModel.Zener)
+            {
+                string vz = ZenerVoltage.ToString("G", CultureInfo.InvariantCulture);
+                if (ZenerMaxCurrent is { } izm)
+                {
+                    string izmStr = izm.ToString("G", CultureInfo.InvariantCulture);
+                    return $"{Id} {nodeAnode} {nodeCathode} ZENER VZ={vz} IZM={izmStr}";
+                }
+                return $"{Id} {nodeAnode} {nodeCathode} ZENER VZ={vz}";
+            }
             return $"{Id} {nodeAnode} {nodeCathode} {NetlistModel}";
         }
     }
