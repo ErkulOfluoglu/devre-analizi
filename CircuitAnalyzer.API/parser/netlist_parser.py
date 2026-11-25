@@ -331,10 +331,11 @@ _PATTERNS = {
         r"^(S\w*)\s+(\w+)\s+(\w+)\s+(\w+)\s+SPDT\s*$", re.IGNORECASE
     ),
 
-    # ── Diyot (Faz 4a) ──
+    # ── Diyot (Faz 4a / 4b) ──
     # D1 <anot> <katot> IDEAL|SI|GE
+    # D1 <anot> <katot> ZENER VZ=<değer> [IZM=<değer>]
     "diode": re.compile(
-        r"^(D\w*)\s+(\w+)\s+(\w+)\s+(\w+)\s*$", re.IGNORECASE
+        r"^(D\w*)\s+(\w+)\s+(\w+)\s+(\w+)(?:\s+(.*))?$", re.IGNORECASE
     ),
 
     # ── Transformatör ──
@@ -720,25 +721,89 @@ def _parse_diode(
     line: str, line_num: int, circuit: ParsedCircuit
 ) -> Optional[ParsedElement]:
     """
-    Diyot satırını ayrıştırır (Faz 4a sözleşmesi).
+    Diyot ve zener diyot satırını ayrıştırır (Faz 4a / 4b sözleşmesi).
 
     D1 <anot> <katot> IDEAL|SI|GE   (büyük/küçük harf fark etmez)
         → node_positive = anot, node_negative = katot, value = V_T,
           params: model ("IDEAL" | "SI" | "GE"), v_t (0 / 0,7 / 0,3 V)
-    Bilinmeyen model ve iki ucu aynı düğümde olan diyot Türkçe hatayla reddedilir.
+    D1 <anot> <katot> ZENER VZ=<değer> [IZM=<değer>]
+        → node_positive = anot, node_negative = katot, value = V_Z,
+          params: model = "ZENER", v_t = 0.7, v_f = 0.7, v_z = V_Z, i_zm = I_ZM | None
+    Bilinmeyen model, eksik/geçersiz VZ veya IZM ve iki ucu aynı düğümde olan diyot reddedilir.
     """
     m = _PATTERNS["diode"].match(line)
     if not m:
         _reject(circuit,
                 f"Satır {line_num}: Diyot satırı anlaşılamadı → '{line}'. Beklenen biçim: "
-                "D1 <anot> <katot> <model>; model IDEAL, SI ya da GE olmalı.")
+                "D1 <anot> <katot> IDEAL|SI|GE  ya da  D1 <anot> <katot> ZENER VZ=<değer> [IZM=<değer>].")
         return None
     did, anode, cathode, model = m.group(1), m.group(2), m.group(3), m.group(4).upper()
+    rest = (m.group(5) or "").strip()
+
+    if model == "ZENER":
+        if anode == cathode:
+            _reject(circuit,
+                    f"Satır {line_num}: {did} zener diyotunun anot ve katodu aynı düğüme (Düğüm {anode}) "
+                    "bağlı; böyle bir eleman devreyi değiştirmez. Uçlarını farklı düğümlere bağlayın.")
+            return None
+        if not rest:
+            _reject(circuit,
+                    f"Satır {line_num}: {did} zener diyotu için VZ (zener gerilimi) belirtilmeli. "
+                    "Beklenen biçim: D1 <anot> <katot> ZENER VZ=<değer> [IZM=<değer>] (örnek: VZ=20 IZM=30m).")
+            return None
+        kv: Dict[str, float] = {}
+        for tok in rest.split():
+            if "=" not in tok:
+                _reject(circuit,
+                        f"Satır {line_num}: {did} zener diyotunda '{tok}' parametresi anlaşılamadı; "
+                        "anahtar=değer biçiminde yazılmalı (örnek: VZ=20 IZM=30m).")
+                return None
+            k_raw, v_raw = tok.split("=", 1)
+            k = k_raw.upper()
+            if k not in ("VZ", "IZM"):
+                _reject(circuit,
+                        f"Satır {line_num}: {did} zener diyotunda '{k_raw}' parametresi tanınmadı; "
+                        "yalnızca VZ ve isteğe bağlı IZM kullanılabilir.")
+                return None
+            if k in kv:
+                _reject(circuit,
+                        f"Satır {line_num}: {did} zener diyotunda {k} parametresi birden fazla kez yazılmış.")
+                return None
+            try:
+                val = parse_spice_value(v_raw)
+            except ValueError:
+                val = float("nan")
+            if not math.isfinite(val) or val <= 0:
+                what = "VZ (zener gerilimi)" if k == "VZ" else "IZM (en büyük zener akımı)"
+                ex = "VZ=20" if k == "VZ" else "IZM=30m"
+                _reject(circuit,
+                        f"Satır {line_num}: {did} zener diyotunun {what} değeri pozitif bir sayı olmalı "
+                        f"(örnek: {ex}).")
+                return None
+            kv[k] = val
+        if "VZ" not in kv:
+            _reject(circuit,
+                    f"Satır {line_num}: {did} zener diyotu için VZ (zener gerilimi) zorunludur "
+                    "(örnek: D1 0 2 ZENER VZ=20 IZM=30m).")
+            return None
+        vz = kv["VZ"]
+        izm = kv.get("IZM")
+        return ParsedElement(
+            id=did, element_type=ElementType.DIODE,
+            node_positive=anode, node_negative=cathode, value=vz,
+            params={"model": "ZENER", "v_t": 0.7, "v_f": 0.7, "v_z": vz, "i_zm": izm},
+        )
+
     if model not in DIODE_MODELS:
         _reject(circuit,
                 f"Satır {line_num}: {did} diyotunun modeli '{m.group(4)}' tanınmadı. Model IDEAL "
-                "(ideal diyot, V_T = 0 V), SI (silisyum, V_T = 0,7 V) ya da GE (germanyum, "
-                "V_T = 0,3 V) olmalı.")
+                "(ideal diyot, V_T = 0 V), SI (silisyum, V_T = 0,7 V), GE (germanyum, "
+                "V_T = 0,3 V) ya da ZENER (VZ=<değer> [IZM=<değer>]) olmalı.")
+        return None
+    if rest:
+        _reject(circuit,
+                f"Satır {line_num}: {did} ({model}) diyotu ek parametre almaz → '{line}'. "
+                "Beklenen biçim: D1 <anot> <katot> IDEAL|SI|GE.")
         return None
     if anode == cathode:
         _reject(circuit,

@@ -255,11 +255,13 @@ namespace CircuitAnalyzer.WPF.Views
                     string? stateText = diodeRes?.State?.Trim().ToUpperInvariant() switch
                     {
                         "ON" => "iletimde",
+                        "ZENER" => "ters iletimde (V_Z)",
                         "OFF" => "yalıtımda",
                         _ => null
                     };
                     if (currentText != null || stateText != null)
-                        AddDiodeLabel(DiodeLabelAnchor(diode), currentText, stateText);
+                        AddDiodeLabel(DiodeLabelAnchor(diode), currentText, stateText,
+                            stacked: Math.Abs(diode.Rotation % 180 - 90) < 1);
                     continue;
                 }
 
@@ -518,11 +520,13 @@ namespace CircuitAnalyzer.WPF.Views
         }
 
         /// <summary>"3,667 mA (2→3) · iletimde": akım akım renginde, durum kendi renginde ve kalın.</summary>
-        private void AddDiodeLabel(Point position, string? currentText, string? stateText)
+        private void AddDiodeLabel(Point position, string? currentText, string? stateText, bool stacked)
         {
+            // Dikey diyotun sağında yer dar: yan koldaki elemanın etiketine taşmasın diye durum
+            // alt satıra iner. Yatayda alt satır, paralel koldaki diyotun yazısını örterdi.
             var label = new Border
             {
-                CornerRadius = new CornerRadius(999),
+                CornerRadius = new CornerRadius(stacked ? 8 : 999),
                 Padding = new Thickness(6, 2, 6, 2),
             };
             label.SetResourceReference(Border.BackgroundProperty, "Brush.Overlay.BadgeBg");
@@ -537,15 +541,21 @@ namespace CircuitAnalyzer.WPF.Views
             }
             if (stateText != null)
             {
-                if (currentText != null)
+                if (currentText != null && stacked)
+                {
+                    tb.Inlines.Add(new LineBreak());
+                }
+                else if (currentText != null)
                 {
                     var sep = new Run(" · ");
                     sep.SetResourceReference(TextElement.ForegroundProperty, "Brush.Text.Secondary");
                     tb.Inlines.Add(sep);
                 }
-                var state = new Run(stateText) { FontWeight = FontWeights.Bold };
+                var state = new Span { FontWeight = FontWeights.Bold };
+                state.Inlines.AddRange(SubscriptText.ToInlines(stateText, 12));
+                bool isConducting = stateText == "iletimde" || stateText == "ters iletimde (V_Z)";
                 state.SetResourceReference(TextElement.ForegroundProperty,
-                    stateText == "iletimde" ? "Brush.Success" : "Brush.Text.Secondary");
+                    isConducting ? "Brush.Success" : "Brush.Text.Secondary");
                 tb.Inlines.Add(state);
             }
             label.Child = tb;

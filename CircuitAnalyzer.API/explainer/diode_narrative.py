@@ -38,8 +38,8 @@ def is_sub(e: ParsedElement) -> bool:
 
 
 def sub_label(e: ParsedElement) -> str:
-    """Denklemlerdeki adı: 'D1 (0,7 V)'."""
-    return f"{e.id} ({_volts(e.params.get('v_t', e.value))})"
+    """Denklemlerdeki adı: 'D1 (0,7 V)' ya da zener bölgesinde 'D1 (20 V)'."""
+    return f"{e.id} ({_volts(e.value)})"
 
 
 def _and(items: List[str]) -> str:
@@ -57,7 +57,18 @@ def _vt(d) -> str:
     return _volts(d.v_t)
 
 
+def _zener_spec(d) -> str:
+    """'D1 (V_Z = 20 V, I_ZM = 30 mA)' veya I_ZM yoksa 'D1 (V_Z = 20 V)'."""
+    parts = [f"V_Z = {_volts(d.v_z)}"]
+    if d.i_zm is not None:
+        parts.append(f"I_ZM = {eng(d.i_zm, 'A')}")
+    return f"{d.id} ({', '.join(parts)})"
+
+
 def _model_text(d) -> str:
+    if d.is_zener:
+        return f"{d.id} (Zener, V_Z = {_volts(d.v_z)}" + (
+            f", I_ZM = {eng(d.i_zm, 'A')})" if d.i_zm is not None else ")")
     return f"{d.id} ({d.label}, V_T = {_vt(d)})"
 
 
@@ -67,7 +78,14 @@ def _volt_ek(text: str) -> str:
 
 
 def intro_line(report) -> str:
-    return "Diyotlar: " + ", ".join(_model_text(d) for d in report.diodes) + "."
+    plain = [d for d in report.diodes if not d.is_zener]
+    zeners = [d for d in report.diodes if d.is_zener]
+    parts = []
+    if plain:
+        parts.append("Diyotlar: " + ", ".join(_model_text(d) for d in plain) + ".")
+    if zeners:
+        parts.append("Zener diyotlar: " + ", ".join(_zener_spec(d) for d in zeners) + ".")
+    return " ".join(parts)
 
 
 # ═══════════════════════════════════════════════════════
@@ -80,19 +98,52 @@ def _vak_text(d) -> str:
 
 def _state_section(report) -> _Sec:
     s = _Sec("Diyotların Durumu")
-    s.add("text",
-          "Diyot doğrusal olmayan bir elemandır; önce her diyotun iletimde mi yalıtımda mı "
-          "olduğunu bulmalıyız. Kural: diyot doğru polarmadaysa (anot katottan daha pozitif) ve "
-          "anot–katot gerilimi V_AK eşik gerilimini (V_T) aşıyorsa iletimdedir; yerine V_T "
-          "değerinde bir gerilim kaynağı konur (+ ucu anotta). Ters polarmada ya da V_AK eşik "
-          "gerilimini aşmıyorsa yalıtımdadır; açık devre gibi davranır (I = 0).")
+    has_zener = any(d.is_zener for d in report.diodes)
+    has_plain = any(not d.is_zener for d in report.diodes)
+    if has_zener and not has_plain:
+        s.add("text",
+              "Zener diyot doğrusal olmayan bir elemandır ve üç çalışma bölgesi vardır. "
+              "Ters polarmada uçlarındaki gerilim zener gerilimine (V_Z) ulaşıyorsa ters iletimdedir "
+              "(zener bölgesi): yerine V_Z değerinde bir gerilim kaynağı konur (+ ucu katotta) ve "
+              "I_Z akımı katottan anoda akar. Doğru polarmada V_AK ≥ 0,7 V ise normal Si diyot gibi "
+              "iletimdedir (+ ucu anotta 0,7 V kaynak). −V_Z < V_AK < 0,7 V aralığında yalıtımdadır "
+              "(açık devre, I = 0).")
+    elif has_zener:
+        s.add("text",
+              "Diyot ve zener diyot doğrusal olmayan elemanlardır; önce her birinin çalışma "
+              "bölgesini bulmalıyız. Normal diyot doğru polarmada V_AK > V_T ise iletimde (+ ucu "
+              "anotta V_T kaynağı), aksi hâlde yalıtımdadır (açık devre). Zener diyot buna ek olarak "
+              "ters polarmada V_Z gerilimine ulaştığında ters iletime (zener bölgesi) geçer ve "
+              "yerine + ucu katotta V_Z kaynağı konur; −V_Z < V_AK < 0,7 V aralığında yalıtımdadır.")
+    else:
+        s.add("text",
+              "Diyot doğrusal olmayan bir elemandır; önce her diyotun iletimde mi yalıtımda mı "
+              "olduğunu bulmalıyız. Kural: diyot doğru polarmadaysa (anot katottan daha pozitif) ve "
+              "anot–katot gerilimi V_AK eşik gerilimini (V_T) aşıyorsa iletimdedir; yerine V_T "
+              "değerinde bir gerilim kaynağı konur (+ ucu anotta). Ters polarmada ya da V_AK eşik "
+              "gerilimini aşmıyorsa yalıtımdadır; açık devre gibi davranır (I = 0).")
     s.add("text",
           f"Diyotların olası iletim/yalıtım birleşimleri denendi ({report.combos_tried} birleşim); "
           "aşağıdaki durum, bütün koşulları birlikte sağlayan birleşimdir. Koşullar, devre çözüldükten "
           "sonra bulunan değerlerle kontrol edilir:")
     for d in report.diodes:
         s.add("math", f"{_model_text(d)}: anot {node_name(d.anode)}, katot {node_name(d.cathode)}")
-        if d.state == "ON":
+        if d.state == "ZENER":
+            iz_txt = eng(d.i, "A") if abs(d.i) > 1e-15 else "0"
+            line = (f"{d.id} ters iletimde (zener bölgesi): yerine {_volt_ek(_volts(d.v_z))} kaynak "
+                    f"konur (+ ucu katoda); uçları arasında V_Z sabit kalır. I_Z = {iz_txt} ≥ 0 ✓")
+            if d.i_zm is not None:
+                if d.over_izm:
+                    line += f"  I_Z > I_ZM ({eng(d.i_zm, 'A')}) ✗"
+                else:
+                    line += f"  I_Z ≤ I_ZM ({eng(d.i_zm, 'A')}) ✓"
+            s.add("check", line)
+            if d.over_izm:
+                s.add("note",
+                      f"⚠ {d.id}: I_Z = {eng(d.i, 'A')}, I_ZM = {eng(d.i_zm, 'A')} sınırını aşıyor; "
+                      "gerçekte zener aşırı akımdan zarar görür. Not: bazı ders kitapları bu durumu "
+                      "“zener yalıtımdadır” diye yorumlar.")
+        elif d.state == "ON":
             if d.is_ideal:
                 what = "yerine kısa devre konur (ideal diyot, V_T = 0 V)"
             else:
@@ -113,6 +164,22 @@ def _state_section(report) -> _Sec:
                 s.add("check",
                       f"{d.id} {'ters' if rev else 'doğru'} polarmada; bir ucu boşta kalan düğüme bağlı, "
                       "V_AK belirsiz ve akım yolu yok → yalıtımda, açık devre (I = 0) ✓")
+            elif d.is_zener:
+                if d.kind == "reverse":
+                    rel = "<" if d.v_ak > -d.v_z + 1e-12 else "="
+                    s.add("check",
+                          f"{d.id} ters polarmada ama V_Z'ye ulaşmıyor, yalıtımda: "
+                          f"{_volts(-d.v_z)} {rel} {_vak_text(d)} < {_vt(d)} "
+                          f"(−V_Z < V_AK < {_vt(d)}) → açık devre (I_{d.id} = 0) ✓")
+                elif d.kind == "zero":
+                    s.add("check",
+                          f"{d.id}: {_vak_text(d)} ({_volts(-d.v_z)} < V_AK < {_vt(d)}), "
+                          f"polarılmamış → yalıtımda, açık devre (I_{d.id} = 0) ✓")
+                else:
+                    rel = "<" if d.v_ak < d.v_t - 1e-12 else "="
+                    s.add("check",
+                          f"{d.id} doğru polarmada ama yalıtımda: {_volts(-d.v_z)} < {_vak_text(d)} "
+                          f"{rel} {_vt(d)} (eşik gerilimi aşılmıyor) → açık devre (I_{d.id} = 0) ✓")
             elif d.kind == "reverse":
                 s.add("check",
                       f"{d.id} ters polarmada: {_vak_text(d)} < 0 → yalıtımda, açık devre "
@@ -143,6 +210,9 @@ def _equivalent_section(report) -> _Sec:
     for d in report.diodes:
         if d.state == "OFF":
             s.add("math", f"{d.id} → açık devre (yalıtımda; devreden çıkarılır)")
+        elif d.state == "ZENER":
+            s.add("math", f"{d.id} → {_volt_ek(_volts(d.v_z))} gerilim kaynağı (zener bölgesi): "
+                          f"+ ucu katotta ({node_name(d.cathode)}), − ucu anotta ({node_name(d.anode)})")
         elif d.rep != d.id:
             s.add("math", f"{d.id} → {d.rep} ile birlikte tek kaynak (özdeş paralel diyotlar)")
         elif d.is_ideal:
@@ -154,12 +224,15 @@ def _equivalent_section(report) -> _Sec:
     for eid in report.dropped:
         s.add("math", f"{eid} boşta kalır: bağlı olduğu bölüm yalıtımdaki diyotlar yüzünden "
                       f"GND'ye bağlantısız, akım yolu yok (I_{eid} = 0)")
-    ons = [d for d in report.diodes if d.state == "ON" and d.rep == d.id and not d.is_ideal]
-    if ons:
-        d = ons[0]
+    active = [d for d in report.diodes
+              if d.rep == d.id and (d.state == "ZENER" or (d.state == "ON" and not d.is_ideal))]
+    if active:
+        d = active[0]
+        v_txt = _volts(d.v_z) if d.state == "ZENER" else _vt(d)
+        what = "zener gerilimi" if d.state == "ZENER" else "eşik gerilimi"
         s.add("text",
               "Bundan sonraki adımlar bu eşdeğer devre üzerinde yapılır; denklemlerde iletimdeki "
-              f"diyot “{d.id} ({_vt(d)})” olarak, yani eşik gerilimi kadar bir gerilim kaynağı "
+              f"diyot “{d.id} ({v_txt})” olarak, yani {what} kadar bir gerilim kaynağı "
               "olarak görünür.")
     else:
         s.add("text", "Bundan sonraki adımlar bu eşdeğer devre üzerinde yapılır.")
@@ -302,8 +375,8 @@ def _kvl_section(report, results) -> Optional[_Sec]:
             sym_terms.append((1, f"V_{e.id}"))
             continue
         if is_sub(e):
-            d = info[e.id]
-            drop = d.v_t if a == d.anode else -d.v_t
+            # Eşdeğer kaynağın (+) ucu: ON'da anot, ZENER'de katot; değeri: ON'da V_T, ZENER'de V_Z
+            drop = e.value if a == e.node_positive else -e.value
             sym_terms.append((1 if drop >= 0 else -1, f"V_{e.id}"))
             diode_drop += drop
         elif e.element_type == ElementType.DC_SOURCE:
@@ -324,8 +397,12 @@ def _kvl_section(report, results) -> Optional[_Sec]:
                   "kaynağın − ucundan + ucuna geçerken − işaretiyle yazılır.")
     diodes_in = [e.id for e, _, _ in order if is_sub(e)]
     if diodes_in:
-        s.add("text", "İletimdeki diyotun gerilimi eşik gerilimidir: "
-              + ", ".join(f"V_{i} = {_vt(info[i])}" for i in diodes_in) + ".")
+        has_z = any(info[i].state == "ZENER" for i in diodes_in)
+        parts = [f"V_{i} = V_Z = {_volts(info[i].v_z)}" if info[i].state == "ZENER"
+                 else f"V_{i} = {_vt(info[i])}" for i in diodes_in]
+        lead = ("İletimdeki diyotun gerilimi sabittir: " if has_z
+                else "İletimdeki diyotun gerilimi eşik gerilimidir: ")
+        s.add("text", lead + ", ".join(parts) + ".")
     if len(resistors) == 1:
         r = resistors[0]
         top = out_symbol(r, v_r_total)
@@ -350,8 +427,11 @@ def _kvl_section(report, results) -> Optional[_Sec]:
                           f"{eng(current * r.value, 'V')}")
         where = "dirençler üzerinde"
     if diodes_in and abs(diode_drop) > 1e-15:
+        has_z = any(info[i].state == "ZENER" for i in diodes_in)
+        kind_lbl = "zener/eşik gerilimi" if has_z and any(info[i].state == "ON" for i in diodes_in) else (
+            "zener gerilimi" if has_z else "eşik gerilimi")
         s.add("note", f"Yorum: Kaynakların çevredeki net gerilimi {eng(src_net, 'V')}; bunun "
-                      f"{_volts(diode_drop)}'u diyotlarda (eşik gerilimi) düşer, kalan "
+                      f"{_volts(diode_drop)}'u diyotlarda ({kind_lbl}) düşer, kalan "
                       f"{eng(v_r_total, 'V')} {where}dir.")
     elif diodes_in:
         s.add("note", f"Yorum: Diyotlar ideal olduğundan üzerlerinde gerilim düşmez; kaynakların "
@@ -379,11 +459,15 @@ def build_diode_sections(report, results) -> List[ExplanationSection]:
 # ═══════════════════════════════════════════════════════
 
 def known_node_texts(elem: ParsedElement, node: str, other: str, value_text: str) -> Tuple[str, str]:
-    """Bilinen düğüm bölümünde iletimdeki diyot: (açıklama, denklem)."""
-    a, k = elem.node_positive, elem.node_negative
-    text = (f"{elem.id} iletimde: yerine {_volt_ek(_volts(elem.params.get('v_t', elem.value)))} "
-            f"kaynak konur (anot {node_name(a)}, katot {node_name(k)}):")
-    sign = "+" if other == a else MINUS
+    """Bilinen düğüm bölümünde iletimdeki diyot/zener: (açıklama, denklem)."""
+    p, n = elem.node_positive, elem.node_negative
+    if elem.params.get("zener_state") == "ZENER":
+        text = (f"{elem.id} ters iletimde (zener bölgesi): yerine {_volt_ek(_volts(elem.value))} "
+                f"kaynak konur (+ ucu katot {node_name(p)}, − ucu anot {node_name(n)}):")
+    else:
+        text = (f"{elem.id} iletimde: yerine {_volt_ek(_volts(elem.value))} "
+                f"kaynak konur (anot {node_name(p)}, katot {node_name(n)}):")
+    sign = "+" if other == p else MINUS
     if node == "0":
         math = f"{node_v(other)} = {sign if sign == MINUS else ''}{sub_label(elem)} = {value_text}"
     else:
@@ -398,11 +482,18 @@ def current_lines(report, currents: Dict[str, complex]) -> List[str]:
     for d in report.diodes:
         if d.rep in done:
             continue
-        flow = f"anot → katot, {node_name(d.anode)} → {node_name(d.cathode)}"
         if d.state == "OFF":
             lines.append(f"I_{d.id} = 0 (yalıtımda, açık devre)")
             continue
         total = complex(currents.get(d.rep, 0)).real if not d.dropped else 0.0
+        if d.state == "ZENER":
+            flow = f"katot → anot, {node_name(d.cathode)} → {node_name(d.anode)}"
+            if abs(total) <= 1e-9:
+                lines.append(f"I_{d.id} (I_Z) = 0 (zener bölgesi, akım geçmez)")
+            else:
+                lines.append(f"I_{d.id} (I_Z) = {eng(total, 'A')} (ters iletimde / zener bölgesi; {flow})")
+            continue
+        flow = f"anot → katot, {node_name(d.anode)} → {node_name(d.cathode)}"
         if abs(total) <= 1e-9:
             lines.append(f"I_{d.id} = 0 (doğru polarmada ama akım yolu kesik)")
             continue
@@ -417,7 +508,7 @@ def current_lines(report, currents: Dict[str, complex]) -> List[str]:
 
 
 def power_lines(report, currents: Dict[str, complex]) -> List[Tuple[str, float]]:
-    """Güç bölümü: iletimdeki diyot P = V_T·I çeker (yük)."""
+    """Güç bölümü: iletimdeki diyot P = V_T·I, zener bölgesinde P = V_Z·I_Z çeker (yük)."""
     out = []
     for d in report.diodes:
         if d.state == "OFF":
@@ -425,6 +516,11 @@ def power_lines(report, currents: Dict[str, complex]) -> List[Tuple[str, float]]
         total = complex(currents.get(d.rep, 0)).real if not d.dropped else 0.0
         i = total / len(d.group) if d.group else total
         if abs(i) <= 1e-15:
+            continue
+        if d.state == "ZENER":
+            p = d.v_z * i
+            out.append((f"P_{d.id} = V_Z·I_Z = {_volts(d.v_z)} · {eng(i, 'A')} = {eng(p, 'W')} "
+                        "(çekilen; zener güç harcar)", p))
             continue
         p = d.v_t * i
         if d.is_ideal:
@@ -454,6 +550,10 @@ def kcl_note(report) -> Optional[str]:
 def summary_lines(report, currents: Dict[str, complex]) -> List[str]:
     out = []
     for d in report.diodes:
+        if d.state == "ZENER":
+            i = complex(currents.get(d.rep, 0)).real if not d.dropped else 0.0
+            out.append(f"{d.id}: ters iletimde (zener), I_Z = {eng(i, 'A') if abs(i) > 1e-15 else '0'}")
+            continue
         state = "iletimde" if d.state == "ON" else "yalıtımda"
         total = (complex(currents.get(d.rep, 0)).real
                  if d.state == "ON" and not d.dropped else 0.0)

@@ -40,6 +40,7 @@ namespace CircuitAnalyzer.WPF
 
         // ── Ad alanları: Uygula'da her şeyden önce denetlenir ──
         private readonly List<(TextBox Box, Func<string?> Check)> _nameChecks = new();
+        private readonly List<Func<bool>> _customValidations = new();
 
         // ── Pencere açıldığındaki eleman durumu: Uygula başarıyla bitmezse geri yüklenir ──
         private readonly List<(PropertyInfo Property, object? Value)> _originalState;
@@ -698,6 +699,36 @@ namespace CircuitAnalyzer.WPF
                         "NC (Normalde Kapalı): t < 0 kapalı, t ≥ 0 açık.");
         }
 
+        /// <summary>
+        /// Zener gerilimi V_Z (zorunlu, &gt; 0) ve isteğe bağlı I_ZM (&gt; 0) girişlerini doğrular.
+        /// Sorun yoksa null, varsa öğrenciye gösterilecek Türkçe hata mesajını döndürür.
+        /// </summary>
+        internal static string? ValidateZenerFields(string? vzText, string? izmText, out double vz, out double? izm)
+        {
+            vz = 0;
+            izm = null;
+
+            string vzTrimmed = (vzText ?? string.Empty).Trim();
+            if (vzTrimmed.Length == 0)
+                return "Zener gerilimi V_Z boş bırakılamaz.";
+            if (!TryParseFieldValue(vzTrimmed, 1.0, out vz))
+                return "Zener gerilimi V_Z geçerli bir sayı olmalıdır.";
+            if (vz <= 0)
+                return "Zener gerilimi V_Z sıfırdan büyük olmalıdır.";
+
+            string izmTrimmed = (izmText ?? string.Empty).Trim();
+            if (izmTrimmed.Length > 0)
+            {
+                if (!TryParseFieldValue(izmTrimmed, 1.0, out double parsedIzm))
+                    return "Maks. zener akımı I_ZM geçerli bir sayı olmalıdır.";
+                if (parsedIzm <= 0)
+                    return "Maks. zener akımı I_ZM sıfırdan büyük olmalıdır.";
+                izm = parsedIzm;
+            }
+
+            return null;
+        }
+
         private void BuildDiodeForm(Diode diode)
         {
             Title = $"{diode.Id} — Diyot Düzenle";
@@ -717,15 +748,79 @@ namespace CircuitAnalyzer.WPF
             combo.Items.Add(new ComboBoxItem { Content = "İdeal (0 V)" });
             combo.Items.Add(new ComboBoxItem { Content = "Silisyum – Si (0,7 V)" });
             combo.Items.Add(new ComboBoxItem { Content = "Germanyum – Ge (0,3 V)" });
+            combo.Items.Add(new ComboBoxItem { Content = "Zener" });
             combo.SelectedIndex = diode.Model switch
             {
                 DiodeModel.Ideal => 0,
                 DiodeModel.Ge => 2,
+                DiodeModel.Zener => 3,
                 _ => 1,
             };
 
             PropertiesPanel.Children.Add(lbl);
             PropertiesPanel.Children.Add(combo);
+
+            // Zener parametreleri: yalnız "Zener" seçiliyken görünür ve doğrulanır
+            var zenerPanel = new StackPanel
+            {
+                Visibility = diode.Model == DiodeModel.Zener ? Visibility.Visible : Visibility.Collapsed
+            };
+
+            var lblVz = new TextBlock
+            {
+                Text = "Zener gerilimi V_Z (V)",
+                Style = (Style)FindResource("Text.Caption"),
+                Margin = new Thickness(0, 4, 0, 4)
+            };
+            var txtVz = new TextBox
+            {
+                Text = diode.ZenerVoltage.ToString("G12", TurkishNumber.Culture),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+
+            var lblIzm = new TextBlock
+            {
+                Text = "Maks. zener akımı I_ZM (isteğe bağlı)",
+                Style = (Style)FindResource("Text.Caption"),
+                Margin = new Thickness(0, 4, 0, 4)
+            };
+            var txtIzm = new TextBox
+            {
+                Text = diode.ZenerMaxCurrent.HasValue
+                    ? diode.ZenerMaxCurrent.Value.ToString("G12", TurkishNumber.Culture)
+                    : string.Empty,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+
+            zenerPanel.Children.Add(lblVz);
+            zenerPanel.Children.Add(txtVz);
+            zenerPanel.Children.Add(lblIzm);
+            zenerPanel.Children.Add(txtIzm);
+            PropertiesPanel.Children.Add(zenerPanel);
+
+            combo.SelectionChanged += (_, _) =>
+            {
+                zenerPanel.Visibility = combo.SelectedIndex == 3 ? Visibility.Visible : Visibility.Collapsed;
+            };
+
+            double validatedVz = diode.ZenerVoltage;
+            double? validatedIzm = diode.ZenerMaxCurrent;
+
+            _customValidations.Add(() =>
+            {
+                if (combo.SelectedIndex != 3)
+                    return true;
+                string? err = ValidateZenerFields(txtVz.Text, txtIzm.Text, out validatedVz, out validatedIzm);
+                if (err != null)
+                {
+                    ShowInputError(err);
+                    var focusTarget = err.Contains("I_ZM", StringComparison.Ordinal) ? txtIzm : txtVz;
+                    focusTarget.Focus();
+                    focusTarget.SelectAll();
+                    return false;
+                }
+                return true;
+            });
 
             _commitActions.Add(() =>
             {
@@ -733,11 +828,17 @@ namespace CircuitAnalyzer.WPF
                 {
                     0 => DiodeModel.Ideal,
                     2 => DiodeModel.Ge,
+                    3 => DiodeModel.Zener,
                     _ => DiodeModel.Si,
                 };
+                if (diode.Model == DiodeModel.Zener)
+                {
+                    diode.ZenerVoltage = validatedVz;
+                    diode.ZenerMaxCurrent = validatedIzm;
+                }
             });
 
-            AddHintText("Anot sol uçta, katot çizgili uçta. Si 0,7 V, Ge 0,3 V eşik gerilimi.");
+            AddHintText("Anot sol uçta, katot çizgili uçta. Si 0,7 V, Ge 0,3 V eşik gerilimi; Zener ters yönde V_Z geriliminde iletime geçer (I_ZM için ör. 0,03 veya 30 mA).");
         }
 
         private void BuildSpdtSwitchForm(SpdtSwitch spdt)
@@ -1384,6 +1485,13 @@ namespace CircuitAnalyzer.WPF
             if (_stringInputBox != null && _stringSetter != null)
             {
                 _stringSetter(_stringInputBox.Text.Trim());
+            }
+
+            // ── 4b. Eleman-özel doğrulamalar (ör. Zener V_Z / I_ZM) ──
+            foreach (var validate in _customValidations)
+            {
+                if (!validate())
+                    return;
             }
 
             // ── 5. Bağımlı kaynağın liste/işaret kutusu ──

@@ -120,6 +120,16 @@ public class ElementDrawerTests
             Assert.False(win.IsElementDrawerOpen);
             Assert.False(win.RailSemiconductor.IsChecked);
             Assert.True(win.HandleKeyDown(Key.Escape));
+
+            // Zener düğmesi de aynı çekmeceden yerleştirmeyi başlatır
+            win.RailSemiconductor.IsChecked = true;
+            Assert.True(win.IsElementDrawerOpen);
+
+            win.BtnAddZener.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+
+            Assert.False(win.IsElementDrawerOpen);
+            Assert.False(win.RailSemiconductor.IsChecked);
+            Assert.True(win.HandleKeyDown(Key.Escape));
         });
     }
 }

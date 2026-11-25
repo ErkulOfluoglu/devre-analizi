@@ -1430,9 +1430,13 @@ def _currents(ctx: _Ctx, mark: str = "", passive_only: bool = False,
         from explainer.diode_narrative import current_lines
         for line in current_lines(ctx.diodes, ctx.i):
             s.math(line)
-        if any(d.state == "ON" for d in ctx.diodes.diodes):
-            s.note("İletimdeki diyotun akımı, eşdeğer kaynağa bağlı elemanların akımlarından KCL "
-                   "ile bulunur; akım anottan katoda doğru pozitiftir.")
+        if any(d.state in ("ON", "ZENER") for d in ctx.diodes.diodes):
+            if any(d.state == "ZENER" for d in ctx.diodes.diodes):
+                s.note("İletimdeki diyotun akımı, eşdeğer kaynağa bağlı elemanların akımlarından KCL "
+                       "ile bulunur (doğru iletimde anot → katot, zener bölgesinde katot → anot).")
+            else:
+                s.note("İletimdeki diyotun akımı, eşdeğer kaynağa bağlı elemanların akımlarından KCL "
+                       "ile bulunur; akım anottan katoda doğru pozitiftir.")
     return [s] if len(s.blocks) > 1 else []
 
 

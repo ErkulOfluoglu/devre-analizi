@@ -6,6 +6,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Shapes;
+using CircuitAnalyzer.WPF;
 using CircuitAnalyzer.WPF.Models;
 using CircuitAnalyzer.WPF.Services;
 using CircuitAnalyzer.WPF.Views;
@@ -69,6 +71,34 @@ public class DiodeTests
 
         Assert.Equal(expectedLabel, diode.ModelLabel);
         Assert.Equal($"D1 2 5 {expectedToken}", diode.ToNetlistEntry(nodeMap));
+    }
+
+    [Fact]
+    public void Zener_ToNetlistEntry_FormatsWithAndWithoutIzmUsingInvariantDecimal()
+    {
+        var zenerWithoutIzm = new Diode(DiodeModel.Zener) { Id = "D1" }; // varsayılan VZ=5.1, IZM=null
+        var map1 = new Dictionary<Pin, int>
+        {
+            [zenerWithoutIzm.Pins[0]] = 2,
+            [zenerWithoutIzm.Pins[1]] = 5,
+        };
+        Assert.Equal(5.1, zenerWithoutIzm.ZenerVoltage, 6);
+        Assert.Null(zenerWithoutIzm.ZenerMaxCurrent);
+        Assert.Equal("Vz=5,1V", zenerWithoutIzm.ModelLabel);
+        Assert.Equal("D1 2 5 ZENER VZ=5.1", zenerWithoutIzm.ToNetlistEntry(map1));
+
+        var zenerWithIzm = new Diode(DiodeModel.Zener)
+        {
+            Id = "D2",
+            ZenerVoltage = 5.1,
+            ZenerMaxCurrent = 0.03
+        };
+        var map2 = new Dictionary<Pin, int>
+        {
+            [zenerWithIzm.Pins[0]] = 0,
+            [zenerWithIzm.Pins[1]] = 2,
+        };
+        Assert.Equal("D2 0 2 ZENER VZ=5.1 IZM=0.03", zenerWithIzm.ToNetlistEntry(map2));
     }
 
     [Fact]
@@ -150,6 +180,88 @@ public class DiodeTests
     }
 
     [Fact]
+    public void CircuitDocument_RoundTrip_PreservesZenerVzAndOptionalIzm()
+    {
+        var d1 = new Diode(DiodeModel.Zener)
+        {
+            Id = "D1",
+            ZenerVoltage = 20,
+            ZenerMaxCurrent = 0.03,
+            Position = new Point(160, 200),
+            Rotation = 270
+        };
+        var d2 = new Diode(DiodeModel.Zener)
+        {
+            Id = "D2",
+            ZenerVoltage = 5.1,
+            ZenerMaxCurrent = null,
+            Position = new Point(260, 200),
+            Rotation = 90
+        };
+
+        var doc = CircuitDocument.FromCircuit(new CircuitElement[] { d1, d2 }, Array.Empty<Wire>());
+        string json = doc.ToJson();
+
+        Assert.Contains("\"model\": \"ZENER\"", json);
+        Assert.Contains("\"vz\": 20", json);
+        Assert.Contains("\"izm\": 0.03", json);
+
+        var loaded = CircuitDocument.FromJson(json).ToCircuit("ZenerTest");
+        var restored1 = loaded.Elements.OfType<Diode>().Single(d => d.Id == "D1");
+        var restored2 = loaded.Elements.OfType<Diode>().Single(d => d.Id == "D2");
+
+        Assert.Equal(DiodeModel.Zener, restored1.Model);
+        Assert.Equal(20, restored1.ZenerVoltage, 6);
+        Assert.Equal(0.03, restored1.ZenerMaxCurrent!.Value, 6);
+        Assert.Equal(270, restored1.Rotation);
+
+        Assert.Equal(DiodeModel.Zener, restored2.Model);
+        Assert.Equal(5.1, restored2.ZenerVoltage, 6);
+        Assert.Null(restored2.ZenerMaxCurrent);
+    }
+
+    [Fact]
+    public void CircuitDocument_OldDiodeFileWithoutVzIzm_LoadsFine()
+    {
+        const string json = """
+        {
+          "format": "devre-analizi",
+          "version": 1,
+          "elements": [
+            { "type": "DIODE", "id": "D1", "model": "GE", "x": 100, "y": 100, "rotation": 0 }
+          ],
+          "wires": []
+        }
+        """;
+
+        var circuit = CircuitDocument.FromJson(json).ToCircuit("OldDiode");
+        var diode = Assert.Single(circuit.Elements.OfType<Diode>());
+        Assert.Equal(DiodeModel.Ge, diode.Model);
+        Assert.Equal(5.1, diode.ZenerVoltage, 6);
+        Assert.Null(diode.ZenerMaxCurrent);
+    }
+
+    [Fact]
+    public void Editor_ValidateZenerFields_AcceptsValidAndRejectsInvalid()
+    {
+        Assert.Null(ElementEditorWindow.ValidateZenerFields("5,1", "", out double vz1, out double? izm1));
+        Assert.Equal(5.1, vz1, 6);
+        Assert.Null(izm1);
+
+        Assert.Null(ElementEditorWindow.ValidateZenerFields("20", "30 mA", out double vz2, out double? izm2));
+        Assert.Equal(20, vz2, 6);
+        Assert.Equal(0.03, izm2!.Value, 6);
+
+        Assert.NotNull(ElementEditorWindow.ValidateZenerFields("", "", out _, out _));
+        Assert.NotNull(ElementEditorWindow.ValidateZenerFields("0", "", out _, out _));
+        Assert.NotNull(ElementEditorWindow.ValidateZenerFields("-5,1", "", out _, out _));
+        Assert.NotNull(ElementEditorWindow.ValidateZenerFields("abc", "", out _, out _));
+        Assert.NotNull(ElementEditorWindow.ValidateZenerFields("5,1", "0", out _, out _));
+        Assert.NotNull(ElementEditorWindow.ValidateZenerFields("5,1", "-0,01", out _, out _));
+        Assert.NotNull(ElementEditorWindow.ValidateZenerFields("5,1", "xyz", out _, out _));
+    }
+
+    [Fact]
     public void Clipboard_GetPrefixForDiode_ReturnsD()
     {
         Assert.Equal("D", CircuitClipboard.GetPrefixForElement(new Diode()));
@@ -161,6 +273,7 @@ public class DiodeTests
         Assert.False(DependentSource.CanBeControl(new Diode(DiodeModel.Si)));
         Assert.False(DependentSource.CanBeControl(new Diode(DiodeModel.Ge)));
         Assert.False(DependentSource.CanBeControl(new Diode(DiodeModel.Ideal)));
+        Assert.False(DependentSource.CanBeControl(new Diode(DiodeModel.Zener)));
     }
 
     [Fact]
@@ -278,6 +391,43 @@ public class DiodeTests
     }
 
     [Fact]
+    public void ApiModels_AndFormatting_ZenerResultDto_FormatsCorrectly()
+    {
+        const string json = """
+        {
+          "status": "success",
+          "mode": "DC",
+          "analysis_type": "NODAL",
+          "results": {
+            "node_voltages": {},
+            "element_currents": {}
+          },
+          "diodes": [
+            { "id": "D1", "model": "ZENER", "v_t": 0.7, "vz": 20.0, "izm": 0.03, "state": "ZENER", "v_ak": -20.0, "i": 0.0133333333 }
+          ]
+        }
+        """;
+
+        var dto = JsonSerializer.Deserialize<AnalysisResponseDto>(json);
+        Assert.NotNull(dto);
+        var z = Assert.Single(dto!.DiodeResults!);
+        Assert.Equal("D1", z.Id);
+        Assert.Equal("ZENER", z.Model);
+        Assert.Equal(20.0, z.Vz!.Value, 6);
+        Assert.Equal(0.03, z.Izm!.Value, 6);
+        Assert.Equal("ZENER", z.State);
+        Assert.Equal(-20.0, z.VAk, 6);
+
+        Assert.Equal(
+            $"D1 (Zener, V_Z = 20 V): ters iletimde (V_Z) · V_AK = −20 V · I_Z = {EngFormat.Format(z.I, "A")}",
+            AnalysisPanel.FormatDiodeLine(z));
+
+        var rows = PrintContent.DiodeRows(new[] { z });
+        var row = Assert.Single(rows);
+        Assert.Equal(("D1 (Zener 20 V)", "ters iletimde (V_Z)", "−20 V", EngFormat.Format(z.I, "A")), row);
+    }
+
+    [Fact]
     public void CreateVisual_ShowsModelLabelOnlyForSiAndGe()
     {
         RunOnSta(() =>
@@ -300,6 +450,12 @@ public class DiodeTests
             Assert.DoesNotContain("Si", idealTexts);
             Assert.DoesNotContain("Ge", idealTexts);
             Assert.Equal(new[] { "D3" }, idealTexts);
+
+            var zenerCanvas = Assert.IsType<Canvas>(new Diode(DiodeModel.Zener) { Id = "D4" }.CreateVisual());
+            var zenerTexts = zenerCanvas.Children.OfType<TextBlock>().Select(t => t.Text).ToList();
+            Assert.Contains("Vz=5,1V", zenerTexts);
+            Assert.Contains("D4", zenerTexts);
+            Assert.Single(zenerCanvas.Children.OfType<Polyline>());
         });
     }
 
@@ -307,7 +463,7 @@ public class DiodeTests
     public void ExampleCircuit_DcSeriesParallelDiodes_HasValidNetlistAndParallelReverseDiode()
     {
         var c = ExampleCircuits.DcSeriesParallelDiodes();
-        Assert.Equal((Func<ExampleCircuit>)ExampleCircuits.DcSeriesParallelDiodes, ExampleCircuits.All[^1]);
+        Assert.Contains((Func<ExampleCircuit>)ExampleCircuits.DcSeriesParallelDiodes, ExampleCircuits.All);
         Assert.Equal("Diyot: Seri ve Paralel Diyotlar", c.Name);
         Assert.Equal(AnalysisTypes.Nodal, c.SuggestedAnalysisType);
 
@@ -326,5 +482,30 @@ public class DiodeTests
         Assert.Equal(netlist.NodeMap[d2.Pins[0]], netlist.NodeMap[d1.Pins[1]]);
         Assert.Equal(netlist.NodeMap[d2.Pins[1]], netlist.NodeMap[d1.Pins[0]]);
         Assert.Equal(netlist.NodeMap[d3.Pins[1]], netlist.NodeMap[d2.Pins[0]]);
+    }
+
+    [Fact]
+    public void ExampleCircuit_DcZenerVoltageRegulator_IsLastAndHasValidNetlist()
+    {
+        Assert.Equal((Func<ExampleCircuit>)ExampleCircuits.DcZenerVoltageRegulator, ExampleCircuits.All[^1]);
+
+        var c = ExampleCircuits.DcZenerVoltageRegulator();
+        Assert.Equal("Zener: Gerilim Regülatörü", c.Name);
+        Assert.Equal("Zener ters iletimde; çıkış V_Y = V_Z = 20 V, I_Z = 13,33 mA.", c.Description);
+        Assert.Equal(AnalysisTypes.Nodal, c.SuggestedAnalysisType);
+
+        var netlist = NetlistBuilder.Build(c.Elements, c.Wires);
+        Assert.True(netlist.HasGround);
+
+        var d1 = c.Elements.OfType<Diode>().Single(d => d.Id == "D1");
+        var ry = c.Elements.OfType<Resistor>().Single(r => r.Id == "RY");
+        Assert.Equal(DiodeModel.Zener, d1.Model);
+        Assert.Equal(20, d1.ZenerVoltage, 6);
+        Assert.Equal(0.03, d1.ZenerMaxCurrent!.Value, 6);
+
+        // Anot toprakta (0), katot çıkış düğümünde (RY'nin üst ucuyla aynı)
+        Assert.Equal(0, netlist.NodeMap[d1.Pins[0]]);
+        Assert.Equal(netlist.NodeMap[ry.Pins[0]], netlist.NodeMap[d1.Pins[1]]);
+        Assert.Contains($"D1 0 {netlist.NodeMap[d1.Pins[1]]} ZENER VZ=20 IZM=0.03", netlist.Text);
     }
 }

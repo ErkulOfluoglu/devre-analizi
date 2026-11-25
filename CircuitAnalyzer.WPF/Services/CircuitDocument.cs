@@ -84,10 +84,16 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("balanced")] public bool? Balanced { get; set; }
             [JsonPropertyName("z")] public List<double[]>? Z { get; set; }
 
-            // ── Diyot ("DIODE"): model ("IDEAL", "SI", "GE") ──
+            // ── Diyot ("DIODE"): model ("IDEAL", "SI", "GE", "ZENER"), Zener için vz ve isteğe bağlı izm ──
             [JsonPropertyName("model")]
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public string? Model { get; set; }
+            [JsonPropertyName("vz")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public double? Vz { get; set; }
+            [JsonPropertyName("izm")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public double? Izm { get; set; }
         }
 
         public sealed class WireData
@@ -235,6 +241,11 @@ namespace CircuitAnalyzer.WPF.Services
                 case Diode diode:
                     d.Type = "DIODE";
                     d.Model = diode.NetlistModel;
+                    if (diode.Model == DiodeModel.Zener)
+                    {
+                        d.Vz = diode.ZenerVoltage;
+                        d.Izm = diode.ZenerMaxCurrent;
+                    }
                     break;
                 default:
                     throw new NotSupportedException($"Kaydedilemeyen eleman türü: {e.GetType().Name}");
@@ -482,9 +493,18 @@ namespace CircuitAnalyzer.WPF.Services
                         {
                             "IDEAL" => DiodeModel.Ideal,
                             "GE" => DiodeModel.Ge,
+                            "ZENER" => DiodeModel.Zener,
                             _ => DiodeModel.Si,
                         };
-                        return new Diode(model);
+                        var diode = new Diode(model);
+                        if (model == DiodeModel.Zener)
+                        {
+                            if (d.Vz is { } vz && double.IsFinite(vz) && vz > 0)
+                                diode.ZenerVoltage = vz;
+                            if (d.Izm is { } izm && double.IsFinite(izm) && izm > 0)
+                                diode.ZenerMaxCurrent = izm;
+                        }
+                        return diode;
                     }
                 default:
                     throw new CircuitFileException($"Tanınmayan eleman türü: “{d.Type}”. Dosya daha yeni bir sürümle kaydedilmiş olabilir.");

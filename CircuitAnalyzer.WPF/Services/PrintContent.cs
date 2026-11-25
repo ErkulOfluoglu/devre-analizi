@@ -114,11 +114,17 @@ namespace CircuitAnalyzer.WPF.Services
             if (diodes == null)
                 return new();
             return diodes
-                .Select(d => (
-                    $"{d.Id} ({AnalysisPanel.FormatDiodeModel(d.Model)})",
-                    AnalysisPanel.FormatDiodeState(d.State),
-                    AnalysisPanel.FormatDiodeVoltage(d.VAk),
-                    UnicodeMinus(EngFormat.Format(d.I, "A"))))
+                .Select(d =>
+                {
+                    string modelText = AnalysisPanel.FormatDiodeModel(d.Model);
+                    if (string.Equals(d.Model?.Trim(), "ZENER", StringComparison.OrdinalIgnoreCase) && d.Vz.HasValue)
+                        modelText = $"{modelText} {AnalysisPanel.FormatDiodeVoltage(d.Vz.Value)}";
+                    return (
+                        $"{d.Id} ({modelText})",
+                        AnalysisPanel.FormatDiodeState(d.State),
+                        AnalysisPanel.FormatDiodeVoltage(d.VAk),
+                        UnicodeMinus(EngFormat.Format(d.I, "A")));
+                })
                 .ToList();
         }
 

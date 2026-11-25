@@ -55,7 +55,7 @@ I_TOL = 1e-9
 V_TOL = 1e-9
 MAX_DIODES = 6
 
-MODEL_LABELS = {"IDEAL": "ideal", "SI": "Si", "GE": "Ge"}
+MODEL_LABELS = {"IDEAL": "ideal", "SI": "Si", "GE": "Ge", "ZENER": "Zener"}
 
 AC_REASON = ("Diyotlu devreler şimdilik yalnızca DC kaynaklarla çözülür; doğrultucu ve kırpıcılar "
              "(AC) sonraki adımda eklenecek.")
@@ -91,14 +91,18 @@ class DiodeInfo:
     v_t: float
     anode: str
     cathode: str
-    state: str = "OFF"                    # "ON" | "OFF"
+    v_z: Optional[float] = None           # zener kırılma gerilimi V_Z (V)
+    i_zm: Optional[float] = None          # en büyük zener akımı I_ZM (A)
+    state: str = "OFF"                    # "ON" | "ZENER" | "OFF"
     group: List[str] = field(default_factory=list)   # özdeş paralel grup (kendisi dahil)
     rep: str = ""                         # grubun temsilcisi (eşdeğer kaynağın kimliği)
-    i: float = 0.0                        # son çözümde bu diyotun akımı (anot → katot)
+    i: float = 0.0                        # raporlanan akım: ON'da I_AK, ZENER'de pozitif I_Z (katot → anot)
+    i_ak: float = 0.0                     # her zaman anot → katot yönünde akım (KCL ve element_currents için)
     i_total: float = 0.0                  # grubun toplam akımı
     v_ak: Optional[float] = None          # son çözümde V_AK (uçlardan biri boştaysa None)
     v_ak_search: float = 0.0              # aramadaki (sızıntılı) V_AK — yalnızca yön için
-    kind: str = ""                        # on | on_cut | reverse | zero | forward_low
+    kind: str = ""                        # on | on_cut | zener | zener_cut | reverse | zero | forward_low
+    over_izm: bool = False                # ZENER durumunda I_Z > I_ZM aşıldı mı
     dropped: bool = False                 # boşta kalan bölümde (eşdeğer devreden çıkarıldı)
 
     @property
@@ -108,6 +112,10 @@ class DiodeInfo:
     @property
     def is_ideal(self) -> bool:
         return self.v_t == 0.0
+
+    @property
+    def is_zener(self) -> bool:
+        return self.model == "ZENER"
 
 
 @dataclass
@@ -150,6 +158,15 @@ def _diode_off_search(d: ParsedElement) -> ParsedElement:
                          node_positive=d.node_positive, node_negative=d.node_negative, value=R_OFF)
 
 
+def _zener_breakdown_element(d: ParsedElement) -> ParsedElement:
+    # Ters iletim (zener bölgesi): + ucu katotta, − ucu anotta V_Z kaynağı (V_KA = V_Z)
+    return ParsedElement(
+        id=d.id, element_type=ElementType.DC_SOURCE,
+        node_positive=d.node_negative, node_negative=d.node_positive, value=d.params["v_z"],
+        params={"diode_of": d.id, "model": d.params["model"], "v_t": d.params["v_t"],
+                "v_z": d.params["v_z"], "zener_state": "ZENER"})
+
+
 # Diyot: durum 0 = OFF (yalıtım), durum 1 = ON (iletim). Sıra önemlidir: arama düşük indeksten başlar.
 DIODE_STATES: List[DeviceState] = [
     DeviceState("OFF", _diode_off_search, lambda d: None,
@@ -158,10 +175,20 @@ DIODE_STATES: List[DeviceState] = [
                 lambda d, v_ak, i_ak: i_ak >= -I_TOL),
 ]
 
+# Zener (sabit V_Z, V_F = 0,7 V): 0 = OFF (−V_Z ≤ V_AK ≤ V_F; sınırda OFF), 1 = ON, 2 = ZENER (I_KA ≥ 0).
+ZENER_STATES: List[DeviceState] = [
+    DeviceState("OFF", _diode_off_search, lambda d: None,
+                lambda d, v_ak, i_ak: -d.params["v_z"] - V_TOL <= v_ak <= d.params["v_t"] + V_TOL),
+    DeviceState("ON", _diode_on_element, _diode_on_element,
+                lambda d, v_ak, i_ak: i_ak >= -I_TOL),
+    DeviceState("ZENER", _zener_breakdown_element, _zener_breakdown_element,
+                lambda d, v_ak, i_ak: -i_ak >= -I_TOL),
+]
+
 
 def device_states(elem: ParsedElement) -> List[DeviceState]:
     if elem.element_type in DIODE_TYPES:
-        return DIODE_STATES
+        return ZENER_STATES if elem.params.get("model") == "ZENER" else DIODE_STATES
     raise ValueError(f"{elem.id}: durum katmanı bu eleman türünü bilmiyor")
 
 
@@ -375,9 +402,9 @@ def _same_physics(a: _Candidate, b: _Candidate) -> bool:
 
 
 def _combos(n: int, sizes: List[int]):
-    """Durum birleşimleri: toplam durum indeksi artan sırada, eşitlikte sözlük sırasıyla."""
+    """Durum birleşimleri: önce en az etkin (OFF dışı) cihaz, eşitlikte netlist sırası."""
     allc = list(itertools.product(*[range(s) for s in sizes]))
-    allc.sort(key=lambda st: (sum(st), [-x for x in st]))
+    allc.sort(key=lambda st: (sum(1 for x in st if x != 0), [0 if x else 1 for x in st], list(st)))
     return allc
 
 
@@ -385,7 +412,9 @@ def _group_identical(diodes: List[ParsedElement]) -> List[List[ParsedElement]]:
     groups: Dict[Tuple[str, str, str], List[ParsedElement]] = {}
     order: List[Tuple[str, str, str]] = []
     for d in diodes:
-        key = (d.params["model"], d.node_positive, d.node_negative)
+        # Zenerler birleştirilmez (farklı V_Z / I_ZM ve ters iletim olasılığı yüzünden tek tek çözülür)
+        key = ("ZENER", d.id, "") if d.params["model"] == "ZENER" else (
+            d.params["model"], d.node_positive, d.node_negative)
         if key not in groups:
             groups[key] = []
             order.append(key)
@@ -408,7 +437,8 @@ def resolve_states(circuit: ParsedCircuit):
     unsupported = None
     for st in _combos(len(reps), sizes):
         tried += 1
-        elems = base + [device_states(r)[s].search_element(r) for r, s in zip(reps, st)]
+        subs = [device_states(r)[s].search_element(r) for r, s in zip(reps, st)]
+        elems = base + subs
         if _voltage_loop(elems):
             continue
         try:
@@ -418,14 +448,19 @@ def resolve_states(circuit: ParsedCircuit):
         except _Unsupported as e:
             unsupported = str(e)
             break
+        # Eşdeğer yönü ters olan durumlarda (ZENER: + katotta) akımı anot → katot (I_AK) yönüne çevir
+        currents_ak = dict(currents)
         ok = True
-        for r, s in zip(reps, st):
+        for r, s, sub in zip(reps, st, subs):
             v_ak = volts.get(r.node_positive, 0.0) - volts.get(r.node_negative, 0.0)
-            if not device_states(r)[s].consistent(r, v_ak, currents[r.id]):
+            i_raw = currents[r.id]
+            i_ak = i_raw if sub.node_positive == r.node_positive else -i_raw
+            currents_ak[r.id] = i_ak
+            if not device_states(r)[s].consistent(r, v_ak, i_ak):
                 ok = False
                 break
         if ok:
-            consistent.append(_Candidate(st, volts, currents))
+            consistent.append(_Candidate(st, volts, currents_ak))
     if unsupported is not None:
         raise DiodeUnsolvable(
             f"{unsupported} elemanı diyotlu devrelerde şimdilik kullanılamıyor (diyotlu devrede "
@@ -597,7 +632,8 @@ def solve_with_diodes(parsed: ParsedCircuit, mode: AnalysisMode, frequency, anal
     for e in circuit.elements:
         if e.element_type in DIODE_TYPES:
             infos.append(DiodeInfo(id=e.id, model=e.params["model"], v_t=e.params["v_t"],
-                                   anode=e.node_positive, cathode=e.node_negative))
+                                   anode=e.node_positive, cathode=e.node_negative,
+                                   v_z=e.params.get("v_z"), i_zm=e.params.get("i_zm")))
     report = DiodeReport(diodes=infos, combos_tried=tried, circuit=circuit)
     try:
         equiv, state_of, rep_of = build_equivalent(circuit, groups, chosen, report)
@@ -683,7 +719,8 @@ def solve_with_diodes(parsed: ParsedCircuit, mode: AnalysisMode, frequency, anal
     # diyot da güç harcadığından bu eşitlik bozulur, soru çıkarılır.
     pat = re.compile(r"(?<![\w])(" + "|".join(re.escape(i) for i in sorted(diode_ids, key=len,
                                                                           reverse=True)) + r")(?![\w])")
-    lossy = any(d.state == "ON" and d.v_t > 0 and not d.dropped for d in infos)
+    lossy = any(((d.state == "ON" and d.v_t > 0) or d.state == "ZENER") and not d.dropped
+                for d in infos)
     results.practice = [q for q in results.practice
                         if not (pat.search(q.id) or pat.search(q.label) or pat.search(q.description)
                                 or (lossy and q.id == "P_TOTAL"))]
@@ -729,6 +766,7 @@ def _scrub_steps(steps, names: Dict[str, str]) -> None:
 def _complete_results(results, report: DiodeReport, equiv: ParsedCircuit, circuit: ParsedCircuit,
                       target_probes, errors: List[str]) -> None:
     """Diyot akımları (gruplar bölünür, yalıtımdakiler 0), boşta kalan elemanlar, güç ve `diodes`."""
+    from explainer.formatting import eng
     from solver.circuit_solver import make_complex_number, sig_round
 
     def num_value(v) -> float:
@@ -738,27 +776,41 @@ def _complete_results(results, report: DiodeReport, equiv: ParsedCircuit, circui
     ec = results.element_currents
     totals: Dict[str, float] = {}
     for d in report.diodes:
-        if d.id == d.rep and d.state == "ON" and not d.dropped and d.id in ec:
+        if d.id == d.rep and d.state in ("ON", "ZENER") and not d.dropped and d.id in ec:
             totals[d.id] = num_value(ec[d.id].value)
     for d in report.diodes:
-        total = totals.get(d.rep, 0.0) if d.state == "ON" else 0.0
+        total = totals.get(d.rep, 0.0) if d.state in ("ON", "ZENER") else 0.0
         d.i_total = total
-        d.i = total / len(d.group) if d.group else total
         if d.anode in nv and d.cathode in nv:
             d.v_ak = num_value(nv[d.anode].value) - num_value(nv[d.cathode].value)
         if d.state == "ON":
+            d.i = total / len(d.group) if d.group else total
+            d.i_ak = d.i
             d.kind = "on" if abs(total) > I_TOL else "on_cut"
+        elif d.state == "ZENER":
+            # Eşdeğer kaynak (+ katot, − anot) akımı katot → anot yönünde pozitiftir (I_Z = I_KA)
+            d.i = total
+            d.i_ak = -d.i
+            d.kind = "zener" if abs(total) > I_TOL else "zener_cut"
+            if d.i_zm is not None and d.i > d.i_zm + I_TOL:
+                d.over_izm = True
+                errors.append(
+                    f"⚠ {d.id}: I_Z = {eng(d.i, 'A')}, I_ZM = {eng(d.i_zm, 'A')} sınırını aşıyor; "
+                    "gerçekte zener aşırı akımdan zarar görür. Not: bazı ders kitapları bu durumu "
+                    "“zener yalıtımdadır” diye yorumlar.")
         else:
+            d.i = 0.0
+            d.i_ak = 0.0
             v = d.v_ak if d.v_ak is not None else d.v_ak_search
             d.kind = "reverse" if v < -1e-12 else ("zero" if abs(v) <= 1e-12 else "forward_low")
 
-    # Eleman akımları: netlist sırasıyla (diyotlar ve boşta kalanlar dahil)
+    # Eleman akımları: netlist sırasıyla (diyotlar her zaman anot → katot yönünde; KCL tutarlı kalır)
     info = report.by_id()
     new_ec = {}
     for e in circuit.elements:
         if e.id in info:
             d = info[e.id]
-            new_ec[e.id] = ElementCurrent(value=sig_round(d.i), unit="A",
+            new_ec[e.id] = ElementCurrent(value=sig_round(d.i_ak), unit="A",
                                           direction=f"{d.anode}→{d.cathode}")
         elif e.id in ec:
             new_ec[e.id] = ec[e.id]
@@ -769,7 +821,7 @@ def _complete_results(results, report: DiodeReport, equiv: ParsedCircuit, circui
         new_ec.setdefault(k, v)
     results.element_currents = new_ec
 
-    # Güç: diyot (yük) P = V_T·I, grup üyelerine bölünür; yalıtımdakiler ve boştakiler 0
+    # Güç: diyot (yük) ON'da V_T·I, ZENER'de V_Z·I_Z; yalıtımdakiler ve boştakiler 0
     if results.power is not None:
         pe = results.power.elements
         new_pe = {}
@@ -784,7 +836,13 @@ def _complete_results(results, report: DiodeReport, equiv: ParsedCircuit, circui
         for e in circuit.elements:
             if e.id in info:
                 d = info[e.id]
-                new_pe[e.id] = power_entry(e.id, d.v_t * d.i if d.state == "ON" else 0.0)
+                if d.state == "ON":
+                    p = d.v_t * d.i
+                elif d.state == "ZENER":
+                    p = d.v_z * d.i
+                else:
+                    p = 0.0
+                new_pe[e.id] = power_entry(e.id, p)
             elif e.id in pe:
                 new_pe[e.id] = pe[e.id]
             elif e.id in report.dropped:
@@ -802,13 +860,13 @@ def _complete_results(results, report: DiodeReport, equiv: ParsedCircuit, circui
         kind = str(getattr(p, "type", None) or getattr(p, "probe_type", "")).upper()
         if kind == "I" and p.target in info:
             results.probe_results.append(ProbeResult(
-                probe_id=p.id, type="I", value=sig_round(info[p.target].i), unit="A"))
+                probe_id=p.id, type="I", value=sig_round(info[p.target].i_ak), unit="A"))
         elif kind == "V" and p.target in floating:
             errors.append(f"ℹ {p.id}: Düğüm {p.target} boşta kalır (akım yolu yok); gerilimi "
                           "belirsizdir.")
 
     results.diodes = [
-        DiodeResult(id=d.id, model=d.model, v_t=d.v_t, state=d.state,
+        DiodeResult(id=d.id, model=d.model, v_t=d.v_t, vz=d.v_z, izm=d.i_zm, state=d.state,
                     v_ak=None if d.v_ak is None else sig_round(d.v_ak), i=sig_round(d.i))
         for d in report.diodes
     ]
