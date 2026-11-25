@@ -61,8 +61,211 @@ def fallback_section(reason: str) -> ExplanationSection:
     )
 
 
+def _build_inverse_sections(analysis) -> List[ExplanationSection]:
+    """Ters problem (INVERSE) için kitap sırasıyla (s. 178) Türkçe anlatım."""
+    reg = analysis.reg
+    sm = analysis.summary
+    given = sm.given
+    sections: List[_Sec] = []
+
+    # ── 1. Devreyi Tanıyalım ──
+    s1 = _Sec("Devreyi Tanıyalım")
+    z_spec = _zener_spec(reg.dz)
+    if reg.kind == "LOAD_FROM_INPUT":
+        s1.add("text", (
+            f"Giriş V_İ = {reg.vs.id}, seri direnç R_X = {reg.rx.id} = {eng(reg.r_x, 'Ω')}, "
+            f"yük R_Y = {reg.ry.id} (devrede {eng(reg.r_y, 'Ω')}), zener {z_spec}."
+        ))
+        s1.add("text", (
+            f"Verilen: {eng(given.min, given.unit)} ≤ {given.symbol} ≤ {eng(given.max, given.unit)}; "
+            f"aranan: {sm.symbol}."
+        ))
+        s1.add("text", (
+            "Amaç: Giriş gerilimi V_İ verilen aralıkta değişirken zenerin hem ters iletimde "
+            "kalmasını hem de I_ZM sınırını aşmamasını sağlayacak yük direnci (R_Y) değerini bulmak."
+        ))
+    else:
+        s1.add("text", (
+            f"Giriş V_İ = {reg.vs.id} (devrede {eng(reg.v_i, 'V')}), "
+            f"seri direnç R_X = {reg.rx.id} = {eng(reg.r_x, 'Ω')}, "
+            f"yük R_Y = {reg.ry.id}, zener {z_spec}."
+        ))
+        s1.add("text", (
+            f"Verilen: {eng(given.min, given.unit)} ≤ {given.symbol} ≤ {eng(given.max, given.unit)}; "
+            f"aranan: {sm.symbol}."
+        ))
+        s1.add("text", (
+            "Amaç: Yük direnci R_Y verilen aralıkta değişirken zenerin hem ters iletimde "
+            "kalmasını hem de I_ZM sınırını aşmamasını sağlayacak giriş gerilimi (V_İ) değerini bulmak."
+        ))
+    sections.append(s1)
+
+    # ── 2. Zener Regülatör Modeli ──
+    sections.append(_model_section(reg))
+
+    # ── 3. Hesap Adımları ──
+    by_sym = {st.symbol: st for st in sm.steps}
+    if reg.kind == "LOAD_FROM_INPUT":
+        s_vx = _Sec("Seri Direnç Gerilimi ve Akımı (V_X, I_X)")
+        s_vx.add("text", (
+            "Zener ters iletimde iken V_Y = V_Z sabit olduğundan seri direnç R_X üzerindeki "
+            "gerilim ve akım aralığı giriş geriliminin sınırlarından bulunur:"
+        ))
+        s_vx.add("math", (
+            f"V_X = V_İ {MINUS} V_Z ⇒ "
+            f"{eng(analysis.v_x_min, 'V')} ≤ V_X ≤ {eng(analysis.v_x_max, 'V')}"
+        ))
+        # İki eşitlik ayrı satırda: tek satırda adım özeti "I_X,min = … = 80 mA" diye
+        # ilk adı son değerle eşleştiriyordu (I_X,min yanlışlıkla 80 mA görünüyordu).
+        s_vx.add("math", f"I_X,min = V_X,min / R_X = {eng(analysis.i_x_min, 'A')}")
+        s_vx.add("math", f"I_X,max = V_X,max / R_X = {eng(analysis.i_x_max, 'A')}")
+        sections.append(s_vx)
+
+        s_cond = _Sec("Yük Direnci Koşulları (R_Y)")
+        s_cond.add("text", (
+            "İki sınır koşulu aynı anda sağlanmalıdır: en küçük girişte zener iletimde kalmalı "
+            "(I_Z ≥ 0), en büyük girişte zener akımı I_ZM'yi aşmamalı (I_Z ≤ I_ZM):"
+        ))
+        s_cond.add("math", (
+            f"V_İ,min'de zener iletimde kalmalı: I_Y ≤ I_X,min ⇒ {by_sym['R_Y,min'].text}"
+        ))
+        if sm.max is not None:
+            s_cond.add("math", (
+                f"V_İ,max'ta I_Z ≤ I_ZM: I_Y ≥ I_X,max {MINUS} I_ZM ⇒ {by_sym['R_Y,max'].text}"
+            ))
+        else:
+            s_cond.add("math", by_sym["R_Y,max"].text)
+            if analysis.unbounded_reason:
+                s_cond.add("note", analysis.unbounded_reason)
+        sections.append(s_cond)
+    else:
+        s_iy = _Sec("Yük Akımı Sınırları (I_Y)")
+        s_iy.add("text", (
+            "Zener ters iletimde iken çıkış gerilimi V_Y = V_Z sabittir; yük direnci küçüldükçe "
+            "yük akımı büyür:"
+        ))
+        s_iy.add("math", by_sym["I_Y,max"].text)
+        s_iy.add("math", by_sym["I_Y,min"].text)
+        sections.append(s_iy)
+
+        s_cond = _Sec("Giriş Gerilimi Koşulları (V_İ)")
+        s_cond.add("text", (
+            "İki sınır koşulu aynı anda sağlanmalıdır: en küçük yükte (en büyük yük akımında) "
+            "zener iletimde kalmalı (I_Z ≥ 0), en büyük yükte (en küçük yük akımında) zener akımı "
+            "I_ZM'yi aşmamalı (I_Z ≤ I_ZM):"
+        ))
+        s_cond.add("math", (
+            f"R_Y,min'de zener iletimde kalmalı: I_X ≥ I_Y,max ⇒ {by_sym['V_İ,min'].text}"
+        ))
+        if sm.max is not None:
+            s_cond.add("math", (
+                f"R_Y,max'ta I_Z ≤ I_ZM: I_X ≤ I_Y,min + I_ZM ⇒ {by_sym['V_İ,max'].text}"
+            ))
+        else:
+            s_cond.add("math", by_sym["V_İ,max"].text)
+            if analysis.unbounded_reason:
+                s_cond.add("note", analysis.unbounded_reason)
+        sections.append(s_cond)
+
+    # ── 4. Sonuç ──
+    s_res = _Sec("Sonuç")
+    if not sm.feasible:
+        s_res.add("result", (
+            f"Çözüm yok: {sm.symbol} ≥ {eng(sm.min, sm.unit)} ve "
+            f"{sm.symbol} ≤ {eng(sm.max, sm.unit)} koşulları çelişiyor."
+        ))
+        if analysis.infeasible_reason:
+            s_res.add("note", analysis.infeasible_reason)
+    elif sm.unique:
+        s_res.add("result", (
+            f"Sonuç: {sm.symbol} = {eng(sm.min, sm.unit)} "
+            "(iki koşul aynı değeri veriyor)."
+        ))
+    elif sm.max is not None:
+        s_res.add("result", f"{eng(sm.min, sm.unit)} ≤ {sm.symbol} ≤ {eng(sm.max, sm.unit)} olmalıdır.")
+    else:
+        s_res.add("result", f"{sm.symbol} ≥ {eng(sm.min, sm.unit)} olmalıdır ({sm.symbol},max = ∞).")
+        if analysis.unbounded_reason:
+            s_res.add("note", analysis.unbounded_reason)
+
+    if sm.feasible:
+        cur_txt = f"{sm.answer_id} = {eng(sm.current_value, sm.unit)}"
+        if sm.current_inside:
+            if sm.unique:
+                s_res.add("check", f"Devredeki mevcut değer ({cur_txt}) bulunan değere uygundur ✓")
+            else:
+                s_res.add("check", f"Devredeki mevcut değer ({cur_txt}) bu aralığın içindedir ✓")
+        elif sm.current_value < sm.min:
+            s_res.add("note", (
+                f"Devredeki mevcut değer ({cur_txt}) gereken alt sınırın ({eng(sm.min, sm.unit)}) "
+                "altındadır."
+            ))
+        else:
+            s_res.add("note", (
+                f"⚠ Devredeki mevcut değer ({cur_txt}) gereken üst sınırın ({eng(sm.max, sm.unit)}) "
+                "üstündedir."
+            ))
+    sections.append(s_res)
+
+    # ── 5. Sağlama (uygulanabilir değilse atlanır) ──
+    if sm.checks:
+        s_chk = _Sec("Sağlama")
+        ans_val = analysis.check_answer_value if analysis.check_answer_value is not None else sm.min
+        s_chk.add("text", (
+            f"Bulunan değer ({sm.symbol} = {eng(ans_val, sm.unit)}) devreye uygulanarak "
+            f"verilen {given.symbol} aralığının altından, içinden ve üstünden seçilen değerlerle "
+            "devre zener çözücüsüyle yeniden çözüldü:"
+        ))
+        _append_checks(s_chk, sm.checks)
+        sections.append(s_chk)
+
+    return [s.build() for s in sections if s.blocks]
+
+
+def _model_section(reg) -> _Sec:
+    s2 = _Sec("Zener Regülatör Modeli")
+    if reg.i_zm is not None:
+        s2.add("text", (
+            f"İdeal zener modeli: ters iletimde (zener bölgesi) çıkış gerilimi V_Y = V_Z = "
+            f"{_volts(reg.v_z)} sabit kalır; zener akımı I_Z,min = 0 ile "
+            f"I_Z,max = I_ZM = {eng(reg.i_zm, 'A')} arasında olmalıdır."
+        ))
+        s2.add("math", f"V_Y = V_Z = {_volts(reg.v_z)},   0 ≤ I_Z ≤ I_ZM ({eng(reg.i_zm, 'A')})")
+    else:
+        s2.add("text", (
+            f"İdeal zener modeli: ters iletimde (zener bölgesi) çıkış gerilimi V_Y = V_Z = "
+            f"{_volts(reg.v_z)} sabit kalır; I_Z,min = 0 olmalıdır. I_ZM belirtilmediği için "
+            "zener akımının üst sınırı yoktur."
+        ))
+        s2.add("math", f"V_Y = V_Z = {_volts(reg.v_z)},   I_Z ≥ 0")
+    s2.add("math", "Çıkış düğümünde KCL:  I_X = I_Z + I_Y")
+    return s2
+
+
+def _append_checks(s_chk: _Sec, checks) -> None:
+    for ch in checks:
+        if ch.verdict == "OK":
+            s_chk.add("check", f"{ch.text} ✓")
+        elif ch.verdict == "ABOVE":
+            s_chk.add("note", ch.text)
+        else:
+            s_chk.add("check", ch.text)
+    # Adım listesindeki kısa özet: üç sonuç birden görünsün ("2 kontrol tuttu" yanıltıcıydı,
+    # çünkü aralık dışındaki değerlerin de beklendiği gibi sonuç vermesi sağlamanın parçası).
+    # " = " kullanılmaz: adım özeti eşitlikleri "ilk = son" diye kısaltır ve ilk iki değer kaybolurdu.
+    _verdict = {"OK": "uygun ✓", "BELOW": "yalıtımda", "ABOVE": "I_Z > I_ZM ⚠"}
+    if checks:
+        sym = checks[0].text.split(" = ")[0]
+        items = [f"{ch.text.split(' → ')[0].split(' = ')[-1]} {_verdict.get(ch.verdict, ch.verdict)}"
+                 for ch in checks]
+        s_chk.add("result", f"{sym}: " + " · ".join(items))
+
+
 def build_zener_range_sections(analysis) -> List[ExplanationSection]:
     """ZenerRangeAnalysis → kitap sırasıyla Türkçe ExplanationSection listesi."""
+    if analysis.summary.mode == "INVERSE":
+        return _build_inverse_sections(analysis)
+
     reg = analysis.reg
     sm = analysis.summary
     sections: List[_Sec] = []
@@ -95,23 +298,7 @@ def build_zener_range_sections(analysis) -> List[ExplanationSection]:
     sections.append(s1)
 
     # ── 2. Zener Regülatör Modeli ──
-    s2 = _Sec("Zener Regülatör Modeli")
-    if reg.i_zm is not None:
-        s2.add("text", (
-            f"İdeal zener modeli: ters iletimde (zener bölgesi) çıkış gerilimi V_Y = V_Z = "
-            f"{_volts(reg.v_z)} sabit kalır; zener akımı I_Z,min = 0 ile "
-            f"I_Z,max = I_ZM = {eng(reg.i_zm, 'A')} arasında olmalıdır."
-        ))
-        s2.add("math", f"V_Y = V_Z = {_volts(reg.v_z)},   0 ≤ I_Z ≤ I_ZM ({eng(reg.i_zm, 'A')})")
-    else:
-        s2.add("text", (
-            f"İdeal zener modeli: ters iletimde (zener bölgesi) çıkış gerilimi V_Y = V_Z = "
-            f"{_volts(reg.v_z)} sabit kalır; I_Z,min = 0 olmalıdır. I_ZM belirtilmediği için "
-            "zener akımının üst sınırı yoktur."
-        ))
-        s2.add("math", f"V_Y = V_Z = {_volts(reg.v_z)},   I_Z ≥ 0")
-    s2.add("math", "Çıkış düğümünde KCL:  I_X = I_Z + I_Y")
-    sections.append(s2)
+    sections.append(_model_section(reg))
 
     # ── 3. Hesap Adımları ──
     by_sym = {st.symbol: st for st in sm.steps}
@@ -200,22 +387,7 @@ def build_zener_range_sections(analysis) -> List[ExplanationSection]:
         + (" ve üstünden" if sm.max is not None else "")
         + " seçilen değerlerle devre zener çözücüsüyle yeniden çözüldü:"
     ))
-    for ch in sm.checks:
-        if ch.verdict == "OK":
-            s_chk.add("check", f"{ch.text} ✓")
-        elif ch.verdict == "ABOVE":
-            s_chk.add("note", ch.text)
-        else:
-            s_chk.add("check", ch.text)
-    # Adım listesindeki kısa özet: üç sonuç birden görünsün ("2 kontrol tuttu" yanıltıcıydı,
-    # çünkü aralık dışındaki değerlerin de beklendiği gibi sonuç vermesi sağlamanın parçası).
-    # " = " kullanılmaz: adım özeti eşitlikleri "ilk = son" diye kısaltır ve ilk iki değer kaybolurdu.
-    _verdict = {"OK": "uygun ✓", "BELOW": "yalıtımda", "ABOVE": "I_Z > I_ZM ⚠"}
-    if sm.checks:
-        sym = sm.checks[0].text.split(" = ")[0]
-        items = [f"{ch.text.split(' → ')[0].split(' = ')[-1]} {_verdict.get(ch.verdict, ch.verdict)}"
-                 for ch in sm.checks]
-        s_chk.add("result", f"{sym}: " + " · ".join(items))
+    _append_checks(s_chk, sm.checks)
     sections.append(s_chk)
 
     return [s.build() for s in sections if s.blocks]

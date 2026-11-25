@@ -120,6 +120,8 @@ namespace CircuitAnalyzer.WPF.Services
             [JsonPropertyName("power_factor_target")] public string? PowerFactorTarget { get; set; }
             [JsonPropertyName("reciprocity_target")] public string? ReciprocityTarget { get; set; }
             [JsonPropertyName("zener_range_target")] public string? ZenerRangeTarget { get; set; }
+            [JsonPropertyName("zener_range_given_min")] public string? ZenerRangeGivenMin { get; set; }
+            [JsonPropertyName("zener_range_given_max")] public string? ZenerRangeGivenMax { get; set; }
         }
 
         private static readonly JsonSerializerOptions JsonOptions = new()

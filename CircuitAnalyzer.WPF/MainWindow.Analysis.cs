@@ -305,6 +305,12 @@ namespace CircuitAnalyzer.WPF
                 ZenerRangeTarget = string.Equals(options.AnalysisType, AnalysisTypes.ZenerRange, StringComparison.OrdinalIgnoreCase)
                     ? options.ZenerRangeTarget
                     : null,
+                ZenerRangeGivenMin = string.Equals(options.AnalysisType, AnalysisTypes.ZenerRange, StringComparison.OrdinalIgnoreCase)
+                    ? options.ZenerRangeGivenMin
+                    : null,
+                ZenerRangeGivenMax = string.Equals(options.AnalysisType, AnalysisTypes.ZenerRange, StringComparison.OrdinalIgnoreCase)
+                    ? options.ZenerRangeGivenMax
+                    : null,
             };
 
             // Büyük AC devre: 2 dakikalık sınıra takılabilir, önce sor (ekran testlerinde sorulmaz)

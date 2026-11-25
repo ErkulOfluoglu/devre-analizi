@@ -292,6 +292,8 @@ def analyze_circuit(
             power_factor_target=request.power_factor_target,
             reciprocity_target=request.reciprocity_target,
             zener_range_target=request.zener_range_target,
+            zener_range_given_min=request.zener_range_given_min,
+            zener_range_given_max=request.zener_range_given_max,
         )
 
     # Tekil devre: sonuç yok, tek Türkçe açıklamayla "Devre çözülemedi"
@@ -665,6 +667,8 @@ def llm_ask(request: LlmAskRequest):
             power_factor_target=request.power_factor_target,
             reciprocity_target=request.reciprocity_target,
             zener_range_target=request.zener_range_target,
+            zener_range_given_min=request.zener_range_given_min,
+            zener_range_given_max=request.zener_range_given_max,
         )
     # Çözülemeyen devre: model sonuçsuz kalır ve sayı uydurur; /analyze ile aynı açıklama
     unsolvable = next((m for m in solve_errors if m.startswith(UNSOLVABLE_PREFIX)), None)

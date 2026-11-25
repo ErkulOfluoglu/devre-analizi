@@ -472,14 +472,28 @@ namespace CircuitAnalyzer.WPF.Services
                             doc.Blocks.Add(pNote);
                         }
 
-                        // Zener Aralığı: aralık cümlesi, hesap adımları ve sağlama tablosu
+                        // Zener Aralığı: verilen aralık (ters problem), cevap cümlesi, hesap adımları ve sağlama tablosu
                         if (zenerRange != null)
                         {
                             var pZrHead = TableHeading("Zener Aralığı", 4);
+                            if (Views.AnalysisPanel.FormatZenerGiven(zenerRange) is { } givenText)
+                            {
+                                var pGiven = new Paragraph
+                                {
+                                    FontSize = 12,
+                                    Foreground = brushSecondary,
+                                    Margin = new Thickness(0, 2, 0, 2)
+                                };
+                                pGiven.Inlines.AddRange(SubscriptText.ToInlines(PrintContent.UnicodeMinus(givenText), 12));
+                                doc.Blocks.Add(pGiven);
+                            }
+
                             var pRange = new Paragraph
                             {
                                 FontSize = 14,
-                                Foreground = brushPrimary,
+                                Foreground = zenerRange.IsInverse && !zenerRange.Feasible
+                                    ? GetBrush(doc, "Brush.Warning")
+                                    : brushPrimary,
                                 Margin = new Thickness(0, 2, 0, 4)
                             };
                             var boldRange = new Bold();
@@ -493,7 +507,9 @@ namespace CircuitAnalyzer.WPF.Services
                                 var pStatus = new Paragraph
                                 {
                                     FontSize = 12.5,
-                                    Foreground = zenerRange.CurrentInside == true ? brushSuccess : GetBrush(doc, "Brush.Warning"),
+                                    Foreground = zenerRange.CurrentInside == true
+                                        ? brushSuccess
+                                        : (zenerRange.IsInverse && zenerRange.Unique ? brushSecondary : GetBrush(doc, "Brush.Warning")),
                                     Margin = new Thickness(0, 0, 0, 8)
                                 };
                                 pStatus.Inlines.AddRange(SubscriptText.ToInlines(PrintContent.UnicodeMinus(currentStatus), 12.5));
@@ -513,7 +529,7 @@ namespace CircuitAnalyzer.WPF.Services
                             if (zenerCheckRows.Count > 0)
                             {
                                 var pCheckHead = TableHeading("Sağlama", 8);
-                                string xCol = !string.IsNullOrWhiteSpace(zenerRange.Symbol) ? zenerRange.Symbol : "x";
+                                string xCol = Views.AnalysisPanel.ZenerCheckXSymbol(zenerRange);
                                 var tblChecks = CreateTable(doc,
                                     new[] { xCol, "Durum", "V_Y", "I_Z", "Karar" },
                                     new[] { 100.0, 145.0, 95.0, 95.0, 85.0 });

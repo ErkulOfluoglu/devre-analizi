@@ -495,6 +495,8 @@ def solve_circuit(
     power_factor_target: Optional[float] = None,
     reciprocity_target: Optional[str] = None,
     zener_range_target: Optional[str] = None,
+    zener_range_given_min: Optional[float] = None,
+    zener_range_given_max: Optional[float] = None,
 ) -> Tuple[AnalysisResults, List[SolutionStep], List[str]]:
     """
     Devreyi çözer (anahtarlı devreler için giriş noktası).
@@ -511,8 +513,13 @@ def solve_circuit(
         # Diyot doğrusal değildir: durumları bulunur, devre eşdeğeriyle çözülür (solver.diode).
         # Ham diyot asla _solve_core'a gitmez (lcapy netlistine yazılamaz).
         from solver.diode import solve_with_diodes
-        return solve_with_diodes(parsed, mode, frequency, analysis_type, thevenin_terminals,
-                                 target_probes, warnings, zener_range_target=zener_range_target)
+        return solve_with_diodes(
+            parsed, mode, frequency, analysis_type, thevenin_terminals,
+            target_probes, warnings,
+            zener_range_target=zener_range_target,
+            zener_range_given_min=zener_range_given_min,
+            zener_range_given_max=zener_range_given_max,
+        )
     if (has_three_phase(parsed) or has_wattmeters(parsed)) and not parsed.errors:
         return _solve_three_phase(parsed, mode, frequency, analysis_type, thevenin_terminals,
                                   target_probes, warnings, power_factor_target)

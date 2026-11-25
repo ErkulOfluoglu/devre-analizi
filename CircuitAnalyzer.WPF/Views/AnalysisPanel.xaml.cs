@@ -26,6 +26,8 @@ public partial class AnalysisPanel : UserControl
     private bool _isBusy;
     private bool _hasAcSource;
     private bool _needsFrequency;
+    private string? _lastZenerRangeTarget;
+    private bool _suppressZenerTargetChanged;
     private bool? _userSelectedExplanation;
     private Border? _viewToggleBorder;
     private ToggleButton? _btnViewExplanation;
@@ -307,8 +309,62 @@ public partial class AnalysisPanel : UserControl
 
         string? prev = GetSelectedTerminal(CmbZenerRangeTarget);
         var list = targetIds.ToList();
-        CmbZenerRangeTarget.ItemsSource = list;
-        CmbZenerRangeTarget.SelectedItem = ResolveZenerRangeTarget(list, prev);
+        string? resolved = ResolveZenerRangeTarget(list, prev);
+
+        // ItemsSource yenilenirken SelectionChanged geçici olarak null tetikler; hedef aynı kaldıysa aralığı silme
+        _suppressZenerTargetChanged = true;
+        try
+        {
+            CmbZenerRangeTarget.ItemsSource = list;
+            CmbZenerRangeTarget.SelectedItem = resolved;
+            _lastZenerRangeTarget = resolved;
+        }
+        finally
+        {
+            _suppressZenerTargetChanged = false;
+        }
+
+        if (!string.Equals(prev, resolved, StringComparison.Ordinal))
+            ClearZenerRangeGiven();
+    }
+
+    private void CmbZenerRangeTarget_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressZenerTargetChanged) return;
+
+        string? current = GetSelectedTerminal(CmbZenerRangeTarget);
+        if (!string.Equals(_lastZenerRangeTarget, current, StringComparison.Ordinal))
+        {
+            _lastZenerRangeTarget = current;
+            ClearZenerRangeGiven();
+        }
+    }
+
+    private void TxtZenerRangeGiven_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        SetZenerRangeGivenError(null);
+    }
+
+    private void ClearZenerRangeGiven()
+    {
+        if (TxtZenerRangeGivenMin != null) TxtZenerRangeGivenMin.Text = "";
+        if (TxtZenerRangeGivenMax != null) TxtZenerRangeGivenMax.Text = "";
+        SetZenerRangeGivenError(null);
+    }
+
+    private void SetZenerRangeGivenError(string? message)
+    {
+        if (TxtZenerRangeGivenError == null) return;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            TxtZenerRangeGivenError.Text = "";
+            TxtZenerRangeGivenError.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            TxtZenerRangeGivenError.Text = message;
+            TxtZenerRangeGivenError.Visibility = Visibility.Visible;
+        }
     }
 
     public void SetAnalysisType(string analysisType, string? terminalPositive = null)
@@ -393,6 +449,9 @@ public partial class AnalysisPanel : UserControl
             ?? CmbAnalysisType.SelectedItem as string
             ?? "";
 
+        string? givenMin = string.IsNullOrWhiteSpace(TxtZenerRangeGivenMin?.Text) ? null : TxtZenerRangeGivenMin.Text.Trim();
+        string? givenMax = string.IsNullOrWhiteSpace(TxtZenerRangeGivenMax?.Text) ? null : TxtZenerRangeGivenMax.Text.Trim();
+
         return new CircuitDocument.AnalysisData
         {
             Type = AnalysisTypeFromText(selectedText),
@@ -403,6 +462,8 @@ public partial class AnalysisPanel : UserControl
             PowerFactorTarget = TxtPowerFactorTarget?.Text,
             ReciprocityTarget = GetSelectedTerminal(CmbReciprocityTarget),
             ZenerRangeTarget = GetSelectedTerminal(CmbZenerRangeTarget),
+            ZenerRangeGivenMin = givenMin,
+            ZenerRangeGivenMax = givenMax,
         };
     }
 
@@ -427,8 +488,27 @@ public partial class AnalysisPanel : UserControl
         if (CmbZenerRangeTarget?.ItemsSource is IEnumerable<string> zenerItems)
         {
             var candidates = zenerItems as IReadOnlyList<string> ?? zenerItems.ToList();
-            CmbZenerRangeTarget.SelectedItem = ResolveZenerRangeTarget(candidates, settings.ZenerRangeTarget);
+            string? resolved = ResolveZenerRangeTarget(candidates, settings.ZenerRangeTarget);
+            _suppressZenerTargetChanged = true;
+            try
+            {
+                CmbZenerRangeTarget.SelectedItem = resolved;
+                _lastZenerRangeTarget = resolved;
+            }
+            finally
+            {
+                _suppressZenerTargetChanged = false;
+            }
         }
+        if (TxtZenerRangeGivenMin != null)
+        {
+            TxtZenerRangeGivenMin.Text = settings.ZenerRangeGivenMin ?? "";
+        }
+        if (TxtZenerRangeGivenMax != null)
+        {
+            TxtZenerRangeGivenMax.Text = settings.ZenerRangeGivenMax ?? "";
+        }
+        SetZenerRangeGivenError(null);
         if (settings.Frequency != null && TxtFrequency != null)
         {
             TxtFrequency.Text = settings.Frequency;
@@ -560,7 +640,10 @@ public partial class AnalysisPanel : UserControl
             ?? "";
 
         bool isZenerRange = string.Equals(AnalysisTypeFromText(selectedText), AnalysisTypes.ZenerRange, StringComparison.OrdinalIgnoreCase);
-        RowZenerRangeTarget.Visibility = isZenerRange ? Visibility.Visible : Visibility.Collapsed;
+        var vis = isZenerRange ? Visibility.Visible : Visibility.Collapsed;
+        RowZenerRangeTarget.Visibility = vis;
+        if (RowZenerRangeGiven != null)
+            RowZenerRangeGiven.Visibility = vis;
     }
 
     /// <summary>Yöntem listesindeki yazıdan API analiz türünü (AnalysisTypes) bulur.</summary>
@@ -720,13 +803,75 @@ public partial class AnalysisPanel : UserControl
             reciprocityTarget = GetSelectedTerminal(CmbReciprocityTarget);
         }
 
+        SetZenerRangeGivenError(null);
+
         string? zenerRangeTarget = null;
+        double? zenerRangeGivenMin = null;
+        double? zenerRangeGivenMax = null;
         if (string.Equals(analysisType, AnalysisTypes.ZenerRange, StringComparison.OrdinalIgnoreCase))
         {
             zenerRangeTarget = GetSelectedTerminal(CmbZenerRangeTarget);
+            if (!TryParseZenerRangeGiven(
+                    TxtZenerRangeGivenMin?.Text,
+                    TxtZenerRangeGivenMax?.Text,
+                    out zenerRangeGivenMin,
+                    out zenerRangeGivenMax,
+                    out string? rangeError))
+            {
+                SetZenerRangeGivenError(rangeError);
+                error = rangeError;
+                return false;
+            }
         }
 
-        options = new SolveOptions(analysisType, freq, pos, neg, ValueDisplay, powerFactorTarget, reciprocityTarget, zenerRangeTarget);
+        options = new SolveOptions(
+            analysisType, freq, pos, neg, ValueDisplay, powerFactorTarget, reciprocityTarget,
+            zenerRangeTarget, zenerRangeGivenMin, zenerRangeGivenMax);
+        return true;
+    }
+
+    /// <summary>
+    /// Zener Aralığı ters problemi için isteğe bağlı [min, maks] girişini ayrıştırır.
+    /// İkisi de boşsa ileri mod (null, null); biri boşsa ya da min ≥ maks ise hata döndürür.
+    /// </summary>
+    internal static bool TryParseZenerRangeGiven(
+        string? minText,
+        string? maxText,
+        out double? min,
+        out double? max,
+        out string? error)
+    {
+        min = null;
+        max = null;
+        error = null;
+
+        string minTrim = minText?.Trim() ?? "";
+        string maxTrim = maxText?.Trim() ?? "";
+
+        if (minTrim.Length == 0 && maxTrim.Length == 0)
+            return true;
+
+        if (minTrim.Length == 0 || maxTrim.Length == 0)
+        {
+            error = "Değişim aralığı için alt ve üst sınırın ikisi de girilmelidir.";
+            return false;
+        }
+
+        if (!TurkishNumber.TryParseSpice(minTrim, out double parsedMin) ||
+            !TurkishNumber.TryParseSpice(maxTrim, out double parsedMax))
+        {
+            error = "Değişim aralığı geçerli bir sayı olmalıdır (ör. 120 V, 1 kΩ).";
+            return false;
+        }
+
+        if (parsedMin >= parsedMax)
+        {
+            error = "Alt sınır, üst sınırdan küçük olmalıdır.";
+            return false;
+        }
+
+        min = parsedMin;
+        max = parsedMax;
         return true;
     }
 
@@ -1404,13 +1549,51 @@ public partial class AnalysisPanel : UserControl
         return (v < 0 ? "−" : "") + s + " V";
     }
 
-    /// <summary>Zener çalışma aralığı metni: sonluysa "250 Ω ≤ R_Y ≤ 400 Ω", üst sınır yoksa "R_Y ≥ 250 Ω (üst sınır yok)".</summary>
+    /// <summary>Ters problemde verilen değişim aralığı satırı (ileri modda null).</summary>
+    internal static string? FormatZenerGiven(ZenerRangeDto zr)
+    {
+        if (!zr.IsInverse || zr.Given == null)
+            return null;
+        string sym = !string.IsNullOrWhiteSpace(zr.Given.Symbol)
+            ? zr.Given.Symbol
+            : (!string.IsNullOrWhiteSpace(zr.TargetId) ? zr.TargetId : "x");
+        string unit = zr.Given.Unit ?? "";
+        return $"Verilen: {EngFormat.Format(zr.Given.Min, unit)} ≤ {sym} ≤ {EngFormat.Format(zr.Given.Max, unit)}";
+    }
+
+    /// <summary>Sağlama tablosunun ilk sütun başlığı: ters problemde verilen büyüklük, ileri modda hedef sembol.</summary>
+    internal static string ZenerCheckXSymbol(ZenerRangeDto zr)
+    {
+        if (zr.IsInverse && !string.IsNullOrWhiteSpace(zr.Given?.Symbol))
+            return zr.Given.Symbol;
+        return !string.IsNullOrWhiteSpace(zr.Symbol) ? zr.Symbol : "x";
+    }
+
+    /// <summary>Sağlama tablosundaki x değerlerinin birimi: ters problemde verilen büyüklüğün birimi.</summary>
+    internal static string ZenerCheckXUnit(ZenerRangeDto zr)
+    {
+        if (zr.IsInverse && zr.Given != null)
+            return zr.Given.Unit ?? "";
+        return zr.Unit ?? "";
+    }
+
+    /// <summary>Zener çalışma aralığı veya ters problem cevabı metni.</summary>
     internal static string FormatZenerRange(ZenerRangeDto zr)
     {
+        if (zr.IsInverse && !zr.Feasible)
+            return "Bu aralık için uygun değer yok";
+
         string sym = !string.IsNullOrWhiteSpace(zr.Symbol)
             ? zr.Symbol
-            : (!string.IsNullOrWhiteSpace(zr.TargetId) ? zr.TargetId : "x");
+            : (!string.IsNullOrWhiteSpace(zr.AnswerId) ? zr.AnswerId : (!string.IsNullOrWhiteSpace(zr.TargetId) ? zr.TargetId : "x"));
         string unit = zr.Unit ?? "";
+
+        if (zr.IsInverse && zr.Unique)
+        {
+            double? val = zr.Min ?? zr.Max;
+            if (val.HasValue)
+                return $"{sym} = {EngFormat.Format(val.Value, unit)}";
+        }
 
         if (zr.Min.HasValue && zr.Max.HasValue)
             return $"{EngFormat.Format(zr.Min.Value, unit)} ≤ {sym} ≤ {EngFormat.Format(zr.Max.Value, unit)}";
@@ -1421,16 +1604,31 @@ public partial class AnalysisPanel : UserControl
         return "Geçerli aralık bulunamadı";
     }
 
-    /// <summary>Devredeki mevcut değerin aralığın içinde/dışında olma cümlesi (bilgi yoksa null).</summary>
+    /// <summary>Devredeki mevcut değerin aralığın içinde/dışında olma ya da tekil çözümle karşılaştırma cümlesi (bilgi yoksa null).</summary>
     internal static string? FormatZenerCurrentStatus(ZenerRangeDto zr)
     {
+        if (zr.IsInverse && !zr.Feasible)
+            return null;
+
+        string elem = zr.IsInverse
+            ? (!string.IsNullOrWhiteSpace(zr.AnswerId) ? zr.AnswerId : (!string.IsNullOrWhiteSpace(zr.Symbol) ? zr.Symbol : zr.TargetId))
+            : (!string.IsNullOrWhiteSpace(zr.TargetId) ? zr.TargetId : zr.Symbol);
+        string unit = zr.Unit ?? "";
+
+        if (zr.IsInverse && zr.Unique)
+        {
+            double? found = zr.Min ?? zr.Max;
+            if (!zr.CurrentValue.HasValue || !found.HasValue)
+                return null;
+            return $"Devredeki {elem} = {EngFormat.Format(zr.CurrentValue.Value, unit)}, bulunan değer {EngFormat.Format(found.Value, unit)}";
+        }
+
         if (!zr.CurrentValue.HasValue || !zr.CurrentInside.HasValue)
             return null;
-        string target = !string.IsNullOrWhiteSpace(zr.TargetId) ? zr.TargetId : zr.Symbol;
-        string valText = EngFormat.Format(zr.CurrentValue.Value, zr.Unit ?? "");
+        string valText = EngFormat.Format(zr.CurrentValue.Value, unit);
         return zr.CurrentInside.Value
-            ? $"Devredeki {target} = {valText} aralığın içinde ✓"
-            : $"Devredeki {target} = {valText} aralığın dışında";
+            ? $"Devredeki {elem} = {valText} aralığın içinde ✓"
+            : $"Devredeki {elem} = {valText} aralığın dışında";
     }
 
     /// <summary>Zener aralığı adım değeri: sayı varsa EngFormat ile, yoksa metin alanı.</summary>
@@ -1465,7 +1663,7 @@ public partial class AnalysisPanel : UserControl
 
         var stack = new StackPanel();
 
-        // Aralık başlığı ve büyük aralık metni
+        // Aralık başlığı, ters problemde verilen aralık satırı ve büyük cevap metni
         var lblTitle = new TextBlock
         {
             Text = "Zener Aralığı",
@@ -1473,6 +1671,20 @@ public partial class AnalysisPanel : UserControl
         };
         lblTitle.SetResourceReference(StyleProperty, "Text.Caption");
         stack.Children.Add(lblTitle);
+
+        if (FormatZenerGiven(zr) is { } givenText)
+        {
+            var txtGiven = new TextBlock
+            {
+                Text = givenText,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 2)
+            };
+            txtGiven.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Secondary");
+            SubscriptText.Apply(txtGiven);
+            stack.Children.Add(txtGiven);
+        }
 
         var txtRange = new TextBlock
         {
@@ -1482,11 +1694,13 @@ public partial class AnalysisPanel : UserControl
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 4)
         };
-        txtRange.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+        txtRange.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            zr.IsInverse && !zr.Feasible ? "Brush.Warning" : "Brush.Text.Primary");
         SubscriptText.Apply(txtRange);
         stack.Children.Add(txtRange);
 
-        // Devredeki mevcut değer aralığın içinde mi?
+        // Devredeki mevcut değer aralığın içinde mi / tekil çözümle karşılaştırma
         if (FormatZenerCurrentStatus(zr) is { } statusText)
         {
             var txtStatus = new TextBlock
@@ -1497,9 +1711,10 @@ public partial class AnalysisPanel : UserControl
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 2, 0, 10)
             };
-            txtStatus.SetResourceReference(
-                TextBlock.ForegroundProperty,
-                zr.CurrentInside == true ? "Brush.Success" : "Brush.Warning");
+            string statusBrush = zr.CurrentInside == true
+                ? "Brush.Success"
+                : (zr.IsInverse && zr.Unique ? "Brush.Text.Secondary" : "Brush.Warning");
+            txtStatus.SetResourceReference(TextBlock.ForegroundProperty, statusBrush);
             SubscriptText.Apply(txtStatus);
             stack.Children.Add(txtStatus);
         }
@@ -1574,7 +1789,8 @@ public partial class AnalysisPanel : UserControl
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            string xColHeader = !string.IsNullOrWhiteSpace(zr.Symbol) ? zr.Symbol : "x";
+            string xColHeader = ZenerCheckXSymbol(zr);
+            string xColUnit = ZenerCheckXUnit(zr);
             string[] headers = { xColHeader, "Durum", "V_Y", "I_Z", "Karar" };
             for (int c = 0; c < headers.Length; c++)
             {
@@ -1601,7 +1817,7 @@ public partial class AnalysisPanel : UserControl
                 var (verdictText, verdictBrush) = FormatZenerVerdict(chk.Verdict);
                 string[] vals =
                 {
-                    EngFormat.Format(chk.X, zr.Unit ?? ""),
+                    EngFormat.Format(chk.X, xColUnit),
                     FormatDiodeState(chk.State),
                     FormatDiodeVoltage(chk.VY),
                     EngFormat.Format(chk.IZ, "A"),

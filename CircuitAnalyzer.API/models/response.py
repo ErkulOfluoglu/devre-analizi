@@ -753,20 +753,39 @@ class ZenerRangeCurve(BaseModel):
     i_z: List[float] = Field(..., description="Her noktadaki zener akımı I_Z (A, 0'da kırpılmış)")
 
 
+class ZenerRangeGiven(BaseModel):
+    """Ters problemde (INVERSE) hedef eleman için verilen çalışma aralığı."""
+    symbol: str = Field(..., description="Verilen büyüklük sembolü ('V_İ' veya 'R_Y')")
+    unit: str = Field(..., description="SI birimi ('V' veya 'Ω')")
+    min: float = Field(..., description="Verilen alt sınır")
+    max: float = Field(..., description="Verilen üst sınır")
+
+
 class ZenerRangeSummary(BaseModel):
-    """Zener Aralığı (ZENER_RANGE) yöntemi özeti."""
-    target_id: str = Field(..., description="Değişken elemanın kimliği (ör: RY veya V1)")
-    kind: Literal["LOAD", "INPUT"] = Field(..., description="LOAD: yük direnci R_Y; INPUT: giriş gerilimi V_İ")
-    symbol: str = Field(..., description="Kitap sembolü ('R_Y' veya 'V_İ')")
-    unit: str = Field(..., description="Birim ('Ω' veya 'V')")
-    min: float = Field(..., description="Alt sınır (Ω veya V)")
-    max: Optional[float] = Field(default=None, description="Üst sınır (Ω veya V); sonsuzsa null")
-    current_value: float = Field(..., description="Elemanın çizilen devredeki mevcut değeri")
-    current_inside: bool = Field(..., description="Mevcut değer [min, max] aralığının içinde mi")
+    """Zener Aralığı (ZENER_RANGE) yöntemi özeti — ileri (RANGE) ve ters (INVERSE) problemler."""
+    mode: Literal["RANGE", "INVERSE"] = Field(
+        default="RANGE", description="RANGE: aralık bulma (ileri); INVERSE: verilen aralıktan değer bulma (ters)")
+    target_id: str = Field(..., description="Hedef elemanın kimliği (RANGE: aranan; INVERSE: aralığı verilen)")
+    answer_id: str = Field(..., description="Değeri/aralığı bulunan elemanın kimliği (RANGE'de target_id ile aynı)")
+    kind: Literal["LOAD", "INPUT", "LOAD_FROM_INPUT", "INPUT_FROM_LOAD"] = Field(
+        ..., description="LOAD/INPUT (ileri) veya LOAD_FROM_INPUT/INPUT_FROM_LOAD (ters)")
+    symbol: str = Field(..., description="Cevabın kitap sembolü ('R_Y' veya 'V_İ')")
+    unit: str = Field(..., description="Cevabın SI birimi ('Ω' veya 'V')")
+    min: float = Field(..., description="Cevabın alt sınırı (Ω veya V)")
+    max: Optional[float] = Field(default=None, description="Cevabın üst sınırı (Ω veya V); sonsuzsa null")
+    unique: bool = Field(default=False, description="Ters problemde iki koşul aynı tek değeri veriyorsa True")
+    feasible: bool = Field(default=True, description="İki koşulu aynı anda sağlayan değer/aralık varsa True")
+    given: Optional[ZenerRangeGiven] = Field(
+        default=None, description="Ters problemde verilen aralık; ileri modda null")
+    plot_min: float = Field(..., description="Grafikte taranacak bandın alt sınırı (RANGE: min; INVERSE: given.min)")
+    plot_max: Optional[float] = Field(
+        default=None, description="Grafikte taranacak bandın üst sınırı (RANGE: max; INVERSE: given.max)")
+    current_value: float = Field(..., description="Cevap elemanının çizilen devredeki mevcut değeri")
+    current_inside: bool = Field(..., description="Mevcut değer bulunan aralık/değere uygun mu")
     steps: List[ZenerRangeStep] = Field(default_factory=list, description="Ara hesap adımları")
     checks: List[ZenerRangeCheck] = Field(default_factory=list, description="Sağlama kontrolleri (alt, iç, üst)")
     curve: ZenerRangeCurve = Field(..., description="V_Y ve I_Z değişim eğrisi")
-    x_label: str = Field(..., description="Yatay eksen etiketi (ör: 'R_Y (Ω)')")
+    x_label: str = Field(..., description="Yatay eksen etiketi (ör: 'R_Y (Ω)' veya 'V_İ (V)')")
     y_label: str = Field(..., description="Düşey eksen etiketi ('V_Y (V)')")
 
 
