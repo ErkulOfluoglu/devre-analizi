@@ -293,3 +293,16 @@ def test_assistant_describes_zener():
     kv = known_values(shown, results, None, [])
     assert any(abs(v - 20.0) < 1e-12 for v in kv._typed.get("V", ()))
     assert any(abs(v - 0.03) < 1e-12 for v in kv._typed.get("A", ()))
+
+
+def test_diode_line_with_huge_whitespace_parses_fast():
+    """CodeQL #6: uzun boşluklu diyot satırı kareli geri izlemeye düşmemeli ve doğru okunmalı."""
+    import time
+
+    line = "D1 0 2 ZENER" + " " * 50000 + "VZ=20 IZM=30m"
+    t0 = time.perf_counter()
+    p = parse_netlist(f"V1 1 0 DC 100\nRX 1 2 1k\n{line}\nRY 2 0 300" + GND)
+    assert time.perf_counter() - t0 < 1.0
+    d = next(e for e in p.elements if e.id == "D1")
+    assert d.params["v_z"] == pytest.approx(20.0)
+    assert d.params["i_zm"] == pytest.approx(0.03)

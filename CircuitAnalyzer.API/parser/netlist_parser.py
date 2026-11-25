@@ -350,7 +350,10 @@ _PATTERNS = {
     # D1 <anot> <katot> IDEAL|SI|GE
     # D1 <anot> <katot> ZENER VZ=<değer> [IZM=<değer>]
     "diode": re.compile(
-        r"^(D\w*)\s+(\w+)\s+(\w+)\s+(\w+)(?:\s+(.*))?$", re.IGNORECASE
+        # Kalan kısım boşluk olmayan bir karakterle başlar (\S): "\s+" ile ".*" aynı boşlukları
+        # paylaşınca uzun boşluklu satırlarda geri izleme kareli yavaşlıyordu (CodeQL uyarısı #6).
+        # Satırlar önceden strip() edildiği için sondaki boşluk sorun olmaz.
+        r"^(D\w*)\s+(\w+)\s+(\w+)\s+(\w+)(?:\s+(\S.*))?$", re.IGNORECASE
     ),
 
     # ── Transformatör ──
