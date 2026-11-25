@@ -545,6 +545,10 @@ def _path_threshold(
                             sign = "+" if dc_diff > 0 else MINUS
                             parts.append(f"{sign} {vdc.id} ({_volts(abs(vdc.value))})")
                             break
+                if len(parts) == 1 and abs(dc_diff) <= 1e-6:
+                    # Tek diyot, ek kaynak yok: kitaptaki gibi doğrudan V_T yazılır (sinüs çıktısıyla aynı).
+                    d = on_diodes[0]
+                    return _sig_round(v_drop, 6), f"V_T = {_volts(d.params['v_t'])} ({d.id})"
                 expr = " + ".join(parts).replace(" + + ", " + ").replace(f" + {MINUS} ", f" {MINUS} ")
                 return _sig_round(v_drop, 6), f"V_eşik = {expr} = {_volts(v_drop)}"
     return None, None

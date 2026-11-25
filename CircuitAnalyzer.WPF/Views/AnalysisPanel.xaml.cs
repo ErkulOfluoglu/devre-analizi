@@ -210,7 +210,7 @@ public partial class AnalysisPanel : UserControl
 
         UpdateModeLabel();
         RowFrequency.Visibility = hasAcSource ? Visibility.Visible : Visibility.Collapsed;
-        RowValueDisplay.Visibility = hasAcSource ? Visibility.Visible : Visibility.Collapsed;
+        UpdateWaveformOutputVisibility();   // Gösterim satırı yönteme de bağlı
         TxtFrequencyLabel.Text = needsFrequency
             ? "Frekans (Hz) — gerekli"
             : "Frekans (Hz) — boş bırakılırsa kaynaktan alınır";
@@ -708,6 +708,9 @@ public partial class AnalysisPanel : UserControl
 
         bool isWaveform = string.Equals(AnalysisTypeFromText(selectedText), AnalysisTypes.Waveform, StringComparison.OrdinalIgnoreCase);
         RowWaveformOutput.Visibility = isWaveform ? Visibility.Visible : Visibility.Collapsed;
+        // Dalga Şekli anlık (tepe) değerlerle çalışır; Etkin/Tepe seçimi sonucu değiştirmediği
+        // için gösterilmez (doğrultulmuş dalganın etkin değeri V_m/√2 değildir, karışıklık olmasın).
+        RowValueDisplay.Visibility = _hasAcSource && !isWaveform ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Yöntem listesindeki yazıdan API analiz türünü (AnalysisTypes) bulur.</summary>
