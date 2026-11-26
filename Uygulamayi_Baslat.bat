@@ -19,7 +19,8 @@ if errorlevel 1 (
 
 where python >nul 2>nul
 if errorlevel 1 (
-    echo [HATA] Python bulunamadi. Cozucu icin Python 3.14 onerilir (en az 3.10).
+    rem Not: bu blogun icindeki metinde parantez kullanmayin; ")" blogu erken kapatir.
+    echo [HATA] Python bulunamadi. Cozucu icin Python 3.14 onerilir, en az 3.10 gerekir.
     pause
     exit /b 1
 )
